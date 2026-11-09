@@ -2,7 +2,9 @@
 -- Flere bedrifter i én installasjon. Alle bedriftsdata har org_id og beskyttes med Row Level Security.
 -- Tidspunkter lagres som timestamptz (UTC). "Dag" regnes i bedriftens tidssone (standard Europe/Oslo).
 
-create extension if not exists btree_gist;
+create schema if not exists extensions;
+create extension if not exists btree_gist with schema extensions;
+set search_path = public, extensions;
 
 -- ---------------------------------------------------------------------------
 -- Typer
