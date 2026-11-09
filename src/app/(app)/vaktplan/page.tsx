@@ -5,6 +5,7 @@ import { addDays, formatDateLong, isoWeekday, localDate, localTime, formatHours,
 import { ActionForm, Field } from "@/components/Form";
 import { AssignForm } from "@/components/AssignForm";
 import { EmployeePicker } from "@/components/EmployeePicker";
+import { AutoPlanPanel } from "@/components/AutoPlanPanel";
 import { assignShift, cancelShift, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "./actions";
 
 type View = "dag" | "uke" | "maned";
@@ -115,6 +116,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               </ActionForm>
             )}
           </div>
+          {view === "uke" && (
+            <AutoPlanPanel from={from} days={days} hasAutoDrafts={shifts.some((s) => s.status === "draft" && s.note === "Automatisk forslag")} />
+          )}
           <details id="ny-vakt" open={Boolean(newShiftDate) || people.length === 0}>
             <summary className="cursor-pointer text-sm font-semibold text-brand">+ Ny vakt</summary>
             {people.length === 0 && (
@@ -235,7 +239,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 font-medium">
                               {s.employee_id ? names.get(s.employee_id) ?? "Ukjent" : "Ledig vakt"}
-                              {s.status === "draft" && <span className="badge bg-white text-muted ring-1 ring-line">utkast</span>}
+                              {s.status === "draft" && (
+                                <span className="badge bg-white text-muted ring-1 ring-line">{s.note === "Automatisk forslag" ? "forslag" : "utkast"}</span>
+                              )}
                             </div>
                             <div className="text-sm tabular-nums text-muted">
                               {time(s)} · {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
