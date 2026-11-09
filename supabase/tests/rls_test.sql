@@ -150,5 +150,26 @@ do $$ begin
   end if;
 end $$;
 
+-- Publisering varsler ansatte, og ledige vakter varsles
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+select :'org_a', id, '2026-11-16 08:00+01', '2026-11-16 16:00+01', 'draft' from employees where full_name = 'Ola Nordmann';
+select publish_shifts(:'org_a', '2026-11-14 00:00+01', '2026-11-21 00:00+01') as published \gset
+select pg_temp.check(:published = 2, 'publisering');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check((select count(*) from notifications where kind = 'schedule_published') = 1, 'Ola fikk ikke varsel');
+-- Ansatt kan ikke publisere
+do $$ begin
+  perform publish_shifts((select id from organizations limit 1), now() - interval '1 year', now() + interval '1 year');
+  raise exception 'FEIL: ansatt publiserte';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+-- Plattformadmin via e-post
+reset role;
+insert into platform_admin_emails values ('ny@innspaell.no');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'ny@innspaell.no');
+select pg_temp.check(is_platform_admin(), 'plattformadmin via e-post');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

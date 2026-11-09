@@ -12,6 +12,7 @@ const EMPLOYEE = [
 ];
 
 const ADMIN = [
+  { href: "/bemanning", label: "Bemanning" },
   { href: "/ansatte", label: "Ansatte" },
   { href: "/innstillinger", label: "Innstillinger" },
 ];
