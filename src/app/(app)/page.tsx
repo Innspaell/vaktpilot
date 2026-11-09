@@ -4,6 +4,7 @@ import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from
 import { addDays, formatDateLong, formatHours, localDate, localTime, workedMinutes, dayBounds } from "@/lib/time";
 import { clockState } from "@/lib/clock";
 import { ClockButton } from "@/components/ClockButton";
+import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -129,7 +130,7 @@ export default async function Home() {
           </section>
         </div>
 
-        {ctx.employeeId && clock && <ClockButton state={clock.state} since={clock.since} />}
+        {ctx.employeeId && clock ? <ClockButton state={clock.state} since={clock.since} /> : <SelfEmployeeCard email={ctx.email} />}
       </div>
     );
   }

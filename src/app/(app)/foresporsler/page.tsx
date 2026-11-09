@@ -1,7 +1,9 @@
 import { requireOrg } from "@/lib/context";
 import { colleagues } from "@/lib/data";
 import { formatDateLong, localDate, localTime } from "@/lib/time";
+import Link from "next/link";
 import { cancelRequest, decideRequest } from "../vaktplan/actions";
+import { AbsenceSection } from "@/components/AbsenceSection";
 
 const STATUS: Record<string, [string, string]> = {
   pending: ["Venter", "bg-warn-soft text-warn"],
@@ -17,9 +19,24 @@ type Req = {
   shifts: { starts_at: string; ends_at: string } | null;
 };
 
-export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ feil?: string }> }) {
-  const { feil } = await searchParams;
+export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ feil?: string; vis?: string }> }) {
+  const { feil, vis } = await searchParams;
   const ctx = await requireOrg();
+  const tab = vis === "vakter" ? "vakter" : "fri";
+  const tabs = (
+    <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
+      <Link href="/foresporsler?vis=fri" className={`rounded-md px-3 py-1.5 font-medium ${tab === "fri" ? "bg-brand text-white" : "text-muted"}`}>Fri og fravær</Link>
+      <Link href="/foresporsler?vis=vakter" className={`rounded-md px-3 py-1.5 font-medium ${tab === "vakter" ? "bg-brand text-white" : "text-muted"}`}>Vakter</Link>
+    </div>
+  );
+  if (tab === "fri") {
+    return (
+      <div className="space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
+        <AbsenceSection ctx={ctx} />
+      </div>
+    );
+  }
   const tz = ctx.org.timezone;
   let q = ctx.supabase
     .from("shift_requests")
@@ -41,7 +58,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-4">
-      <h1 className="h1">Forespørsler</h1>
+      <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
       {feil && <p className="card bg-bad-soft text-sm text-bad">{feil}</p>}
 
       <section className="card p-0">
@@ -93,7 +110,6 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
           </ul>
         </section>
       )}
-      <p className="text-sm text-muted">Søknad om fri og vaktbytte kommer i neste del.</p>
     </div>
   );
 }

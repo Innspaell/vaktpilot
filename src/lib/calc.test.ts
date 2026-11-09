@@ -145,3 +145,25 @@ describe("advarsler", () => {
     expect(w).toEqual([]);
   });
 });
+
+import { workdaysBetween, vacationYear, overlapDays } from "./absence";
+
+describe("ferie og fravær", () => {
+  it("teller arbeidsdager uten helg og helligdager", () => {
+    // Påskeuka 2026: man 30.3 – fre 3.4, der skjærtorsdag og langfredag er fri
+    expect(workdaysBetween("2026-03-30", "2026-04-03")).toBe(3);
+    // To hele uker i november
+    expect(workdaysBetween("2026-11-16", "2026-11-29")).toBe(10);
+    // 2. påskedag regnes ikke
+    expect(workdaysBetween("2026-04-06", "2026-04-06")).toBe(0);
+  });
+
+  it("finner ferieåret", () => {
+    expect(vacationYear("2026-11-09")).toEqual({ from: "2026-01-01", to: "2026-12-31" });
+    expect(vacationYear("2026-03-01", 5)).toEqual({ from: "2025-05-01", to: "2026-04-30" });
+  });
+
+  it("teller bare dagene innenfor året", () => {
+    expect(overlapDays("2026-12-28", "2027-01-08", "2026-01-01", "2026-12-31")).toBe(4);
+  });
+});

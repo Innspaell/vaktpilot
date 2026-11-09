@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getContext, requireAdmin, requireOrg, ORG_COOKIE } from "@/lib/context";
+import { insertEmployee } from "@/lib/employees";
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
@@ -91,43 +92,22 @@ export async function deleteWorkRole(fd: FormData) {
 
 export async function addEmployee(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
-  const fullName = text(fd, "full_name");
-  const email = text(fd, "email")?.toLowerCase() ?? null;
-  if (!fullName) return { error: "Skriv inn navn." };
-  const startDate = text(fd, "start_date") ?? new Date().toISOString().slice(0, 10);
+  const r = await insertEmployee(ctx, fd);
+  if (r.error) return { error: r.error };
+  redirect(`/ansatte/${r.id}?ny=1`);
+}
 
-  const { data: emp, error } = await ctx.supabase
-    .from("employees")
-    .insert({
-      org_id: ctx.org.id,
-      full_name: fullName,
-      email,
-      phone: text(fd, "phone"),
-      employee_number: text(fd, "employee_number"),
-      start_date: startDate,
-      is_shift_worker: fd.get("is_shift_worker") === "on",
-    })
-    .select("id")
-    .single();
-  if (error) return { error: error.code === "23505" ? "Det finnes allerede en ansatt med denne e-posten." : error.message };
-
-  const pct = num(fd, "position_pct", 100);
-  const { data: org } = await ctx.supabase.from("organizations").select("full_time_hours_week, vacation_days_year").eq("id", ctx.org.id).single();
-  const fullTime = Number(org?.full_time_hours_week ?? 37.5);
-  const { error: termsError } = await ctx.supabase.from("employment_terms").insert({
-    org_id: ctx.org.id,
-    employee_id: emp.id,
-    valid_from: startDate,
-    position_pct: pct,
-    hours_per_week: Math.round(fullTime * pct) / 100,
-    pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
-    paid_holidays: true,
-    vacation_days: Number(org?.vacation_days_year ?? 25),
-  });
-  if (termsError) return { error: termsError.message };
-
-  revalidatePath("/ansatte");
-  redirect(`/ansatte/${emp.id}?ny=1`);
+/** Administrator legger seg selv inn som ansatt, så hen kan få vakter, stemple og søke fri. */
+export async function addSelfAsEmployee(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  if (ctx.employeeId) return { ok: "Du er allerede registrert som ansatt." };
+  fd.set("email", ctx.email);
+  const r = await insertEmployee(ctx, fd);
+  if (r.error) return { error: r.error };
+  const { error } = await ctx.supabase.from("employees").update({ user_id: ctx.userId }).eq("id", r.id!).eq("org_id", ctx.org.id);
+  if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: "Du er nå registrert som ansatt. Du beholder administratortilgangen." };
 }
 
 export async function updateEmployee(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -147,6 +127,19 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
     .eq("id", id)
     .eq("org_id", ctx.org.id);
   if (error) return { error: error.message };
+
+  // Stillingsprosent og lønnstype rettes på gjeldende avtale. Endringer fra en dato lages som ny avtale.
+  if (text(fd, "position_pct")) {
+    const pct = Math.min(100, Math.max(1, num(fd, "position_pct", 100)));
+    const { data: org } = await ctx.supabase.from("organizations").select("full_time_hours_week").eq("id", ctx.org.id).single();
+    const hours = text(fd, "hours_per_week") ? num(fd, "hours_per_week", 37.5) : Math.round(Number(org?.full_time_hours_week ?? 37.5) * pct) / 100;
+    const { error: tErr } = await ctx.supabase
+      .from("employment_terms")
+      .update({ position_pct: pct, hours_per_week: hours, pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly" })
+      .eq("employee_id", id)
+      .is("valid_to", null);
+    if (tErr) return { error: tErr.message };
+  }
 
   const roles = fd.getAll("work_roles").map(String);
   await ctx.supabase.from("employee_work_roles").delete().eq("employee_id", id);

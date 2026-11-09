@@ -47,6 +47,19 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <Field label="Sluttdato" hint="Tilgangen stenges fra denne datoen.">
             <input name="end_date" type="date" defaultValue={e.end_date ?? ""} className="input" />
           </Field>
+          <Field label="Stillingsprosent" hint={current ? `Gjelder avtalen fra ${current.valid_from}. Endring fra en senere dato: bruk «Ny avtale» under.` : undefined}>
+            <input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" />
+          </Field>
+          <Field label="Timer per uke" hint="Tomt = regnes ut fra stillingsprosent og heltid.">
+            <input name="hours_per_week" type="number" step="0.25" defaultValue={current ? Number(current.hours_per_week) : ""} className="input" />
+          </Field>
+          <Field label="Lønnstype">
+            <select name="pay_type" defaultValue={current?.pay_type ?? "hourly"} className="input">
+              <option value="hourly">Timelønn</option>
+              <option value="fixed">Fastlønn</option>
+            </select>
+          </Field>
+          <div />
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input type="checkbox" name="is_shift_worker" defaultChecked={e.is_shift_worker} className="h-4 w-4" /> Jobber turnus eller skift
           </label>

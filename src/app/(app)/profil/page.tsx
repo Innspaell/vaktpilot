@@ -1,5 +1,6 @@
 import { getContext } from "@/lib/context";
 import { signOut, switchOrganization } from "../actions";
+import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 
 export default async function ProfilePage() {
   const ctx = await getContext();
@@ -10,6 +11,7 @@ export default async function ProfilePage() {
         <div className="text-sm text-muted">Innlogget som</div>
         <div className="font-medium">{ctx.email}</div>
       </section>
+      {ctx.isAdmin && !ctx.employeeId && <SelfEmployeeCard email={ctx.email} />}
       {ctx.orgs.length > 1 && (
         <section className="card">
           <h2 className="h2">Bedrift</h2>

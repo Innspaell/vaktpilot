@@ -171,5 +171,25 @@ set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'ny@innspaell.no');
 select pg_temp.check(is_platform_admin(), 'plattformadmin via e-post');
 
+-- Fravær: ansatt søker ferie, sykefravær godkjennes automatisk, admin godkjenner og frigjør vakt
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date)
+select :'org_a', my_employee_id(:'org_a'), id, '2026-11-16', '2026-11-17' from absence_types where org_id = :'org_a' and key = 'ferie'
+returning id as ferie_ola \gset
+insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date)
+select :'org_a', my_employee_id(:'org_a'), id, '2026-11-25', '2026-11-25' from absence_types where org_id = :'org_a' and key = 'syk';
+select pg_temp.check((select status from absence_requests where id = :'ferie_ola') = 'pending', 'ferie skal vente');
+select pg_temp.check((select count(*) from absence_requests a join absence_types t on t.id = a.absence_type_id where t.key = 'syk' and a.status = 'approved' and a.from_date = '2026-11-25') = 1, 'sykefravær ble ikke godkjent automatisk');
+-- Ola kan ikke godkjenne selv
+do $$ begin
+  perform decide_absence((select id from absence_requests where status = 'pending' limit 1), true, false);
+  raise exception 'FEIL: ansatt godkjente eget fravær';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check((select count(*) from notifications where kind = 'absence_request') >= 2, 'leder fikk ikke varsel om fravær');
+select decide_absence(:'ferie_ola', true, true) as released \gset
+select pg_temp.check(:released = 1, 'vakten i ferien ble ikke ledig');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

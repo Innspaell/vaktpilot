@@ -4,6 +4,7 @@ import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from
 import { addDays, formatDateLong, isoWeekday, localDate, localTime, formatHours, workedMinutes } from "@/lib/time";
 import { ActionForm, Field } from "@/components/Form";
 import { AssignForm } from "@/components/AssignForm";
+import { EmployeePicker } from "@/components/EmployeePicker";
 import { assignShift, cancelShift, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "./actions";
 
 type View = "dag" | "uke" | "maned";
@@ -22,7 +23,7 @@ function weekNumber(date: string) {
 
 const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; tilby?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; tilby?: string; ny?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
@@ -45,19 +46,26 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     while (addDays(from, days) < nextMonth || isoWeekday(addDays(from, days)) !== 1) days++;
   }
 
-  const [names, shifts, rolesRes, requestsRes] = await Promise.all([
+  const [names, shifts, rolesRes, requestsRes, absencesRes, pctRes] = await Promise.all([
     colleagues(ctx),
     shiftsBetween(ctx, from, addDays(from, days)),
     ctx.supabase.from("work_roles").select("id, name, color").eq("org_id", ctx.org.id).order("name"),
     ctx.employeeId
       ? ctx.supabase.from("shift_requests").select("shift_id").eq("employee_id", ctx.employeeId).eq("status", "pending")
       : Promise.resolve({ data: [] as { shift_id: string | null }[] }),
+    ctx.supabase.rpc("org_absences", { p_org: ctx.org.id, p_from: from, p_to: addDays(from, days - 1) }),
+    ctx.isAdmin
+      ? ctx.supabase.from("employment_terms").select("employee_id, position_pct").eq("org_id", ctx.org.id).is("valid_to", null)
+      : Promise.resolve({ data: [] as { employee_id: string; position_pct: number }[] }),
   ]);
+  const absences = (absencesRes.data ?? []) as { employee_id: string; from_date: string; to_date: string; type_name: string }[];
+  const pct = new Map((pctRes.data ?? []).map((t) => [t.employee_id, Number(t.position_pct)]));
+  const newShiftDate = /^\d{4}-\d{2}-\d{2}$/.test(sp.ny ?? "") ? sp.ny! : null;
   const coverage = await coverageForDays(ctx, from, days, shifts);
   const roles = new Map((rolesRes.data ?? []).map((r) => [r.id, r]));
   const requested = new Set((requestsRes.data ?? []).map((r) => r.shift_id));
   const drafts = shifts.filter((s) => s.status === "draft").length;
-  const people = Array.from(names, ([id, name]) => ({ id, name }));
+  const people = Array.from(names, ([id, name]) => ({ id, name, pct: pct.get(id) ?? null }));
 
   const step = view === "dag" ? 1 : view === "uke" ? 7 : 0;
   const prev = step ? addDays(anchor, -step) : addDays(anchor.slice(0, 8) + "01", -1);
@@ -107,25 +115,35 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               </ActionForm>
             )}
           </div>
-          <details>
-            <summary className="cursor-pointer text-sm font-semibold text-brand">Ny vakt</summary>
+          <details id="ny-vakt" open={Boolean(newShiftDate) || people.length === 0}>
+            <summary className="cursor-pointer text-sm font-semibold text-brand">+ Ny vakt</summary>
+            {people.length === 0 && (
+              <p className="mt-2 text-sm text-muted">Ingen ansatte ennå. Velg «+ Ny ansatt» i listen for å legge inn den første mens du lager vakten.</p>
+            )}
             <ActionForm action={createShift} submitLabel="Legg til vakt" className="mt-3 grid gap-3 md:grid-cols-4">
-              <Field label="Dato"><input name="date" type="date" required defaultValue={from} className="input" /></Field>
+              <Field label="Fra dato"><input key={newShiftDate ?? from} name="date" type="date" required defaultValue={newShiftDate ?? from} className="input" /></Field>
+              <Field label="Til dato" hint="Tomt = bare én dag."><input key={`t${newShiftDate ?? ""}`} name="date_to" type="date" defaultValue={newShiftDate ?? ""} className="input" /></Field>
               <Field label="Fra"><input name="start" type="time" required defaultValue="08:00" className="input" /></Field>
               <Field label="Til"><input name="end" type="time" required defaultValue="16:00" className="input" /></Field>
               <Field label="Pause (min)"><input name="break_minutes" type="number" min={0} step={5} defaultValue={30} className="input" /></Field>
-              <Field label="Ansatt">
-                <select name="employee_id" className="input" defaultValue="">
-                  <option value="">Ledig vakt</option>
-                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </Field>
+              <EmployeePicker people={people} roles={Array.from(roles.values()).map((r) => ({ id: r.id, name: r.name }))} />
               <Field label="Arbeidsrolle">
                 <select name="work_role_id" className="input" defaultValue="">
                   <option value="">Ingen</option>
                   {Array.from(roles.values()).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </Field>
+              <fieldset className="md:col-span-4">
+                <legend className="label">Ukedager i perioden</legend>
+                <div className="flex flex-wrap gap-2">
+                  {["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"].map((n, i) => (
+                    <label key={n} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                      <input type="checkbox" name="weekday" value={i + 1} defaultChecked={i < 5} className="h-4 w-4" /> {n}
+                    </label>
+                  ))}
+                </div>
+                <span className="mt-1 block text-xs text-muted">Brukes når du velger en periode, for eksempel hele uka.</span>
+              </fieldset>
               <Field label="Gjenta ukentlig">
                 <select name="repeat_weeks" className="input" defaultValue="1">
                   {[1, 2, 4, 8, 12, 26].map((n) => <option key={n} value={n}>{n === 1 ? "Nei" : `${n} uker`}</option>)}
@@ -136,6 +154,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 <label className="flex items-center gap-2"><input type="checkbox" name="publish" className="h-4 w-4" /> Publiser med en gang</label>
                 <label className="flex items-center gap-2"><input type="checkbox" name="auto_approve" className="h-4 w-4" /> Godkjenn påmelding automatisk</label>
                 <label className="flex items-center gap-2"><input type="checkbox" name="called_overtime" className="h-4 w-4" /> Tilsagt overtid</label>
+                <label className="flex items-center gap-2"><input type="checkbox" name="skip_holidays" defaultChecked className="h-4 w-4" /> Hopp over helligdager</label>
               </div>
             </ActionForm>
           </details>
@@ -154,7 +173,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               const open = shifts.filter((s) => !s.employee_id && localDate(new Date(s.starts_at), tz) === c.date).length;
               const short = c.gaps.length > 0;
               return (
-                <Link key={c.date} href={href(c.date, "dag")}
+                <Link key={c.date} href={ctx.isAdmin ? `/vaktplan?visning=dag&dato=${c.date}&ny=${c.date}#ny-vakt` : href(c.date, "dag")}
                   className={`min-h-16 rounded-lg border p-1.5 text-left text-xs ${inMonth ? "bg-white" : "bg-paper text-muted"} ${short ? "border-bad/40" : "border-line"} ${c.date === today(ctx) ? "ring-2 ring-brand" : ""}`}>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">{Number(c.date.slice(8))}</span>
@@ -164,6 +183,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   {c.closed && !c.holiday && <div className="text-muted">Stengt</div>}
                   {count > 0 && <div>{count} på jobb</div>}
                   {open > 0 && <div className="text-brand">{open} ledig</div>}
+                  {absences.some((a) => a.from_date <= c.date && a.to_date >= c.date) && (
+                    <div className="text-warn">{absences.filter((a) => a.from_date <= c.date && a.to_date >= c.date).length} borte</div>
+                  )}
                 </Link>
               );
             })}
@@ -176,10 +198,28 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             return (
               <section key={c.date} className={`card ${c.date === today(ctx) ? "ring-2 ring-brand/30" : ""}`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="h2 capitalize">{formatDateLong(c.date)}</h2>
+                  {ctx.isAdmin ? (
+                    <Link href={`/vaktplan?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="h2 capitalize hover:text-brand" title="Legg inn vakt denne dagen">
+                      {formatDateLong(c.date)}
+                    </Link>
+                  ) : (
+                    <h2 className="h2 capitalize">{formatDateLong(c.date)}</h2>
+                  )}
                   <CoverageChip c={c} tz={tz} />
                 </div>
                 {c.holiday && <p className="mt-1 text-sm text-warn">{c.holiday}</p>}
+                {(() => {
+                  const away = absences.filter((a) => a.from_date <= c.date && a.to_date >= c.date);
+                  return away.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {away.map((a) => (
+                        <span key={a.employee_id + a.from_date} className="badge bg-warn-soft text-warn">
+                          {names.get(a.employee_id) ?? "Ansatt"}: {a.type_name.toLowerCase()}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {dayShifts.length === 0 ? (
                   <p className="mt-2 text-sm text-muted">{c.closed ? "Stengt." : "Ingen vakter."}</p>
@@ -224,6 +264,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   </ul>
                 )}
 
+                {ctx.isAdmin && !c.closed && (
+                  <Link href={`/vaktplan?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="mt-3 inline-block text-sm font-semibold text-brand">
+                    + Vakt denne dagen
+                  </Link>
+                )}
                 {!ctx.isAdmin && ctx.employeeId && c.gaps.length > 0 && (
                   <Link href={`/vaktplan?visning=${view}&dato=${anchor}&tilby=${c.date}#tilby`} className="mt-3 inline-block text-sm font-semibold text-brand">
                     Jeg kan jobbe denne dagen →
@@ -283,7 +328,7 @@ function Legend() {
       <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-good-soft ring-1 ring-good/30" /> Din vakt</span>
       <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-brand-soft ring-1 ring-brand/30" /> Ledig vakt</span>
       <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-bad-soft ring-1 ring-bad/30" /> Mangler folk</span>
-      <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-warn-soft ring-1 ring-warn/30" /> Helligdag</span>
+      <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-warn-soft ring-1 ring-warn/30" /> Fravær / helligdag</span>
     </div>
   );
 }

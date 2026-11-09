@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireOrg } from "@/lib/context";
-import { addDays, localDate, zonedToUtc } from "@/lib/time";
+import { addDays, formatDateLong, isoWeekday, localDate, zonedToUtc } from "@/lib/time";
+import { holidayOn } from "@/lib/holidays";
 import { checkShift, type Warning } from "@/lib/warnings";
+import { insertEmployee } from "@/lib/employees";
 import type { ActionState } from "../actions";
 
 function text(fd: FormData, key: string) {
@@ -61,17 +63,42 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
   const start = text(fd, "start");
   const end = text(fd, "end");
   if (!date || !start || !end) return { error: "Fyll inn dato og klokkeslett." };
-  const employeeId = text(fd, "employee_id");
+  let employeeId = text(fd, "employee_id");
+  let createdName: string | null = null;
+  if (employeeId === "__new") {
+    const r = await insertEmployee(ctx, fd);
+    if (r.error) return { error: r.error };
+    employeeId = r.id!;
+    createdName = text(fd, "full_name");
+  }
   const breakMinutes = Number(text(fd, "break_minutes") ?? 0);
+  const dateTo = text(fd, "date_to") ?? date;
+  if (dateTo < date) return { error: "Til-dato kan ikke være før fra-dato." };
+  const weekdays = new Set(fd.getAll("weekday").map(Number));
   const repeatWeeks = Math.min(52, Math.max(1, Number(text(fd, "repeat_weeks") ?? 1)));
-  const seriesId = repeatWeeks > 1 ? crypto.randomUUID() : null;
+  const skipHolidays = fd.get("skip_holidays") === "on";
+
+  // Alle datoer i perioden som passer ukedagene, gjentatt ukentlig om valgt
+  const dates: string[] = [];
+  for (let w = 0; w < repeatWeeks; w++) {
+    for (let d = addDays(date, 7 * w); d <= addDays(dateTo, 7 * w); d = addDays(d, 1)) {
+      if (date !== dateTo && weekdays.size > 0 && !weekdays.has(isoWeekday(d))) continue;
+      if (skipHolidays && holidayOn(d)) continue;
+      if (!dates.includes(d)) dates.push(d);
+    }
+  }
+  if (dates.length === 0) return { error: "Ingen datoer passer valgene. Sjekk ukedagene." };
+  if (dates.length > 400) return { error: "For mange vakter på én gang. Velg en kortere periode." };
+  const seriesId = dates.length > 1 ? crypto.randomUUID() : null;
 
   const rows = [];
-  let warnings: Warning[] = [];
-  for (let w = 0; w < repeatWeeks; w++) {
-    const d = addDays(date, 7 * w);
+  const warningLines: string[] = [];
+  for (const d of dates) {
     const { s, e } = interval(d, start, end, ctx.org.timezone);
-    if (employeeId && w === 0) warnings = await warningsFor(ctx, employeeId, s, e, breakMinutes);
+    if (employeeId && warningLines.length < 4) {
+      const w = await warningsFor(ctx, employeeId, s, e, breakMinutes);
+      if (w.length) warningLines.push(`${formatDateLong(d)}: ${describe(w)}`);
+    }
     rows.push({
       org_id: ctx.org.id,
       employee_id: employeeId,
@@ -86,6 +113,7 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
       note: text(fd, "note"),
     });
   }
+  const warnings = warningLines;
 
   let created = 0;
   let overlaps = 0;
@@ -98,8 +126,9 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
   refresh();
   if (created === 0) return { error: "Den ansatte har allerede en vakt som overlapper." };
   const parts = [`${created} ${created === 1 ? "vakt" : "vakter"} lagt til.`];
+  if (createdName) parts.unshift(`${createdName} er lagt til som ansatt.`);
   if (overlaps) parts.push(`${overlaps} hoppet over fordi de overlapper med andre vakter.`);
-  if (warnings.length) parts.push(`Advarsel: ${describe(warnings)}`);
+  if (warnings.length) parts.push(`Advarsel – ${warnings.join(" ")}`);
   return warnings.length || overlaps ? { error: parts.join(" ") } : { ok: parts.join(" ") };
 }
 
@@ -239,5 +268,5 @@ export async function decideRequest(fd: FormData) {
       ? await ctx.supabase.rpc("approve_shift_request", { p_request: id })
       : await ctx.supabase.rpc("reject_shift_request", { p_request: id, p_comment: text(fd, "comment") });
   refresh();
-  if (error) redirect(`/foresporsler?feil=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/foresporsler?vis=vakter&feil=${encodeURIComponent(error.message)}`);
 }

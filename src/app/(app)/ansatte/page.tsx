@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { addEmployee } from "../actions";
+import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 
 export default async function EmployeesPage() {
   const ctx = await requireAdmin();
@@ -19,6 +20,7 @@ export default async function EmployeesPage() {
   return (
     <div className="space-y-4">
       <h1 className="h1">Ansatte</h1>
+      {!ctx.employeeId && <SelfEmployeeCard email={ctx.email} />}
 
       <section className="card p-0">
         {rows.length === 0 ? (
