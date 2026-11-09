@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
+import { CompanyLookup } from "@/components/CompanyLookup";
 import { addWorkRole, deleteWorkRole, updateOrganization } from "../actions";
 
 export default async function SettingsPage() {
@@ -17,8 +18,8 @@ export default async function SettingsPage() {
       <section className="card">
         <h2 className="h2">Bedrift</h2>
         <ActionForm action={updateOrganization} className="mt-4 grid gap-4 md:grid-cols-2">
-          <Field label="Navn"><input name="name" defaultValue={org?.name} className="input" /></Field>
-          <Field label="Organisasjonsnummer"><input name="org_number" defaultValue={org?.org_number ?? ""} className="input" /></Field>
+          <CompanyLookup defaultName={org?.name ?? ""} defaultOrgNumber={org?.org_number ?? ""} defaultAddress={org?.address ?? ""}
+            defaultPostalCode={org?.postal_code ?? ""} defaultCity={org?.city ?? ""} />
           <Field label="Heltid, timer per uke"><input name="full_time_hours_week" type="number" step="0.25" defaultValue={Number(org?.full_time_hours_week)} className="input" /></Field>
           <Field label="Feriedager per år" hint="Standard for nye ansatte, telt mandag–fredag. 25 = 5 uker.">
             <input name="vacation_days_year" type="number" defaultValue={org?.vacation_days_year} className="input" />

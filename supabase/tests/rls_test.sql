@@ -23,7 +23,7 @@ end $$;
 -- Plattformadmin lager to bedrifter og gir eierskap videre
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
-select create_organization('Æ e trønder AS') as org_a \gset
+select create_organization('Æ e trønder AS', '123456789', 'Kirkegata 1', '7500', 'Stjørdal') as org_a \gset
 select create_organization('Bedrift B') as org_b \gset
 insert into memberships values (:'org_a', '00000000-0000-0000-0000-0000000000a1', 'owner', now());
 insert into memberships values (:'org_b', '00000000-0000-0000-0000-0000000000b1', 'owner', now());

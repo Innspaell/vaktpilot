@@ -17,6 +17,12 @@ function num(fd: FormData, key: string, fallback: number) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** Orgnr uten mellomrom; tomt felt blir null. */
+function orgNumber(fd: FormData) {
+  const v = text(fd, "org_number")?.replace(/\D/g, "");
+  return v ? v : null;
+}
+
 // ---------- Bedrift ----------
 
 export async function createOrganization(_: ActionState, fd: FormData): Promise<ActionState> {
@@ -24,7 +30,13 @@ export async function createOrganization(_: ActionState, fd: FormData): Promise<
   if (!ctx.isPlatformAdmin) return { error: "Bare InnSpæll kan opprette bedrifter." };
   const name = text(fd, "name");
   if (!name) return { error: "Skriv inn navnet på bedriften." };
-  const { data, error } = await ctx.supabase.rpc("create_organization", { p_name: name, p_org_number: text(fd, "org_number") });
+  const { data, error } = await ctx.supabase.rpc("create_organization", {
+    p_name: name,
+    p_org_number: orgNumber(fd),
+    p_address: text(fd, "address"),
+    p_postal_code: text(fd, "postal_code"),
+    p_city: text(fd, "city"),
+  });
   if (error) return { error: error.message };
   (await cookies()).set(ORG_COOKIE, data as string, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   redirect("/innstillinger");
@@ -42,7 +54,10 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
     .from("organizations")
     .update({
       name: text(fd, "name") ?? ctx.org.name,
-      org_number: text(fd, "org_number"),
+      org_number: orgNumber(fd),
+      address: text(fd, "address"),
+      postal_code: text(fd, "postal_code"),
+      city: text(fd, "city"),
       full_time_hours_week: num(fd, "full_time_hours_week", 37.5),
       vacation_days_year: num(fd, "vacation_days_year", 25),
       staffing_slot_minutes: num(fd, "staffing_slot_minutes", 15),
