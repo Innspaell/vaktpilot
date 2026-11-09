@@ -70,6 +70,34 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
   return { ok: "Lagret." };
 }
 
+// ---------- Logo ----------
+
+const LOGO_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/svg+xml": "svg" };
+
+export async function uploadLogo(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const file = fd.get("logo");
+  if (!(file instanceof File) || file.size === 0) return { error: "Velg en bildefil." };
+  const ext = LOGO_TYPES[file.type];
+  if (!ext) return { error: "Bruk PNG, JPG, WebP eller SVG." };
+  if (file.size > 2 * 1024 * 1024) return { error: "Filen er for stor. Maks 2 MB." };
+
+  const path = `${ctx.org.id}/logo-${Date.now()}.${ext}`;
+  const { error } = await ctx.supabase.storage.from("logos").upload(path, file, { contentType: file.type, upsert: true });
+  if (error) return { error: `Kunne ikke laste opp: ${error.message}` };
+  const { data } = ctx.supabase.storage.from("logos").getPublicUrl(path);
+  const { error: uErr } = await ctx.supabase.from("organizations").update({ logo_url: data.publicUrl }).eq("id", ctx.org.id);
+  if (uErr) return { error: uErr.message };
+  revalidatePath("/", "layout");
+  return { ok: "Logoen er lagret." };
+}
+
+export async function removeLogo() {
+  const ctx = await requireAdmin();
+  await ctx.supabase.from("organizations").update({ logo_url: null }).eq("id", ctx.org.id);
+  revalidatePath("/", "layout");
+}
+
 // ---------- Arbeidsroller ----------
 
 export async function addWorkRole(_: ActionState, fd: FormData): Promise<ActionState> {

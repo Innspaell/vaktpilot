@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
-import { addWorkRole, deleteWorkRole, updateOrganization } from "../actions";
+import { addWorkRole, deleteWorkRole, removeLogo, updateOrganization, uploadLogo } from "../actions";
 
 export default async function SettingsPage() {
   const ctx = await requireAdmin();
@@ -35,6 +35,21 @@ export default async function SettingsPage() {
             <input type="checkbox" name="auto_submit_clock_entries" defaultChecked={org?.auto_submit_clock_entries} className="h-4 w-4" />
             Send inn stemplede timer automatisk
           </label>
+        </ActionForm>
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Logo</h2>
+        <p className="mt-1 text-sm text-muted">Vises øverst i appen for alle i bedriften. PNG med gjennomsiktig bakgrunn blir finest. Maks 2 MB.</p>
+        {org?.logo_url && (
+          <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg border border-line bg-paper p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={org.logo_url} alt="Logo" className="max-h-16 w-auto object-contain" />
+            <form action={removeLogo}><button className="btn-ghost">Fjern logo</button></form>
+          </div>
+        )}
+        <ActionForm action={uploadLogo} submitLabel={org?.logo_url ? "Bytt logo" : "Last opp"} className="mt-3 flex flex-wrap items-end gap-3">
+          <input name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" required className="text-sm" />
         </ActionForm>
       </section>
 
