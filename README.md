@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Vaktpilot
 
-## Getting Started
+Vaktplan, bemanning og timer for små bedrifter. Eies og driftes av InnSpæll AS. Én installasjon betjener flere bedrifter.
 
-First, run the development server:
+## Teknologi
+
+Next.js 15 (App Router) · TypeScript · Supabase (Postgres, innlogging, Row Level Security) · Tailwind 4 · Vercel.
+
+## Struktur
+
+| Mappe | Innhold |
+| --- | --- |
+| `supabase/migrations` | Databasen: tabeller, tilgangsregler (RLS), funksjoner for stempling og vakttildeling |
+| `supabase/tests` | Databasetester mot lokal Postgres |
+| `src/lib/time.ts` | Tid i Europe/Oslo: vakter over midnatt, sommer- og vintertid |
+| `src/lib/holidays.ts` | Norske helligdager og høytidsaftener |
+| `src/lib/staffing.ts` | Bemanning per tidsrom mot behov |
+| `src/lib/warnings.ts` | Advarsler om hviletid og lange dager (stopper ikke) |
+| `src/app/(app)` | Sidene i appen |
+
+## Kom i gang
+
+1. Lag et Supabase-prosjekt i EU-region og kjør migreringen i `supabase/migrations`.
+2. Kopier `.env.example` til `.env.local` og fyll inn URL og publishable key.
+3. Under Authentication → URL Configuration: legg til `https://<domenet>/auth/callback` som redirect-adresse.
+4. Logg inn én gang, og gjør deg selv til plattformadmin i SQL-editoren:
+   `insert into platform_admins (user_id) select id from auth.users where email = '<din e-post>';`
+5. Opprett bedriften under «Ny bedrift», legg inn daglig leder som ansatt og gi hen administratortilgang.
+
+## Tester
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm test                 # beregninger (Vitest)
+# databasetester, krever lokal Postgres 16:
+psql -d vp -f supabase/tests/supabase_stub.sql
+psql -d vp -f supabase/migrations/20261109000001_grunnmur.sql
+psql -d vp -f supabase/tests/rls_test.sql
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Status
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Ferdig: database for alle faser, innlogging med e-postlenke, bedriftsvalg, ansattregister med avtaler og arbeidsroller, innstillinger, dashbord for administrator og ansatt, stempling.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Neste: vaktplan med kalender og bemanningsbehov, påmelding til ledige vakter, manuell timeregistrering og godkjenning, CSV-eksport.

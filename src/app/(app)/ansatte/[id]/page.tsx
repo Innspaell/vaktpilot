@@ -1,0 +1,126 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/context";
+import { ActionForm, Field } from "@/components/Form";
+import { addTerms, setMemberRole, updateEmployee } from "../../actions";
+
+export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ny?: string }> }) {
+  const { id } = await params;
+  const { ny } = await searchParams;
+  const ctx = await requireAdmin();
+
+  const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }] = await Promise.all([
+    ctx.supabase.from("employees").select("*").eq("id", id).eq("org_id", ctx.org.id).maybeSingle(),
+    ctx.supabase.from("employment_terms").select("*").eq("employee_id", id).order("valid_from", { ascending: false }),
+    ctx.supabase.from("work_roles").select("id, name").eq("org_id", ctx.org.id).order("name"),
+    ctx.supabase.from("employee_work_roles").select("work_role_id").eq("employee_id", id),
+  ]);
+  if (!e) notFound();
+
+  let membershipRole: string | null = null;
+  if (e.user_id) {
+    const { data: m } = await ctx.supabase.from("memberships").select("role").eq("org_id", ctx.org.id).eq("user_id", e.user_id).maybeSingle();
+    membershipRole = m?.role ?? null;
+  }
+  const has = new Set((myRoles ?? []).map((r) => r.work_role_id));
+  const current = (terms ?? []).find((t) => !t.valid_to);
+
+  return (
+    <div className="space-y-4">
+      <Link href="/ansatte" className="text-sm font-medium text-brand">← Alle ansatte</Link>
+      <h1 className="h1">{e.full_name}</h1>
+      {ny && (
+        <p className="card bg-good-soft text-sm text-good">
+          {e.full_name} er lagt til. {e.email ? `Be hen logge inn med ${e.email}.` : "Legg inn e-post så hen kan logge inn."}
+        </p>
+      )}
+
+      <section className="card">
+        <h2 className="h2">Opplysninger</h2>
+        <ActionForm action={updateEmployee} className="mt-4 grid gap-4 md:grid-cols-2">
+          <input type="hidden" name="id" value={e.id} />
+          <Field label="Navn"><input name="full_name" required defaultValue={e.full_name} className="input" /></Field>
+          <Field label="E-post"><input name="email" type="email" defaultValue={e.email ?? ""} className="input" /></Field>
+          <Field label="Telefon"><input name="phone" type="tel" defaultValue={e.phone ?? ""} className="input" /></Field>
+          <Field label="Ansattnummer"><input name="employee_number" defaultValue={e.employee_number ?? ""} className="input" /></Field>
+          <Field label="Startdato"><input name="start_date" type="date" defaultValue={e.start_date} className="input" /></Field>
+          <Field label="Sluttdato" hint="Tilgangen stenges fra denne datoen.">
+            <input name="end_date" type="date" defaultValue={e.end_date ?? ""} className="input" />
+          </Field>
+          <label className="flex items-center gap-2 text-sm md:col-span-2">
+            <input type="checkbox" name="is_shift_worker" defaultChecked={e.is_shift_worker} className="h-4 w-4" /> Jobber turnus eller skift
+          </label>
+          <fieldset className="md:col-span-2">
+            <legend className="label">Arbeidsroller</legend>
+            {(roles ?? []).length === 0 ? (
+              <p className="text-sm text-muted">Ingen roller ennå. <Link href="/innstillinger" className="text-brand">Legg til i innstillinger.</Link></p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(roles ?? []).map((r) => (
+                  <label key={r.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                    <input type="checkbox" name="work_roles" value={r.id} defaultChecked={has.has(r.id)} className="h-4 w-4" />
+                    {r.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+        </ActionForm>
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Avtale</h2>
+        {current ? (
+          <p className="mt-1 text-sm text-muted">
+            Gjelder fra {current.valid_from}: {Number(current.position_pct)} % · {Number(current.hours_per_week)} t/uke ·{" "}
+            {current.pay_type === "fixed" ? "fastlønn" : "timelønn"} · {current.paid_holidays ? "betalte helligdager" : "ikke betalte helligdager"} ·{" "}
+            {current.vacation_days} feriedager
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">Ingen gjeldende avtale.</p>
+        )}
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm font-semibold text-brand">Ny avtale fra en dato</summary>
+          <p className="mt-2 text-sm text-muted">Gjeldende avtale avsluttes dagen før. Gamle timelister beregnes fortsatt etter avtalen som gjaldt da.</p>
+          <ActionForm action={addTerms} className="mt-4 grid gap-4 md:grid-cols-3">
+            <input type="hidden" name="employee_id" value={e.id} />
+            <Field label="Fra dato"><input name="valid_from" type="date" required className="input" /></Field>
+            <Field label="Stillingsprosent"><input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" /></Field>
+            <Field label="Timer per uke"><input name="hours_per_week" type="number" step="0.25" defaultValue={Number(current?.hours_per_week ?? 37.5)} className="input" /></Field>
+            <Field label="Lønnstype">
+              <select name="pay_type" defaultValue={current?.pay_type ?? "hourly"} className="input">
+                <option value="hourly">Timelønn</option>
+                <option value="fixed">Fastlønn</option>
+              </select>
+            </Field>
+            <Field label="Feriedager per år" hint="Telt mandag–fredag."><input name="vacation_days" type="number" defaultValue={current?.vacation_days ?? 25} className="input" /></Field>
+            <label className="flex items-center gap-2 self-end pb-3 text-sm">
+              <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? true} className="h-4 w-4" /> Betalte helligdager
+            </label>
+          </ActionForm>
+        </details>
+        {(terms ?? []).length > 1 && (
+          <ul className="mt-4 space-y-1 border-t border-line pt-3 text-sm text-muted">
+            {(terms ?? []).filter((t) => t.valid_to).map((t) => (
+              <li key={t.id}>{t.valid_from} – {t.valid_to}: {Number(t.position_pct)} % · {t.pay_type === "fixed" ? "fast" : "time"}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {e.user_id && membershipRole && membershipRole !== "owner" && e.user_id !== ctx.userId && (
+        <section className="card">
+          <h2 className="h2">Tilgang</h2>
+          <form action={setMemberRole} className="mt-3 flex flex-wrap items-center gap-3">
+            <input type="hidden" name="user_id" value={e.user_id} />
+            <select name="role" defaultValue={membershipRole} className="input w-auto">
+              <option value="employee">Ansatt</option>
+              <option value="admin">Administrator</option>
+            </select>
+            <button className="btn-ghost">Endre tilgang</button>
+          </form>
+        </section>
+      )}
+    </div>
+  );
+}
