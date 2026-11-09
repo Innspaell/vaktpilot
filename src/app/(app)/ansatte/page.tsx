@@ -8,11 +8,11 @@ export default async function EmployeesPage() {
   const ctx = await requireAdmin();
   const { data: employees } = await ctx.supabase
     .from("employees")
-    .select("id, full_name, email, user_id, end_date, employment_terms(position_pct, pay_type, valid_to)")
+    .select("id, full_name, email, user_id, end_date, auto_plan, employment_terms(position_pct, pay_type, valid_to)")
     .eq("org_id", ctx.org.id)
     .order("full_name");
 
-  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null;
+  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null; auto_plan: boolean;
     employment_terms: { position_pct: number; pay_type: string; valid_to: string | null }[] };
   const rows = (employees ?? []) as Row[];
   const today = new Date().toISOString().slice(0, 10);
@@ -38,6 +38,7 @@ export default async function EmployeesPage() {
                       <div className="truncate text-sm text-muted">{e.email ?? "Ingen e-post"}</div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2 text-sm">
+                      {!e.auto_plan && <span className="badge bg-paper text-muted ring-1 ring-line">ikke i autoplan</span>}
                       {terms && <span className="text-muted">{Number(terms.position_pct)} % · {terms.pay_type === "fixed" ? "fast" : "time"}</span>}
                       {ended ? <span className="badge bg-paper text-muted">Sluttet</span>
                         : e.user_id ? <span className="badge bg-good-soft text-good">Aktiv</span>

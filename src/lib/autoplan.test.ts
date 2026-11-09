@@ -116,4 +116,31 @@ describe("fordeling på ansatte", () => {
     expect(r.shifts.filter((s) => s.employeeId === "kari")).toHaveLength(1);
     expect(r.openCount).toBe(1);
   });
+
+  it("to på 60 % fyller en uke med én person man–tor og to på fredag", () => {
+    const K = "kundebehandler";
+    const days = [0, 1, 2, 3, 4].map((i) => ({
+      date: addDays(monday, i), closed: false,
+      requirements: [{ start: "08:00", end: "16:00", required: i === 4 ? 2 : 1, workRoleId: K }],
+    }));
+    const employees: PlanEmployee[] = [
+      { id: "c", name: "Christian", targetMinutes: 22.5 * 60, roleIds: [K], unavailable: [] },
+      { id: "j", name: "Joakim", targetMinutes: 22.5 * 60, roleIds: [K], unavailable: [] },
+    ];
+    const r = buildPlan(days, employees, []);
+    expect(r.openCount).toBe(0);
+    expect(r.shifts.every((s) => localTime(s.start) === "08:00" && localTime(s.end) === "16:00")).toBe(true);
+    expect(r.summary.map((s) => s.shifts)).toEqual([3, 3]);
+    expect(r.shifts.filter((s) => s.date === addDays(monday, 4)).map((s) => s.employeeId).sort()).toEqual(["c", "j"]);
+  });
+
+  it("100 % stilling tar ikke alle vaktene fra de på deltid", () => {
+    const employees: PlanEmployee[] = [
+      { id: "a", name: "Anne", targetMinutes: 37.5 * 60, roleIds: [], unavailable: [] },
+      { id: "b", name: "Bjørn", targetMinutes: 22.5 * 60, roleIds: [], unavailable: [] },
+    ];
+    const days = [0, 1, 2, 3].map((i) => ({ date: addDays(monday, i), closed: false, requirements: [{ start: "08:00", end: "16:00", required: 1 }] }));
+    const r = buildPlan(days, employees, []);
+    expect(r.summary.map((s) => s.shifts)).toEqual([2, 2]);
+  });
 });

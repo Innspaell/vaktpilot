@@ -37,7 +37,7 @@ export async function autoPlanWeek(_: AutoPlanState, fd: FormData): Promise<Auto
 
   const [needsAll, empRes, termsRes, rolesRes, absRes, availRes, shiftsRes] = await Promise.all([
     needsForDays(ctx, from, days),
-    ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id)
+    ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).eq("auto_plan", true)
       .lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`),
     ctx.supabase.from("employment_terms").select("employee_id, hours_per_week, valid_from, valid_to").eq("org_id", ctx.org.id)
       .lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`),
@@ -57,7 +57,7 @@ export async function autoPlanWeek(_: AutoPlanState, fd: FormData): Promise<Auto
     return { error: "Det er ikke satt bemanningsbehov for denne perioden. Legg det inn under Bemanning først." };
   }
   const employeesRaw = empRes.data ?? [];
-  if (employeesRaw.length === 0) return { error: "Ingen ansatte å fordele vakter på." };
+  if (employeesRaw.length === 0) return { error: "Ingen ansatte er med i automatisk vaktplan. Slå det på i ansattkortet." };
 
   const dates = needs.map((n) => n.date);
   const employees: PlanEmployee[] = employeesRaw.map((e) => {

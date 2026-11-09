@@ -60,6 +60,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             </select>
           </Field>
           <div />
+          <label className="flex items-start gap-2 text-sm md:col-span-2">
+            <input type="checkbox" name="auto_plan" defaultChecked={e.auto_plan ?? true} className="mt-0.5 h-4 w-4" />
+            <span>Med i automatisk vaktplan<span className="block text-xs text-muted">Slå av for ledelse og andre som ikke skal få vakter automatisk. De kan fortsatt settes opp for hånd.</span></span>
+          </label>
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input type="checkbox" name="is_shift_worker" defaultChecked={e.is_shift_worker} className="h-4 w-4" /> Jobber turnus eller skift
           </label>

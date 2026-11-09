@@ -151,6 +151,7 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
       start_date: text(fd, "start_date") ?? undefined,
       end_date: text(fd, "end_date"),
       is_shift_worker: fd.get("is_shift_worker") === "on",
+      auto_plan: fd.get("auto_plan") === "on",
     })
     .eq("id", id)
     .eq("org_id", ctx.org.id);

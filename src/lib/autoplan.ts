@@ -187,8 +187,12 @@ export function buildPlan(
     return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
   };
 
+  // Dager med størst behov planlegges først, så de ikke står igjen når timene er brukt opp
+  const peak = (d: DayNeeds) => d.requirements.reduce((m, r) => Math.max(m, r.required), 0);
+  const order = days.map((d, i) => ({ d, i })).sort((a, b) => peak(b.d) - peak(a.d) || a.i - b.i).map((x) => x.d);
+
   const result: PlannedShift[] = [];
-  for (const day of days) {
+  for (const day of order) {
     const needs = needsToShifts(day, existing.filter((x) => localDay(x.start) === day.date), opts)
       // lengste vakter først, så de kortere fyller inn
       .sort((a, b) => b.end.getTime() - b.start.getTime() - (a.end.getTime() - a.start.getTime()));
@@ -211,11 +215,13 @@ export function buildPlan(
         );
       });
 
-      // Den som har mest igjen av avtalt tid, får vakten. Likt = færrest vakter, så navn.
+      // Den som har størst andel igjen av avtalt tid, får vakten, så 60 % og 100 % konkurrerer likt.
+      // Likt = færrest vakter, så navn.
+      const share = (e: PlanEmployee) => (e.targetMinutes > 0 ? 1 - planned.get(e.id)! / e.targetMinutes : -1);
       candidates.sort((a, b) => {
-        const ra = a.targetMinutes - planned.get(a.id)!;
-        const rb = b.targetMinutes - planned.get(b.id)!;
-        if (rb !== ra) return rb - ra;
+        const ra = share(a);
+        const rb = share(b);
+        if (Math.abs(rb - ra) > 1e-9) return rb - ra;
         const sa = busy.get(a.id)!.length;
         const sb = busy.get(b.id)!.length;
         if (sa !== sb) return sa - sb;
