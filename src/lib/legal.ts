@@ -6,7 +6,7 @@ export const VENDOR = {
   orgNumber: "936 532 233",
   place: "Stjørdal",
   /** Kontakt for personvern. Fylles inn av InnSpæll. Tom = vises som «kontakt via arbeidsgiveren». */
-  contactEmail: "",
+  contactEmail: "personvern@innspaell.no",
 };
 
 export const DPA_VERSION = "2026-11";
