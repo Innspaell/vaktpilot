@@ -22,6 +22,8 @@ export interface PlanEmployee {
   unavailable: string[];
   /** Ønsker ekstravakter: kan få litt mer enn avtalt tid. */
   wantsExtra?: boolean;
+  /** Datoer den ansatte gjerne vil jobbe. Gir fortrinn når fordelingen ellers er lik. */
+  preferred?: string[];
 }
 
 export interface ExistingShift {
@@ -217,7 +219,9 @@ export function buildPlan(
 
       // Den som har størst andel igjen av avtalt tid, får vakten, så 60 % og 100 % konkurrerer likt.
       // Likt = færrest vakter, så navn.
-      const share = (e: PlanEmployee) => (e.targetMinutes > 0 ? 1 - planned.get(e.id)! / e.targetMinutes : -1);
+      // Ønsket dag gir et lite fortrinn (tilsvarer 10 % av avtalt tid)
+      const share = (e: PlanEmployee) =>
+        (e.targetMinutes > 0 ? 1 - planned.get(e.id)! / e.targetMinutes : -1) + (e.preferred?.includes(day.date) ? 0.1 : 0);
       candidates.sort((a, b) => {
         const ra = share(a);
         const rb = share(b);

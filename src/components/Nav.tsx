@@ -12,13 +12,25 @@ const EMPLOYEE = [
 ];
 
 const ADMIN = [
+  { href: "/vaktplan/rediger", label: "Rediger plan" },
   { href: "/bemanning", label: "Bemanning" },
+  { href: "/turnus", label: "Turnus" },
   { href: "/ansatte", label: "Ansatte" },
+  { href: "/fravaer", label: "Fravær" },
+  { href: "/lonn", label: "Lønn" },
   { href: "/innstillinger", label: "Innstillinger" },
 ];
 
+const MORE = [
+  { href: "/tavle", label: "Oppslagstavle" },
+  { href: "/tilgjengelighet", label: "Når kan jeg jobbe" },
+  { href: "/varsler", label: "Varsler" },
+];
+
 function active(path: string, href: string) {
-  return href === "/" ? path === "/" : path.startsWith(href);
+  if (href === "/") return path === "/";
+  if (href === "/vaktplan") return path === "/vaktplan" || path.startsWith("/vaktplan/vakt");
+  return path.startsWith(href);
 }
 
 export function BottomNav() {
@@ -41,7 +53,7 @@ export function BottomNav() {
   );
 }
 
-export function SideNav({ isAdmin }: { isAdmin: boolean }) {
+export function SideNav({ isAdmin, isPlatformAdmin }: { isAdmin: boolean; isPlatformAdmin?: boolean }) {
   const path = usePathname();
   const link = (href: string, label: string) => (
     <Link key={href} href={href}
@@ -52,8 +64,11 @@ export function SideNav({ isAdmin }: { isAdmin: boolean }) {
   return (
     <nav className="space-y-1">
       {EMPLOYEE.map((i) => link(i.href, i.label))}
+      {MORE.map((i) => link(i.href, i.label))}
       {isAdmin && <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-muted">Administrasjon</div>}
       {isAdmin && ADMIN.map((i) => link(i.href, i.label))}
+      {isPlatformAdmin && <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-muted">InnSpæll</div>}
+      {isPlatformAdmin && link("/plattform", "Plattform")}
     </nav>
   );
 }

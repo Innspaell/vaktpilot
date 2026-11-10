@@ -263,5 +263,84 @@ select pg_temp.check((select status from absence_requests where id = :'abs_id') 
 select pg_temp.check((select from_date from absence_requests where id = :'abs_id') = '2026-12-02', 'feil fraværsdato');
 select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id where e.full_name = 'Kari Nordmann' and n.kind = 'absence_registered'), 'Kari ble ikke varslet');
 
+-- Oppslagstavle: alle skriver eget, bare admin setter fokus, egne/admin sletter
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+insert into board_posts (org_id, author_user, author_name, body) values (:'org_a', '00000000-0000-0000-0000-0000000000a3', 'Ola', 'Hei alle') returning id as post_ola \gset
+do $$ begin
+  insert into board_posts (org_id, author_user, author_name, body, pinned)
+  values ((select id from organizations limit 1), '00000000-0000-0000-0000-0000000000a3', 'Ola', 'Viktig!', true);
+  raise exception 'FEIL: ansatt satte fokus';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+delete from board_posts where id = :'post_ola';
+reset role;
+select pg_temp.check(exists (select 1 from board_posts where id = :'post_ola'), 'Kari slettet Olas innlegg');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+update board_posts set pinned = true where id = :'post_ola';
+select pg_temp.check((select pinned from board_posts where id = :'post_ola'), 'admin fikk ikke satt fokus');
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+select pg_temp.check((select count(*) from board_posts) = 0, 'bedrift B ser tavlen til A');
+
+-- Vaktbytte: Kari tilbyr vakt til Ola, Ola sier ja, leder godkjenner
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+select :'org_a', id, now() + interval '20 days', now() + interval '20 days 8 hours', 'published' from employees where full_name = 'Kari Nordmann'
+returning id as swap_shift \gset
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select propose_swap(:'swap_shift', (select id from org_colleagues(:'org_a') where full_name = 'Ola Nordmann'), 'Bursdag') as swap_id \gset
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin
+  perform decide_swap((select id from shift_swaps where status = 'pending' limit 1), true);
+  raise exception 'FEIL: godkjent før kollega svarte';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select respond_swap(:'swap_id', true);
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select decide_swap(:'swap_id', true);
+reset role;
+select pg_temp.check((select e.full_name from shifts s join employees e on e.id = s.employee_id where s.id = :'swap_shift') = 'Ola Nordmann', 'vakten ble ikke byttet');
+
+-- Kalenderlenke: riktig token gir egne vakter, feil gir ingenting, også uten innlogging
+select calendar_token as ola_token from employees where full_name = 'Ola Nordmann' \gset
+set role anon;
+select pg_temp.check((select count(*) from calendar_feed(:'ola_token')) >= 1, 'kalender tom');
+select pg_temp.check((select count(*) from calendar_feed(gen_random_uuid())) = 0, 'kalender med feil lenke');
+reset role;
+
+-- Plattformside: bare plattformadmin
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin perform platform_overview(); raise exception 'FEIL: bedriftsleder så plattformsiden';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select pg_temp.check((select count(*) from platform_overview()) = 2, 'plattformoversikt');
+
+-- Lønnsperiode: kan ikke låses med ugodkjente timer; låses etter godkjenning; kan åpnes igjen
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin
+  perform lock_pay_period((select id from organizations where name like 'Æ%'), current_date - 30, current_date, 'csv', 'x');
+  raise exception 'FEIL: låst med ugodkjente timer';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select approve_time_entries(array(select id from time_entries where org_id = :'org_a' and status = 'submitted'));
+select lock_pay_period(:'org_a', current_date - 30, current_date, 'csv', 'abc') as export_id \gset
+reset role;
+select pg_temp.check((select count(*) from time_entries where payroll_export_id = :'export_id' and status = 'locked') >= 1, 'timer ble ikke låst');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select reopen_pay_period((select pay_period_id from payroll_exports where id = :'export_id'));
+reset role;
+select pg_temp.check((select count(*) from time_entries where payroll_export_id = :'export_id' and status = 'locked') = 0, 'periode ble ikke åpnet');
+
+-- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
+update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
+select run_reminders();
+select run_retention();
+select pg_temp.check(not exists (select 1 from memberships m join employees e on e.user_id = m.user_id where e.full_name = 'Kari Nordmann'), 'sluttet ansatt har fortsatt tilgang');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

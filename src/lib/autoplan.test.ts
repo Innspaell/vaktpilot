@@ -143,4 +143,16 @@ describe("fordeling på ansatte", () => {
     const r = buildPlan(days, employees, []);
     expect(r.summary.map((s) => s.shifts)).toEqual([2, 2]);
   });
+
+  it("gir fortrinn til den som gjerne vil jobbe dagen", () => {
+    const r = buildPlan(
+      [{ date: monday, closed: false, requirements: [{ start: "08:00", end: "16:00", required: 1 }] }],
+      [
+        { id: "a", name: "Anne", targetMinutes: 22.5 * 60, roleIds: [], unavailable: [] },
+        { id: "b", name: "Bjørn", targetMinutes: 22.5 * 60, roleIds: [], unavailable: [], preferred: [monday] },
+      ],
+      [],
+    );
+    expect(r.shifts[0].employeeId).toBe("b");
+  });
 });

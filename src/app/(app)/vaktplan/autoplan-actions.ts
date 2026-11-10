@@ -106,6 +106,7 @@ export async function autoPlanWeek(_: AutoPlanState, fd: FormData): Promise<Auto
         roleIds: (rolesRes.data ?? []).filter((r) => r.employee_id === e.id).map((r) => r.work_role_id),
         unavailable: Array.from(unavailable),
         wantsExtra: avail.some((x) => x.kind === "wants_extra"),
+        preferred: allDates.filter((d) => avail.some((a) => a.kind === "available" && (a.date === d || (!a.date && a.weekday === isoWeekday(d))))),
       };
     });
 

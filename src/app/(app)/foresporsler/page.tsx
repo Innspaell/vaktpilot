@@ -4,6 +4,7 @@ import { formatDateLong, localDate, localTime } from "@/lib/time";
 import Link from "next/link";
 import { cancelRequest, decideRequest } from "../vaktplan/actions";
 import { AbsenceSection } from "@/components/AbsenceSection";
+import { SwapSection } from "@/components/SwapSection";
 
 const STATUS: Record<string, [string, string]> = {
   pending: ["Venter", "bg-warn-soft text-warn"],
@@ -19,16 +20,26 @@ type Req = {
   shifts: { starts_at: string; ends_at: string } | null;
 };
 
-export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ feil?: string; vis?: string }> }) {
-  const { feil, vis } = await searchParams;
+export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ feil?: string; vis?: string; vakt?: string }> }) {
+  const { feil, vis, vakt } = await searchParams;
   const ctx = await requireOrg();
-  const tab = vis === "vakter" ? "vakter" : "fri";
+  const tab = vis === "vakter" ? "vakter" : vis === "bytte" ? "bytte" : "fri";
   const tabs = (
     <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
-      <Link href="/foresporsler?vis=fri" className={`rounded-md px-3 py-1.5 font-medium ${tab === "fri" ? "bg-brand text-white" : "text-muted"}`}>Fri og fravær</Link>
-      <Link href="/foresporsler?vis=vakter" className={`rounded-md px-3 py-1.5 font-medium ${tab === "vakter" ? "bg-brand text-white" : "text-muted"}`}>Vakter</Link>
+      {([["fri", "Fri og fravær"], ["vakter", "Ledige vakter"], ["bytte", "Vaktbytte"]] as const).map(([k, label]) => (
+        <Link key={k} href={`/foresporsler?vis=${k}`} className={`rounded-md px-3 py-1.5 font-medium ${tab === k ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
+      ))}
     </div>
   );
+  if (tab === "bytte") {
+    return (
+      <div className="space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
+        {feil && <p className="card bg-bad-soft text-sm text-bad">{feil}</p>}
+        <SwapSection ctx={ctx} preselect={vakt} />
+      </div>
+    );
+  }
   if (tab === "fri") {
     return (
       <div className="space-y-4">

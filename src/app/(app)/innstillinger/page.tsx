@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
@@ -14,6 +15,10 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-4">
       <h1 className="h1">Innstillinger</h1>
+      <Link href="/innstillinger/personvern" className="card flex items-center justify-between hover:border-brand">
+        <span><b>Personvern og databehandleravtale</b><span className="block text-sm text-muted">Godta avtalen, last ned alle data, se sletterutiner</span></span>
+        <span className="text-brand">›</span>
+      </Link>
 
       <section className="card">
         <h2 className="h2">Bedrift</h2>

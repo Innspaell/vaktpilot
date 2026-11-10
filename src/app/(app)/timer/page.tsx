@@ -6,6 +6,7 @@ import { ClockButton } from "@/components/ClockButton";
 import { EntryForm } from "@/components/EntryForm";
 import { addDays, dayBounds, formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
 import { approveEntries, confirmShift, deleteEntry } from "./actions";
+import { loadPayroll } from "@/lib/payroll-data";
 
 const STATUS: Record<string, [string, string]> = {
   draft: ["Utkast", "bg-paper text-muted"],
@@ -121,6 +122,12 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       .order("starts_at"),
   ]);
   const entries = (entriesData ?? []) as unknown as Entry[];
+  const [monthPay, yearPay] = await Promise.all([
+    loadPayroll(ctx, today.slice(0, 8) + "01", today, ctx.employeeId),
+    loadPayroll(ctx, today.slice(0, 5) + "01-01", today, ctx.employeeId),
+  ]);
+  const mb = monthPay.balances.get(ctx.employeeId);
+  const yb = yearPay.balances.get(ctx.employeeId);
   const registered = new Set(entries.map((e) => e.shift_id).filter(Boolean));
   const toConfirm = (shiftsData ?? []).filter((s) => !registered.has(s.id));
   const monthStart = today.slice(0, 8) + "01";
@@ -131,6 +138,26 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Timer</h1>{tabs}</header>
+
+      {mb && yb && (
+        <section className="card">
+          <h2 className="h2">Timesaldo</h2>
+          <p className="mt-1 text-xs text-muted">Avtalt tid fram til i dag, mot timer du har registrert pluss betalt fravær. Helligdager er trukket fra.</p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {([["Denne måneden", mb], ["Hittil i år", yb]] as const).map(([t, b]) => (
+              <div key={t} className="rounded-lg bg-paper p-3">
+                <div className="text-xs text-muted">{t}</div>
+                <div className={`text-2xl font-bold tabular-nums ${b.diffHours < -0.01 ? "text-warn" : b.diffHours > 0.01 ? "text-brand" : "text-good"}`}>
+                  {b.diffHours > 0 ? "+" : ""}{b.diffHours.toLocaleString("nb-NO")} t
+                </div>
+                <div className="text-xs text-muted tabular-nums">
+                  {(b.workedHours + b.paidAbsenceHours).toLocaleString("nb-NO")} av {b.expectedHours.toLocaleString("nb-NO")} t
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {toConfirm.length > 0 && (
         <section id="bekreft" className="card border-brand/30">

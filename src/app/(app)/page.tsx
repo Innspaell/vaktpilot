@@ -5,6 +5,7 @@ import { addDays, formatDateLong, formatHours, localDate, localTime, workedMinut
 import { clockState } from "@/lib/clock";
 import { ClockButton } from "@/components/ClockButton";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
+import { Board } from "@/components/Board";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -59,6 +60,8 @@ export default async function Home() {
           <h1 className="h1 capitalize">{formatDateLong(date)}</h1>
           {todayCov.holiday && <p className="mt-1 text-warn">{todayCov.holiday}</p>}
         </header>
+
+        <Board ctx={org} compact />
 
         {short.length > 0 ? (
           <section className="card border-bad/30 bg-bad-soft">
@@ -169,6 +172,8 @@ export default async function Home() {
         </section>
       )}
       {clock && <ClockButton state={clock.state} since={clock.since} />}
+
+      <Board ctx={org} compact />
 
       <section className="card">
         <h2 className="h2">Neste vakt</h2>
