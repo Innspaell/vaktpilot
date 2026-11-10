@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { autoPlanWeek, undoAutoPlan, clearAutoDrafts, type AutoPlanState } from "@/app/(app)/vaktplan/autoplan-actions";
 
@@ -13,8 +13,10 @@ function Submit() {
   return <button className="btn-primary" disabled={pending}>{pending ? "Lager forslag …" : "Lag forslag"}</button>;
 }
 
-export function AutoPlanPanel({ from, days, hasAutoDrafts }: { from: string; days: number; hasAutoDrafts: boolean }) {
+export function AutoPlanPanel({ from, days, monthStart, hasAutoDrafts }: { from: string; days: number; monthStart: string; hasAutoDrafts: boolean }) {
   const [state, action] = useActionState<AutoPlanState, FormData>(autoPlanWeek, undefined);
+  const [period, setPeriod] = useState("uke");
+  const monthName = new Intl.DateTimeFormat("nb-NO", { month: "long", timeZone: "UTC" }).format(new Date(monthStart + "T12:00:00Z"));
   return (
     <details className="rounded-lg border border-line" open={Boolean(state)}>
       <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand">Lag vaktplan automatisk</summary>
@@ -24,17 +26,36 @@ export function AutoPlanPanel({ from, days, hasAutoDrafts }: { from: string; day
           11 timers hvile. Vakter som allerede finnes, beholdes. Alt lagres som utkast som du kan endre før du publiserer.
         </p>
         <form action={action} className="grid gap-3 md:grid-cols-4">
-          <input type="hidden" name="from" value={from} />
-          <input type="hidden" name="days" value={days} />
+          <input type="hidden" name="month_start" value={monthStart} />
           <label className="block">
-            <span className="label">Lengste vakt (timer)</span>
-            <input name="max_hours" type="number" step="0.5" min="2" max="13" defaultValue="8.5" className="input" />
+            <span className="label">Periode</span>
+            <select name="period" value={period} onChange={(e) => setPeriod(e.target.value)} className="input">
+              <option value="uke">Denne uka</option>
+              <option value="maned">Hele {monthName}</option>
+              <option value="egen">Velg datoer</option>
+            </select>
+          </label>
+          {period === "egen" ? (
+            <>
+              <label className="block"><span className="label">Fra</span><input name="from" type="date" required defaultValue={from} className="input" /></label>
+              <label className="block"><span className="label">Til</span><input name="to" type="date" required className="input" /></label>
+            </>
+          ) : (
+            <input type="hidden" name="from" value={from} />
+          )}
+          <label className="block">
+            <span className="label">Arbeidsdag (timer uten pause)</span>
+            <input name="work_hours" type="number" step="0.25" min="2" max="12" defaultValue="7.5" className="input" />
+          </label>
+          <label className="block">
+            <span className="label">Pause (minutter)</span>
+            <input name="break_minutes" type="number" step="5" min="0" max="60" defaultValue="30" className="input" />
           </label>
           <label className="block">
             <span className="label">Korteste vakt (timer)</span>
             <input name="min_hours" type="number" step="0.5" min="1" max="8" defaultValue="3" className="input" />
           </label>
-          <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-2">
+          <label className="flex items-center gap-2 self-end pb-3 text-sm">
             <input type="checkbox" name="create_open" defaultChecked className="h-4 w-4" />
             Lag ledige vakter for det ingen kan ta
           </label>

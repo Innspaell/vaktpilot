@@ -104,10 +104,29 @@ export async function addWorkRole(_: ActionState, fd: FormData): Promise<ActionS
   const ctx = await requireAdmin();
   const name = text(fd, "name");
   if (!name) return { error: "Skriv inn et navn." };
-  const { error } = await ctx.supabase.from("work_roles").insert({ org_id: ctx.org.id, name, color: text(fd, "color") ?? "#1f5fbf" });
+  const { data: last } = await ctx.supabase.from("work_roles").select("sort_order").eq("org_id", ctx.org.id).order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await ctx.supabase.from("work_roles").insert({
+    org_id: ctx.org.id, name, color: text(fd, "color") ?? "#1f5fbf", sort_order: (last?.sort_order ?? 0) + 10,
+  });
   if (error) return { error: error.code === "23505" ? "Rollen finnes allerede." : error.message };
   revalidatePath("/innstillinger");
   return { ok: "Lagt til." };
+}
+
+/** Flytt en rolle opp eller ned i rekkefølgen. Nummererer alle på nytt. */
+export async function moveWorkRole(fd: FormData) {
+  const ctx = await requireAdmin();
+  const id = text(fd, "id");
+  const dir = text(fd, "dir");
+  const { data } = await ctx.supabase.from("work_roles").select("id, sort_order, name").eq("org_id", ctx.org.id).order("sort_order").order("name");
+  const list = (data ?? []).map((r) => r.id);
+  const i = list.indexOf(id ?? "");
+  const j = dir === "up" ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  await Promise.all(list.map((rid, k) => ctx.supabase.from("work_roles").update({ sort_order: (k + 1) * 10 }).eq("id", rid).eq("org_id", ctx.org.id)));
+  revalidatePath("/innstillinger");
+  revalidatePath("/vaktplan", "layout");
 }
 
 export async function deleteWorkRole(fd: FormData) {

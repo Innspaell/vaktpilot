@@ -1,13 +1,13 @@
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
-import { addWorkRole, deleteWorkRole, removeLogo, updateOrganization, uploadLogo } from "../actions";
+import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, updateOrganization, uploadLogo } from "../actions";
 
 export default async function SettingsPage() {
   const ctx = await requireAdmin();
   const [{ data: org }, { data: roles }, { data: absenceTypes }] = await Promise.all([
     ctx.supabase.from("organizations").select("*").eq("id", ctx.org.id).single(),
-    ctx.supabase.from("work_roles").select("id, name, color").eq("org_id", ctx.org.id).order("name"),
+    ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id).order("sort_order").order("name"),
     ctx.supabase.from("absence_types").select("id, name, paid, is_sick, unit").eq("org_id", ctx.org.id).order("name"),
   ]);
 
@@ -55,12 +55,17 @@ export default async function SettingsPage() {
 
       <section className="card">
         <h2 className="h2">Arbeidsroller</h2>
-        <p className="mt-1 text-sm text-muted">Brukes i bemanningsbehov og vakter, for eksempel Kundebehandler.</p>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {(roles ?? []).map((r) => (
-            <li key={r.id} className="flex items-center gap-2 rounded-lg border border-line py-1 pl-3 pr-1 text-sm">
+        <p className="mt-1 text-sm text-muted">Brukes i bemanningsbehov og vakter. Rekkefølgen her er rekkefølgen i vaktplanen, øverst først.</p>
+        <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+          {(roles ?? []).map((r, i) => (
+            <li key={r.id} className="flex items-center gap-2 py-1.5 pl-3 pr-1 text-sm">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: r.color }} />
-              {r.name}
+              <span className="flex-1">{r.name}</span>
+              <form action={moveWorkRole} className="flex">
+                <input type="hidden" name="id" value={r.id} />
+                <button name="dir" value="up" disabled={i === 0} className="rounded px-2 py-1 text-muted hover:bg-paper disabled:opacity-30" aria-label={`Flytt ${r.name} opp`}>↑</button>
+                <button name="dir" value="down" disabled={i === (roles ?? []).length - 1} className="rounded px-2 py-1 text-muted hover:bg-paper disabled:opacity-30" aria-label={`Flytt ${r.name} ned`}>↓</button>
+              </form>
               <form action={deleteWorkRole}>
                 <input type="hidden" name="id" value={r.id} />
                 <button className="rounded px-2 py-1 text-muted hover:bg-paper hover:text-bad" aria-label={`Slett ${r.name}`}>×</button>

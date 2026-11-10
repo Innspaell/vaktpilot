@@ -191,5 +191,58 @@ select pg_temp.check((select count(*) from notifications where kind = 'absence_r
 select decide_absence(:'ferie_ola', true, true) as released \gset
 select pg_temp.check(:released = 1, 'vakten i ferien ble ikke ledig');
 
+-- Fjerne vakter i en periode: ansatt kan ikke, admin sletter utkast og avlyser publiserte
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  perform clear_shifts((select id from organizations limit 1), '2026-01-01', '2026-12-31', null, true);
+  raise exception 'FEIL: ansatt fjernet vakter';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, starts_at, ends_at, status) values (:'org_a', '2026-12-01 08:00+01', '2026-12-01 16:00+01', 'draft');
+select pg_temp.check((select deleted from clear_shifts(:'org_a', '2026-12-01', '2026-12-01')) = 1, 'utkast ble ikke slettet');
+-- Vakten med registrerte timer (Karis 13.11) skal ikke avlyses
+select * from clear_shifts(:'org_a', '2026-11-01', '2026-11-30', null, true) \gset clr_
+reset role;
+select pg_temp.check((select status from shifts where id = :'shift_open') = 'published' or exists (select 1 from time_entries where shift_id = :'shift_open') = false, 'vakt med timer ble avlyst');
+set role authenticated;
+
+-- Bekreft arbeidsdag: Ola bekrefter egen vakt i dag, ikke dobbelt, ikke andres, ikke fram i tid
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, break_minutes, status)
+select :'org_a', id, date_trunc('day', now()) + interval '5 hours', date_trunc('day', now()) + interval '13 hours', 30, 'published'
+from employees where full_name = 'Ola Nordmann' returning id as ola_today \gset
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+select :'org_a', id, now() + interval '3 days', now() + interval '3 days 8 hours', 'published'
+from employees where full_name = 'Ola Nordmann' returning id as ola_future \gset
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select confirm_shift(:'ola_today', null, null, null, 'Som planlagt') as confirmed \gset
+select pg_temp.check((select break_minutes from time_entries where id = :'confirmed') = 30, 'bekreftet pause');
+select pg_temp.check((select status from time_entries where id = :'confirmed') = 'submitted', 'bekreftet status');
+do $$ begin
+  perform confirm_shift((select shift_id from time_entries where comment = 'Som planlagt'), null, null, null, null);
+  raise exception 'FEIL: samme vakt bekreftet to ganger';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.check((select count(*) from time_entries where shift_id = :'ola_future') = 0, 'forutsetning');
+do $$ begin
+  perform confirm_shift((select id from shifts where starts_at > now() + interval '2 days' limit 1), null, null, null, null);
+  raise exception 'FEIL: framtidig vakt bekreftet';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+-- Manuell registrering: Ola kan registrere og rette før godkjenning
+insert into time_entries (org_id, employee_id, starts_at, ends_at, break_minutes, source, status)
+values (:'org_a', my_employee_id(:'org_a'), now() - interval '2 days', now() - interval '2 days' + interval '4 hours', 0, 'manual', 'submitted')
+returning id as manual_entry \gset
+update time_entries set break_minutes = 15 where id = :'manual_entry';
+select pg_temp.check((select break_minutes from time_entries where id = :'manual_entry') = 15, 'retting av egne timer');
+-- Ola kan ikke registrere som admin-kilde
+do $$ begin
+  insert into time_entries (org_id, employee_id, starts_at, ends_at, source, status)
+  values ((select id from organizations limit 1), my_employee_id((select id from organizations limit 1)), now() - interval '1 day', now() - interval '20 hours', 'admin', 'submitted');
+  raise exception 'FEIL: ansatt brukte admin-kilde';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

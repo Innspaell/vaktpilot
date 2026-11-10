@@ -12,7 +12,7 @@ function text(fd: FormData, key: string) {
 
 function refresh() {
   revalidatePath("/foresporsler");
-  revalidatePath("/vaktplan");
+  revalidatePath("/vaktplan", "layout");
   revalidatePath("/");
 }
 

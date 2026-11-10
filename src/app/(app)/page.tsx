@@ -150,8 +150,24 @@ export default async function Home() {
     ? shifts.filter((s) => s.id !== next.id && s.employee_id && new Date(s.starts_at) < new Date(next.ends_at) && new Date(s.ends_at) > new Date(next.starts_at)).map((s) => names.get(s.employee_id!))
     : [];
 
+  const todaysOwn = mine.find((s) => localDate(new Date(s.starts_at), tz) === date && s.status === "published");
+  let unconfirmed = false;
+  if (todaysOwn) {
+    const { data: te } = await ctx.supabase.from("time_entries").select("id").eq("shift_id", todaysOwn.id).maybeSingle();
+    unconfirmed = !te;
+  }
+
   return (
     <div className="space-y-4">
+      {todaysOwn && unconfirmed && (
+        <section className="card flex flex-wrap items-center justify-between gap-3 border-brand/30 bg-brand-soft">
+          <div>
+            <div className="h2">Dagens vakt: <span className="tabular-nums">{time(todaysOwn)}</span></div>
+            <div className="text-sm text-muted">Bekreft når du er ferdig, så registreres timene.</div>
+          </div>
+          <Link href="/timer#bekreft" className="btn-primary">Bekreft arbeidsdag</Link>
+        </section>
+      )}
       {clock && <ClockButton state={clock.state} since={clock.since} />}
 
       <section className="card">

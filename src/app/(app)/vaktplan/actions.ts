@@ -15,7 +15,7 @@ function text(fd: FormData, key: string) {
 }
 
 function refresh() {
-  revalidatePath("/vaktplan");
+  revalidatePath("/vaktplan", "layout");
   revalidatePath("/");
   revalidatePath("/foresporsler");
 }
@@ -130,6 +130,24 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
   if (overlaps) parts.push(`${overlaps} hoppet over fordi de overlapper med andre vakter.`);
   if (warnings.length) parts.push(`Advarsel – ${warnings.join(" ")}`);
   return warnings.length || overlaps ? { error: parts.join(" ") } : { ok: parts.join(" ") };
+}
+
+/** Fjern vakter i en periode, for alle eller én ansatt. */
+export async function clearPeriod(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const from = text(fd, "from");
+  const to = text(fd, "to") ?? from;
+  if (!from || !to || to < from) return { error: "Velg en gyldig periode." };
+  const { data, error } = await ctx.supabase.rpc("clear_shifts", {
+    p_org: ctx.org.id, p_from: from, p_to: to,
+    p_employee: text(fd, "employee_id"),
+    p_include_published: fd.get("include_published") === "on",
+  });
+  if (error) return { error: error.message };
+  refresh();
+  const r = (data as { deleted: number; cancelled: number }[])?.[0] ?? { deleted: 0, cancelled: 0 };
+  if (r.deleted + r.cancelled === 0) return { ok: "Ingen vakter å fjerne i perioden." };
+  return { ok: `${r.deleted} utkast slettet${r.cancelled ? `, ${r.cancelled} publiserte vakter fjernet (de ansatte er varslet)` : ""}.` };
 }
 
 export async function cancelShift(fd: FormData) {
