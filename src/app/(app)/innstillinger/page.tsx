@@ -19,6 +19,10 @@ export default async function SettingsPage() {
         <span><b>Personvern og databehandleravtale</b><span className="block text-sm text-muted">Godta avtalen, last ned alle data, se sletterutiner</span></span>
         <span className="text-brand">›</span>
       </Link>
+      <Link href="/innstillinger/varsler" className="card flex items-center justify-between hover:border-brand">
+        <span><b>Varsler</b><span className="block text-sm text-muted">Velg hva ansatte og ledere skal få beskjed om</span></span>
+        <span className="text-brand">›</span>
+      </Link>
 
       <section className="card">
         <h2 className="h2">Bedrift</h2>

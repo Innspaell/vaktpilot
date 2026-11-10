@@ -380,6 +380,43 @@ select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
 select pg_temp.check((select sum(amount) from leave_ledger where kind = 'time_off') = 7.5, 'Ola ser ikke egen avspasering');
 reset role;
 
+-- Varsler merkes som lest når saken løses, og bedriften kan slå av varseltyper
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+-- ledig vakt -> Kari får varsel; når vakta blir tatt, er varselet lest
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+values (:'org_a', null, now() + interval '40 days', now() + interval '40 days 5 hours', 'published')
+returning id as open_shift \gset
+reset role;
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Kari Nordmann' and n.kind = 'open_shifts' and n.ref_id = :'open_shift' and n.read_at is null), 'Kari fikk ikke ledig vakt med ref');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+update shifts set employee_id = (select id from employees where full_name = 'Ola Nordmann') where id = :'open_shift';
+reset role;
+select pg_temp.check(not exists (select 1 from notifications where ref_id = :'open_shift' and kind = 'open_shifts' and read_at is null), 'ledig-vakt-varsel ble ikke lest når vakta ble tatt');
+-- avslått varseltype lagres ikke
+update organizations set notification_prefs = '{"shift_changed": false, "shift_assigned": false}' where id = :'org_a';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+update shifts set ends_at = ends_at + interval '30 minutes' where id = :'open_shift';
+reset role;
+select pg_temp.check(not exists (select 1 from notifications where ref_id = :'open_shift' and kind = 'shift_changed'), 'avslått varseltype ble sendt likevel');
+update organizations set notification_prefs = '{}' where id = :'org_a';
+-- ansatt kan ikke endre varselvalg
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+update organizations set notification_prefs = '{"time_approved": false}' where id = :'org_a';
+reset role;
+select pg_temp.check((select notification_prefs from organizations where id = :'org_a') = '{}'::jsonb, 'ansatt endret varselvalg');
+-- påminnelse om bekreftelse leses når timer registreres
+insert into notifications (org_id, user_id, kind, title, link)
+values (:'org_a', '00000000-0000-0000-0000-0000000000a3', 'reminder_confirm', 'Husk', '/timer?bekreft=' || :'open_shift');
+insert into time_entries (org_id, employee_id, shift_id, starts_at, ends_at, break_minutes, status, source)
+select :'org_a', id, :'open_shift', now() - interval '60 days', now() - interval '60 days' + interval '3 hours', 0, 'submitted', 'manual' from employees where full_name = 'Ola Nordmann';
+select pg_temp.check(not exists (select 1 from notifications where link = '/timer?bekreft=' || :'open_shift' and read_at is null), 'påminnelse ble ikke lest etter bekreftelse');
+select pg_temp.check(resolve_stale_notifications() >= 0, 'rydding feilet');
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();
