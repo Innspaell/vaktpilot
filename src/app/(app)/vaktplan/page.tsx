@@ -90,6 +90,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const prev = step ? addDays(anchor, -step) : addDays(anchor.slice(0, 8) + "01", -1);
   const next = step ? addDays(anchor, step) : addDays(anchor.slice(0, 8) + "01", 32);
   const href = (p: { d?: string; v?: View; w?: Who }) => `/vaktplan?visning=${p.v ?? view}&dato=${p.d ?? anchor}&vis=${p.w ?? who}`;
+  // Admin trykker på en vakt for å sette personen fraværende eller endre vakten
+  const shiftLink = ctx.isAdmin ? (s: ShiftRow) => `/vaktplan/vakt/${s.id}?tilbake=${encodeURIComponent(href({}))}` : undefined;
   const title =
     view === "dag" ? dayLabelLong(anchor)
       : view === "uke" ? `Uke ${weekNumber(from)}`
@@ -131,7 +133,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
       {/* ---------------- DAG ---------------- */}
       {view === "dag" && (
-        <DayView date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
+        <DayView linkFor={shiftLink} date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
           cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.isAdmin} />
       )}
 
@@ -171,7 +173,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                             return (
                               <td key={c.date} className="px-2 py-1.5 align-top">
                                 {off && <span className="badge bg-warn-soft text-warn">{off.type_name}</span>}
-                                {day.map((s) => <ShiftChip key={s.id} s={s} tz={tz} role={roleById.get(roleOf(s) ?? "")} />)}
+                                {day.map((s) => <ShiftChip key={s.id} s={s} tz={tz} role={roleById.get(roleOf(s) ?? "")} href={shiftLink?.(s)} />)}
                               </td>
                             );
                           })}
@@ -220,7 +222,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     <h2 className="h2 capitalize">{dayLabelLong(c.date)}{isToday && <span className="ml-2 text-xs font-semibold uppercase text-brand">i dag</span>}</h2>
                     {c.holiday ? <span className="text-xs text-warn">{c.holiday}</span> : c.closed ? <span className="text-xs text-muted">Stengt</span> : null}
                   </div>
-                  <GroupedList shifts={day} roles={roles} roleOf={roleOf} name={name} tz={tz} highlight={ctx.employeeId} />
+                  <GroupedList shifts={day} roles={roles} roleOf={roleOf} name={name} tz={tz} highlight={ctx.employeeId} linkFor={shiftLink} />
                   {away.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {away.map((a) => <span key={a.employee_id + a.from_date} className="badge bg-warn-soft text-warn">{mine ? a.type_name : `${shortName(name(a.employee_id))}: ${a.type_name.toLowerCase()}`}</span>)}
@@ -339,14 +341,17 @@ function RoleLabel({ role }: { role: RosterRole | null }) {
   );
 }
 
-function ShiftChip({ s, tz, role }: { s: ShiftRow; tz: string; role?: RosterRole }) {
-  return (
-    <div className={`mb-1 rounded-md border-l-4 px-2 py-1 ${s.status === "draft" ? "border-dashed bg-white ring-1 ring-line" : "bg-paper"}`}
-      style={{ borderLeftColor: role?.color ?? "#94a3b8" }}>
+function ShiftChip({ s, tz, role, href }: { s: ShiftRow; tz: string; role?: RosterRole; href?: string }) {
+  const cls = `mb-1 block rounded-md border-l-4 px-2 py-1 ${s.status === "draft" ? "border-dashed bg-white ring-1 ring-line" : "bg-paper"} ${href ? "hover:ring-2 hover:ring-brand/40" : ""}`;
+  const body = (
+    <>
       <div className="font-semibold tabular-nums">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</div>
       <div className="text-xs text-muted">{formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}{s.status === "draft" ? " · utkast" : ""}</div>
-    </div>
+    </>
   );
+  return href
+    ? <Link href={href} className={cls} style={{ borderLeftColor: role?.color ?? "#94a3b8" }} title="Endre eller sett fraværende">{body}</Link>
+    : <div className={cls} style={{ borderLeftColor: role?.color ?? "#94a3b8" }}>{body}</div>;
 }
 
 function OpenShift({ s, tz, canClaim, requested, compact }: { s: ShiftRow; tz: string; canClaim: boolean; requested: boolean; compact?: boolean }) {
@@ -360,8 +365,9 @@ function OpenShift({ s, tz, canClaim, requested, compact }: { s: ShiftRow; tz: s
   );
 }
 
-function GroupedList({ shifts, roles, roleOf, name, tz, highlight }: {
+function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor }: {
   shifts: ShiftRow[]; roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; highlight: string | null;
+  linkFor?: (s: ShiftRow) => string;
 }) {
   const assigned = shifts.filter((s) => s.employee_id);
   if (assigned.length === 0) return null;
@@ -373,15 +379,26 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight }: {
           <RoleLabel role={g.role} />
           <ul className="mt-1 divide-y divide-line">
             {g.items.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || name(a.employee_id).localeCompare(name(b.employee_id), "nb")).map((s) => (
-              <li key={s.id} className={`flex items-center justify-between gap-3 py-1.5 ${s.employee_id === highlight ? "font-semibold" : ""}`}>
-                <span className="min-w-0 truncate">
-                  {name(s.employee_id)}
-                  {s.status === "draft" && <span className="ml-2 text-xs font-normal italic text-muted">utkast</span>}
-                </span>
-                <span className="shrink-0 text-right tabular-nums">
-                  {shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}
-                  <span className="ml-2 text-xs font-normal text-muted">{formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}</span>
-                </span>
+              <li key={s.id} className={s.employee_id === highlight ? "font-semibold" : ""}>
+                {(() => {
+                  const inner = (
+                    <>
+                      <span className="min-w-0 truncate">
+                        {name(s.employee_id)}
+                        {s.status === "draft" && <span className="ml-2 text-xs font-normal italic text-muted">utkast</span>}
+                      </span>
+                      <span className="shrink-0 text-right tabular-nums">
+                        {shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}
+                        <span className="ml-2 text-xs font-normal text-muted">{formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}</span>
+                        {linkFor && <span className="ml-2 text-muted" aria-hidden>›</span>}
+                      </span>
+                    </>
+                  );
+                  const cls = "flex items-center justify-between gap-3 py-2";
+                  return linkFor
+                    ? <Link href={linkFor(s)} className={`${cls} -mx-2 rounded-lg px-2 hover:bg-paper`}>{inner}</Link>
+                    : <div className={cls}>{inner}</div>;
+                })()}
               </li>
             ))}
           </ul>
@@ -391,7 +408,8 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight }: {
   );
 }
 
-function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin }: {
+function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor }: {
+  linkFor?: (s: ShiftRow) => string;
   date: string; shifts: ShiftRow[]; away: { employee_id: string; type_name: string }[];
   cov: { closed: boolean; holiday: string | null; gaps: { start: Date; end: Date; missing: number }[]; peakRequired: number };
   roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; isAdmin: boolean;
@@ -432,7 +450,7 @@ function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin }: 
             const b = (new Date(s.ends_at).getTime() - d0.getTime()) / 3600000;
             const color = roleById.get(roleOf(s) ?? "")?.color ?? "#94a3b8";
             return (
-              <div key={s.id} className="flex items-center gap-3">
+              <Row key={s.id} href={linkFor?.(s)}>
                 <div className="w-28 shrink-0 truncate text-sm font-medium sm:w-24">{shortName(name(s.employee_id))}</div>
                 <div className="relative hidden h-7 flex-1 rounded bg-paper sm:block">
                   <div className={`absolute inset-y-0 flex items-center rounded px-2 text-xs font-semibold text-white ${s.status === "draft" ? "opacity-60" : ""}`}
@@ -443,8 +461,9 @@ function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin }: 
                 <div className="ml-auto text-right text-sm tabular-nums sm:w-16">
                   <span className="sm:hidden">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)} · </span>
                   {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
+                  {linkFor && <span className="ml-1 text-muted" aria-hidden>›</span>}
                 </div>
-              </div>
+              </Row>
             );
           })}
         </div>
@@ -465,4 +484,10 @@ function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin }: 
       )}
     </section>
   );
+}
+
+function Row({ href, children }: { href?: string; children: React.ReactNode }) {
+  return href
+    ? <Link href={href} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-0.5 hover:bg-paper" title="Endre eller sett fraværende">{children}</Link>
+    : <div className="flex items-center gap-3">{children}</div>;
 }

@@ -244,5 +244,24 @@ do $$ begin
 exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
 end $$;
 
+-- Sett fraværende fra planen: fravær registreres, vakten blir ledig, ansatt varsles; ansatt kan ikke
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+select :'org_a', id, '2026-12-02 08:00+01', '2026-12-02 16:00+01', 'published' from employees where full_name = 'Kari Nordmann'
+returning id as kari_dec \gset
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  perform mark_absent((select id from shifts where starts_at = '2026-12-02 08:00+01'), (select id from absence_types where key = 'syk' limit 1), 'open', null, null);
+  raise exception 'FEIL: ansatt satte kollega fraværende';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select mark_absent(:'kari_dec', (select id from absence_types where org_id = :'org_a' and key = 'syk'), 'open', null, 'Ringte inn syk') as abs_id \gset
+reset role;
+select pg_temp.check((select employee_id from shifts where id = :'kari_dec') is null, 'vakten ble ikke ledig');
+select pg_temp.check((select status from absence_requests where id = :'abs_id') = 'approved', 'fravær ikke godkjent');
+select pg_temp.check((select from_date from absence_requests where id = :'abs_id') = '2026-12-02', 'feil fraværsdato');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id where e.full_name = 'Kari Nordmann' and n.kind = 'absence_registered'), 'Kari ble ikke varslet');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

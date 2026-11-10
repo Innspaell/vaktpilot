@@ -288,3 +288,34 @@ export async function decideRequest(fd: FormData) {
   refresh();
   if (error) redirect(`/foresporsler?vis=vakter&feil=${encodeURIComponent(error.message)}`);
 }
+
+function safeBack(v: string | null) {
+  return v && v.startsWith("/vaktplan") ? v : "/vaktplan";
+}
+
+/** Sett den ansatte på vakten fraværende, med årsak. */
+export async function markAbsent(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const shiftId = text(fd, "shift_id");
+  const typeId = text(fd, "absence_type_id");
+  if (!shiftId || !typeId) return { error: "Velg årsak." };
+  const handle = text(fd, "handle") ?? "open";
+  const partial = text(fd, "partial_hours");
+  const { error } = await ctx.supabase.rpc("mark_absent", {
+    p_shift: shiftId,
+    p_absence_type: typeId,
+    p_handle: handle,
+    p_partial_hours: handle === "keep" && partial ? Number(partial.replace(",", ".")) : null,
+    p_comment: text(fd, "comment"),
+  });
+  if (error) return { error: error.message };
+  refresh();
+  revalidatePath("/foresporsler");
+  redirect(safeBack(text(fd, "back")));
+}
+
+/** Fjern vakten og gå tilbake til planen. */
+export async function removeShiftAndBack(fd: FormData) {
+  await cancelShift(fd);
+  redirect(safeBack(text(fd, "back")));
+}
