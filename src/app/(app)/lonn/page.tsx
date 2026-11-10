@@ -4,7 +4,8 @@ import { loadPayroll } from "@/lib/payroll-data";
 import { addDays, localDate } from "@/lib/time";
 import { BILUTLEIE_2024 } from "@/lib/pay";
 import { ActionForm } from "@/components/Form";
-import { lockPeriod, reopenPeriod } from "./actions";
+import { addCompTime, lockPeriod, reopenPeriod } from "./actions";
+import { loadCompTime } from "@/lib/report-data";
 
 const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
 const num = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
@@ -18,10 +19,11 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const from = iso(sp.fra) ?? monthStart;
   const to = iso(sp.til) ?? addDays(addDays(from, 32).slice(0, 8) + "01", -1);
 
-  const [data, { data: periods }] = await Promise.all([
+  const [data, { data: periods }, comp] = await Promise.all([
     loadPayroll(ctx, from, to),
     ctx.supabase.from("pay_periods").select("id, starts_on, ends_on, status, payroll_exports(created_at, checksum)")
       .eq("org_id", ctx.org.id).order("starts_on", { ascending: false }).limit(12),
+    loadCompTime(ctx),
   ]);
   const pendingTotal = Array.from(data.pendingByEmployee.values()).reduce((a, b) => a + b, 0);
   const thisPeriod = (periods ?? []).find((p) => p.starts_on === from && p.ends_on === to);
@@ -62,8 +64,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
       )}
 
       <section className="card flex flex-wrap items-center gap-3">
-        <a href={`/api/lonn?type=lonn&fra=${from}&til=${to}`} className="btn-primary">Last ned lønnsgrunnlag (Excel/CSV)</a>
-        <a href={`/api/lonn?type=dager&fra=${from}&til=${to}`} className="btn-ghost">Kontrollark per dag</a>
+        <a href={`/api/lonn?type=lonn&format=xlsx&fra=${from}&til=${to}`} className="btn-primary">Last ned lønnsgrunnlag (Excel)</a>
+        <a href={`/api/lonn?type=lonn&fra=${from}&til=${to}`} className="btn-ghost">Som CSV</a>
+        <a href={`/api/lonn?type=dager&format=xlsx&fra=${from}&til=${to}`} className="btn-ghost">Kontrollark per dag</a>
         {!locked ? (
           <ActionForm action={lockPeriod} submitLabel="Lås perioden" className="flex items-center gap-3">
             <input type="hidden" name="fra" value={from} />
@@ -77,7 +80,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         )}
         <p className="w-full text-xs text-muted">
           Når perioden låses, kan ingen endre timene i den før den åpnes igjen. Det hindrer at timer blir endret etter at lønnen er kjørt.
-          Filen åpnes i Excel og har én rad per ansatt og lønnsart.
+          Excel-filen har ett ark med én rad per ansatt og lønnsart, og ett kontrollark med alle registreringene. CSV-filen har samme lønnsgrunnlag.
         </p>
       </section>
 
@@ -115,6 +118,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                   </div>
                 </div>
                 {pending > 0 && <p className="mt-2 text-xs text-warn">{pending} ikke godkjent</p>}
+                <CompTime employeeId={p.employee.id} c={comp.balances.get(p.employee.id)} history={comp.history.filter((h) => h.employeeId === p.employee.id).slice(0, 5)} today={today} />
               </section>
             );
           })}
@@ -137,5 +141,37 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         </section>
       )}
     </div>
+  );
+}
+
+function CompTime({ employeeId, c, history, today }: {
+  employeeId: string; c?: { earned: number; used: number; balance: number };
+  history: { id: string; hours: number; comment: string; date: string }[]; today: string;
+}) {
+  const b = c ?? { earned: 0, used: 0, balance: 0 };
+  return (
+    <details className="mt-3 rounded-lg border border-line p-2 text-sm">
+      <summary className="flex cursor-pointer items-center justify-between">
+        <span>Avspasering</span>
+        <span className={`font-semibold tabular-nums ${b.balance < -0.01 ? "text-warn" : ""}`}>{num(b.balance)} t</span>
+      </summary>
+      <p className="mt-2 text-xs text-muted">Opptjent {num(b.earned)} t · tatt ut {num(b.used)} t. Uttak trekkes automatisk når avspasering godkjennes.</p>
+      {history.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs">
+          {history.map((h) => (
+            <li key={h.id} className="flex justify-between gap-2">
+              <span className="truncate">{h.date.split("-").reverse().join(".")} · {h.comment}</span>
+              <span className="tabular-nums">{h.hours > 0 ? "+" : ""}{num(h.hours)} t</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ActionForm action={addCompTime} submitLabel="Legg til" className="mt-2 grid grid-cols-2 gap-2">
+        <input type="hidden" name="employee_id" value={employeeId} />
+        <input name="hours" inputMode="decimal" placeholder="Timer, f.eks. 7,5" className="input" aria-label="Timer" required />
+        <input name="date" type="date" defaultValue={today} className="input" aria-label="Dato" />
+        <input name="comment" placeholder="Forklaring, f.eks. overtid oktober" className="input col-span-2" aria-label="Forklaring" required />
+      </ActionForm>
+    </details>
   );
 }

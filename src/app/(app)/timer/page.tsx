@@ -7,6 +7,7 @@ import { EntryForm } from "@/components/EntryForm";
 import { addDays, dayBounds, formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
 import { approveEntries, confirmShift, deleteEntry } from "./actions";
 import { loadPayroll } from "@/lib/payroll-data";
+import { loadCompTime } from "@/lib/report-data";
 
 const STATUS: Record<string, [string, string]> = {
   draft: ["Utkast", "bg-paper text-muted"],
@@ -122,10 +123,12 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       .order("starts_at"),
   ]);
   const entries = (entriesData ?? []) as unknown as Entry[];
-  const [monthPay, yearPay] = await Promise.all([
+  const [monthPay, yearPay, comp] = await Promise.all([
     loadPayroll(ctx, today.slice(0, 8) + "01", today, ctx.employeeId),
     loadPayroll(ctx, today.slice(0, 5) + "01-01", today, ctx.employeeId),
+    loadCompTime(ctx, ctx.employeeId),
   ]);
+  const cb = comp.balances.get(ctx.employeeId);
   const mb = monthPay.balances.get(ctx.employeeId);
   const yb = yearPay.balances.get(ctx.employeeId);
   const registered = new Set(entries.map((e) => e.shift_id).filter(Boolean));
@@ -156,6 +159,12 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
               </div>
             ))}
           </div>
+          {cb && (cb.earned > 0 || cb.used > 0) && (
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm">
+              <span>Avspasering <span className="text-xs text-muted">(opptjent {cb.earned.toLocaleString("nb-NO")} t, tatt ut {cb.used.toLocaleString("nb-NO")} t)</span></span>
+              <b className={`tabular-nums ${cb.balance < -0.01 ? "text-warn" : ""}`}>{cb.balance.toLocaleString("nb-NO")} t</b>
+            </div>
+          )}
         </section>
       )}
 

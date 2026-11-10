@@ -3,8 +3,10 @@ import { getContext } from "@/lib/context";
 import { loadPayroll } from "@/lib/payroll-data";
 import { payrollCsv } from "@/lib/pay";
 import { localDate, localTime } from "@/lib/time";
+import { buildXlsx, xlsxResponseHeaders } from "@/lib/xlsx";
+import { entriesSheet, payrollSheet } from "@/lib/report-sheets";
 
-/** Last ned lønnsgrunnlag (?type=lonn) eller kontrollark per dag (?type=dager) som CSV for Excel. */
+/** Last ned lønnsgrunnlag (?type=lonn) eller kontrollark per dag (?type=dager) som CSV, eller som Excel med &format=xlsx. */
 export async function GET(request: Request) {
   const ctx = await getContext();
   if (!ctx.org || !ctx.isAdmin) return NextResponse.json({ error: "Ikke tillatt" }, { status: 403 });
@@ -17,6 +19,14 @@ export async function GET(request: Request) {
   const org = ctx.org;
   const data = await loadPayroll({ ...ctx, org }, from, to);
   const type = url.searchParams.get("type") === "dager" ? "dager" : "lonn";
+  if (url.searchParams.get("format") === "xlsx") {
+    const names = new Map(data.pay.map((p) => [p.employee.id, p.employee.name]));
+    const buf = buildXlsx(type === "lonn"
+      ? [payrollSheet(data.pay, data.period), entriesSheet(data.entries, names, org.timezone)]
+      : [entriesSheet(data.entries, names, org.timezone)]);
+    const xfile = `${type === "lonn" ? "lonnsgrunnlag" : "timer-per-dag"}_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.xlsx`;
+    return new NextResponse(new Uint8Array(buf), { headers: xlsxResponseHeaders(xfile) });
+  }
   let body: string;
   if (type === "lonn") {
     body = payrollCsv(data.pay, data.period);

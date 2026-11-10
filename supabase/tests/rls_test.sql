@@ -336,6 +336,50 @@ select reopen_pay_period((select pay_period_id from payroll_exports where id = :
 reset role;
 select pg_temp.check((select count(*) from time_entries where payroll_export_id = :'export_id' and status = 'locked') = 0, 'periode ble ikke åpnet');
 
+-- Varsler: tildelt, endret, gjort ledig, og godkjente timer
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+select :'org_a', id, now() + interval '30 days', now() + interval '30 days 6 hours', 'published' from employees where full_name = 'Ola Nordmann'
+returning id as note_shift \gset
+update shifts set ends_at = ends_at + interval '1 hour' where id = :'note_shift';
+update shifts set employee_id = null where id = :'note_shift';
+insert into time_entries (org_id, employee_id, starts_at, ends_at, break_minutes, status, source)
+select :'org_a', id, now() - interval '50 days', now() - interval '50 days' + interval '4 hours', 0, 'submitted', 'manual' from employees where full_name = 'Ola Nordmann'
+returning id as note_entry \gset
+select pg_temp.check(approve_time_entries(array[:'note_entry']::uuid[]) = 1, 'godkjenning telte feil');
+reset role;
+select pg_temp.check((select count(*) from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.kind = 'shift_assigned' and n.title like 'Du har fått en vakt: ' || to_char((now() + interval '30 days') at time zone 'Europe/Oslo', 'DD.MM.') || '%') = 1, 'Ola fikk ikke varsel om ny vakt');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.kind = 'shift_changed' and n.title like 'Vakta di er endret%'), 'Ola fikk ikke varsel om endret vakt');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.title like 'Du er tatt av vakta%'), 'Ola fikk ikke varsel om at han er tatt av');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Kari Nordmann' and n.kind = 'open_shifts' and n.title like 'Ledig vakt%'), 'Kari fikk ikke varsel om ledig vakt');
+select pg_temp.check(not exists (select 1 from notifications where user_id = '00000000-0000-0000-0000-0000000000a1' and kind in ('open_shifts', 'shift_changed') and created_at > now() - interval '1 minute'), 'lederen varslet seg selv');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.kind = 'time_approved'), 'Ola fikk ikke varsel om godkjente timer');
+-- Avspasering: leder kan registrere, ansatt ser bare egne
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into leave_ledger (org_id, employee_id, kind, amount, source, effective_date)
+select :'org_a', id, 'time_off', 7.5, 'Overtid oktober', current_date from employees where full_name = 'Ola Nordmann';
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select pg_temp.check((select count(*) from leave_ledger where kind = 'time_off') = 0, 'Kari ser Olas avspasering');
+do $$ begin
+  begin
+    insert into leave_ledger (org_id, employee_id, kind, amount, source, effective_date)
+    select org_id, id, 'time_off', 100, 'juks', current_date from employees limit 1;
+    raise exception 'FEIL: ansatt kunne gi seg selv avspasering';
+  exception when insufficient_privilege or check_violation then null;
+    when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check((select sum(amount) from leave_ledger where kind = 'time_off') = 7.5, 'Ola ser ikke egen avspasering');
+reset role;
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

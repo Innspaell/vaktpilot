@@ -18,6 +18,7 @@ const ADMIN = [
   { href: "/ansatte", label: "Ansatte" },
   { href: "/fravaer", label: "Fravær" },
   { href: "/lonn", label: "Lønn" },
+  { href: "/rapporter", label: "Rapporter" },
   { href: "/innstillinger", label: "Innstillinger" },
 ];
 

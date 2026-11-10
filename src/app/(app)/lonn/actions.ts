@@ -34,3 +34,23 @@ export async function reopenPeriod(fd: FormData) {
   revalidatePath("/lonn");
   revalidatePath("/timer");
 }
+
+/** Registrer opptjent avspasering (f.eks. overtid tatt ut som fri), eller en korreksjon med minus. */
+export async function addCompTime(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const employee = text(fd, "employee_id");
+  const hours = Number(String(fd.get("hours") ?? "").replace(",", "."));
+  const comment = text(fd, "comment");
+  const date = text(fd, "date");
+  if (!employee || !Number.isFinite(hours) || hours === 0 || Math.abs(hours) > 500) return { error: "Skriv inn antall timer (bruk minus for å trekke fra)." };
+  if (!comment) return { error: "Skriv en kort forklaring, f.eks. «Overtid oktober tatt som avspasering»." };
+  const { error } = await ctx.supabase.from("leave_ledger").insert({
+    org_id: ctx.org.id, employee_id: employee, kind: "time_off", amount: hours, source: comment.slice(0, 200),
+    effective_date: date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10),
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/lonn");
+  revalidatePath("/timer");
+  revalidatePath("/rapporter");
+  return { ok: `${hours > 0 ? "La til" : "Trakk fra"} ${Math.abs(hours).toLocaleString("nb-NO")} t avspasering.` };
+}
