@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { requireOrg } from "@/lib/context";
 
@@ -26,14 +25,14 @@ export default async function NotificationsPage() {
         <ul className="card divide-y divide-line p-0">
           {rows.map((n) => (
             <li key={n.id}>
-              <Link href={n.link ?? "/"} className={`flex items-start gap-3 px-4 py-3 hover:bg-paper ${n.read_at ? "text-muted" : ""}`}>
+              <a href={`/varsler/${n.id}`} className={`flex items-start gap-3 px-4 py-3 hover:bg-paper ${n.read_at ? "text-muted" : ""}`}>
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-transparent" : "bg-brand"}`} />
                 <span className="min-w-0 flex-1">
                   <span className={`block text-sm ${n.read_at ? "" : "font-semibold text-ink"}`}>{n.title}</span>
                   {n.body && <span className="block text-sm">{n.body}</span>}
                 </span>
                 <span className="shrink-0 text-xs text-muted">{fmt.format(new Date(n.created_at))}</span>
-              </Link>
+              </a>
             </li>
           ))}
         </ul>

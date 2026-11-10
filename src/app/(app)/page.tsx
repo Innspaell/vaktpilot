@@ -211,7 +211,7 @@ export default async function Home() {
         <section className="card">
           <h2 className="h2">Beskjeder</h2>
           <ul className="mt-2 space-y-1 text-sm">
-            {(notes ?? []).map((n) => <li key={n.id}>{n.title}</li>)}
+            {(notes ?? []).map((n) => <li key={n.id}><a href={`/varsler/${n.id}`} className="hover:text-brand">{n.title}</a></li>)}
             {(requests ?? []).map((r) => (
               <li key={r.id} className="flex justify-between"><span>Vaktpåmelding</span><StatusBadge status={r.status} /></li>
             ))}
