@@ -27,10 +27,23 @@ export async function sendEmail(m: Mail): Promise<{ sent: boolean; error?: strin
   }
 }
 
+/**
+ * Toppen av e-posten: bedriftens logo når den finnes (PNG/JPG – SVG vises ikke i mange e-postprogrammer),
+ * ellers bedriftsnavnet. «Vaktpilot» står alltid som avsender.
+ */
+function header(org: string, logoUrl?: string | null) {
+  const usable = logoUrl && /^https:\/\//.test(logoUrl) && !/\.svg(\?|$)/i.test(logoUrl);
+  const left = usable
+    ? `<img src="${esc(logoUrl!)}" alt="${esc(org)}" style="display:block;max-height:56px;max-width:220px;height:auto;width:auto;border:0">`
+    : `<div style="font-size:16px;font-weight:700;color:#16202b">${esc(org)}</div>`;
+  return `<table role="presentation" style="width:100%;border-collapse:collapse"><tr><td style="vertical-align:middle">${left}</td>
+<td style="text-align:right;vertical-align:middle;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1f5fbf">Vaktpilot</td></tr></table>`;
+}
+
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Velkomst-e-post til ny bruker. Passordet tas bare med når lederen har valgt det. */
-export function welcomeEmail(p: { name: string; org: string; email: string; loginUrl: string; password?: string | null }): Mail {
+export function welcomeEmail(p: { name: string; org: string; email: string; loginUrl: string; password?: string | null; logoUrl?: string | null }): Mail {
   const first = p.name.split(" ")[0] || p.name;
   const pwLine = p.password
     ? `Midlertidig passord: ${p.password}\nDu blir bedt om å lage ditt eget passord første gang du logger inn.`
@@ -52,7 +65,7 @@ export function welcomeEmail(p: { name: string; org: string; email: string; logi
   ].join("\n");
   const html = `<!doctype html><html lang="nb"><body style="margin:0;background:#f6f7f9;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#16202b">
 <div style="max-width:520px;margin:0 auto;padding:24px 16px">
-<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1f5fbf">Vaktpilot</div>
+${header(p.org, p.logoUrl)}
 <div style="background:#fff;border:1px solid #e3e7ec;border-radius:14px;padding:24px;margin-top:12px">
 <h1 style="margin:0 0 8px;font-size:22px">Hei ${esc(first)}!</h1>
 <p style="margin:0 0 16px;line-height:1.5">${esc(p.org)} bruker Vaktpilot til vaktplan, timer og fravær. Nå har du fått tilgang.</p>
@@ -70,7 +83,7 @@ ${p.password ? `<tr><td style="padding:6px 0;color:#5b6673">Midlertidig passord<
 }
 
 /** Invitasjon: lenke der den ansatte lager passordet selv. */
-export function inviteEmail(p: { name: string; org: string; email: string; link: string }): Mail {
+export function inviteEmail(p: { name: string; org: string; email: string; link: string; logoUrl?: string | null }): Mail {
   const first = p.name.split(" ")[0] || p.name;
   const text = [
     `Hei ${first}!`,
@@ -86,7 +99,7 @@ export function inviteEmail(p: { name: string; org: string; email: string; link:
   ].join("\n");
   const html = `<!doctype html><html lang="nb"><body style="margin:0;background:#f6f7f9;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#16202b">
 <div style="max-width:520px;margin:0 auto;padding:24px 16px">
-<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1f5fbf">Vaktpilot</div>
+${header(p.org, p.logoUrl)}
 <div style="background:#fff;border:1px solid #e3e7ec;border-radius:14px;padding:24px;margin-top:12px">
 <h1 style="margin:0 0 8px;font-size:22px">Hei ${esc(first)}!</h1>
 <p style="margin:0 0 16px;line-height:1.5">${esc(p.org)} bruker Vaktpilot til vaktplan, timer og fravær. Nå har du fått tilgang. Trykk på knappen og lag ditt eget passord.</p>

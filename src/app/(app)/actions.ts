@@ -288,13 +288,14 @@ export async function setEmployeeLogin(_: ActionState, fd: FormData): Promise<Ac
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const loginUrl = `${h.get("x-forwarded-proto") ?? "https"}://${host}/login`;
   const includePw = fd.get("include_password") === "on";
-  const mail = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: includePw ? password : null });
+  const logoUrl = absoluteUrl(ctx.org.logoUrl, loginUrl);
+  const mail = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: includePw ? password : null, logoUrl });
   const res = await sendEmail(mail);
   if (res.sent) {
     return { ok: `Innlogging klar. Velkomst-e-post er sendt til ${email}${includePw ? " med det midlertidige passordet" : ". Gi den ansatte passordet"}.` };
   }
   // Ikke satt opp ennå: legg e-posten i kø uten passord, og be lederen gi passordet selv.
-  const queued = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: null });
+  const queued = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: null, logoUrl });
   await ctx.supabase.from("email_outbox").insert({
     org_id: ctx.org.id, to_email: email, subject: queued.subject, html: queued.html, body_text: queued.text, kind: "welcome", created_by: ctx.userId,
   });
@@ -313,9 +314,15 @@ export async function createLoginInvite(_: ActionState, fd: FormData): Promise<A
   const h = await headers();
   const link = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}/velkommen/${token}`;
   if (fd.get("send_welcome") === "on") {
-    const res = await sendEmail(inviteEmail({ name: emp?.full_name ?? "", org: ctx.org.name, email, link }));
+    const res = await sendEmail(inviteEmail({ name: emp?.full_name ?? "", org: ctx.org.name, email, link, logoUrl: absoluteUrl(ctx.org.logoUrl, link) }));
     if (res.sent) return { ok: `Invitasjon er sendt til ${email}. Lenken virker i 7 dager.`, link };
     return { ok: "E-postutsending er ikke satt opp ennå. Kopier lenken under og send den på SMS eller melding. Den virker i 7 dager og kan brukes én gang.", link };
   }
   return { ok: "Lenken er laget. Send den til den ansatte. Den virker i 7 dager og kan brukes én gang.", link };
+}
+
+/** Logo lagret som «/logos/...» må ha full adresse i e-post. */
+function absoluteUrl(url: string | null | undefined, base: string) {
+  if (!url) return null;
+  try { return new URL(url, base).toString(); } catch { return null; }
 }

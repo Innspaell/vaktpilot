@@ -12,10 +12,18 @@ export default async function WelcomePage({ params }: { params: Promise<{ token:
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
       <div className="mb-6">
-        <div className="text-sm font-semibold uppercase tracking-wider text-brand">Vaktpilot</div>
+        {info?.logo_url ? (
+          <div className="flex items-center justify-between gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={info.logo_url} alt={info.org_name} className="max-h-14 w-auto max-w-[60%] object-contain" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-brand">Vaktpilot</span>
+          </div>
+        ) : (
+          <div className="text-sm font-semibold uppercase tracking-wider text-brand">Vaktpilot</div>
+        )}
         {info ? (
           <>
-            <h1 className="h1 mt-1">Velkommen, {info.full_name.split(" ")[0]}!</h1>
+            <h1 className="h1 mt-4">Velkommen, {info.full_name.split(" ")[0]}!</h1>
             <p className="mt-2 text-muted">{info.org_name} bruker Vaktpilot til vaktplan, timer og fravær. Lag passordet ditt, så er du i gang.</p>
           </>
         ) : (
