@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/auth", "/api/kalender", "/personvern", "/offline", "/velkommen"];
+const PUBLIC = ["/login", "/auth", "/api/kalender", "/personvern", "/offline", "/velkommen", "/start"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -21,6 +21,13 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Forsiden: besøkende som ikke er logget inn ser produktsiden
+  if (!user && request.nextUrl.pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/start";
+    return NextResponse.rewrite(url, { headers: response.headers });
+  }
 
   const isPublic = PUBLIC.some((p) => request.nextUrl.pathname.startsWith(p));
   if (!user && !isPublic) {
