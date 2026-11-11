@@ -10,7 +10,8 @@ import { createClient } from "@/lib/supabase/client";
  */
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [step, setStep] = useState<"email" | "code" | "password">("email");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +54,22 @@ export default function LoginPage() {
     window.location.href = "/";
   }
 
+  // Passord finnes bare for testbrukere som er opprettet med passord i Supabase. Vanlige brukere bruker kode.
+  async function passwordLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    if (error) {
+      setBusy(false);
+      setError("Feil e-post eller passord.");
+      return;
+    }
+    await supabase.rpc("claim_invites");
+    window.location.href = "/";
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
       <div className="mb-8">
@@ -61,7 +78,9 @@ export default function LoginPage() {
         <p className="mt-2 text-muted">
           {step === "email"
             ? "Vi sender deg en kode på e-post. Bruk e-posten arbeidsgiveren din har registrert."
-            : `Vi har sendt en kode til ${email}. Den gjelder i en time.`}
+            : step === "password"
+              ? "Innlogging med passord er bare for testbrukere."
+              : `Vi har sendt en kode til ${email}. Den gjelder i en time.`}
         </p>
       </div>
 
@@ -74,6 +93,23 @@ export default function LoginPage() {
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? "Sender …" : "Send kode"}</button>
+          <button type="button" className="w-full text-center text-xs text-muted hover:text-brand" onClick={() => { setStep("password"); setError(null); }}>
+            Logg inn med passord (testbruker)
+          </button>
+        </form>
+      ) : step === "password" ? (
+        <form onSubmit={passwordLogin} className="card space-y-4">
+          <div>
+            <label className="label" htmlFor="pemail">E-post</label>
+            <input id="pemail" type="email" required autoComplete="username" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="label" htmlFor="password">Passord</label>
+            <input id="password" type="password" required autoComplete="current-password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {error && <p className="text-sm text-bad">{error}</p>}
+          <button className="btn-primary w-full" disabled={busy}>{busy ? "Logger inn …" : "Logg inn"}</button>
+          <button type="button" className="w-full text-center text-sm text-brand" onClick={() => { setStep("email"); setError(null); }}>Tilbake til innlogging med kode</button>
         </form>
       ) : (
         <form onSubmit={verify} className="card space-y-4">
