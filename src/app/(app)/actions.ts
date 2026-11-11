@@ -61,6 +61,7 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
       city: text(fd, "city"),
       full_time_hours_week: num(fd, "full_time_hours_week", 37.5),
       vacation_days_year: num(fd, "vacation_days_year", 25),
+      vacation_carryover_max_days: num(fd, "vacation_carryover_max_days", 12),
       staffing_slot_minutes: num(fd, "staffing_slot_minutes", 15),
       auto_submit_clock_entries: fd.get("auto_submit_clock_entries") === "on",
     })

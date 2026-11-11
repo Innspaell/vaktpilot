@@ -33,6 +33,9 @@ export default async function SettingsPage() {
           <Field label="Feriedager per år" hint="Standard for nye ansatte, telt mandag–fredag. 25 = 5 uker.">
             <input name="vacation_days_year" type="number" defaultValue={org?.vacation_days_year} className="input" />
           </Field>
+          <Field label="Ferie som kan overføres etter avtale" hint="Dager per år. Ferieloven: inntil 12 virkedager (2 uker).">
+            <input name="vacation_carryover_max_days" type="number" min={0} max={60} step="0.5" defaultValue={Number(org?.vacation_carryover_max_days ?? 12)} className="input" />
+          </Field>
           <Field label="Bemanning telles per">
             <select name="staffing_slot_minutes" defaultValue={org?.staffing_slot_minutes} className="input">
               <option value={15}>15 minutter</option>

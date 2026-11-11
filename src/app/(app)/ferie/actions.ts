@@ -22,10 +22,10 @@ function refresh() {
   revalidatePath("/");
 }
 
-/** Ansatt ber om å overføre ferie, eller leder foreslår / registrerer overføring. */
+/** Leder lager avtale (signert av leder) eller registrerer lovbestemt overføring. */
 export async function proposeCarryover(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireOrg();
-  const employee = text(fd, "employee_id") ?? ctx.employeeId;
+  const ctx = await requireAdmin();
+  const employee = text(fd, "employee_id");
   const year = Number(text(fd, "from_year"));
   const days = num(fd, "days");
   const reason = text(fd, "reason") ?? "agreement";
@@ -33,16 +33,28 @@ export async function proposeCarryover(_: ActionState, fd: FormData): Promise<Ac
   if (!Number.isFinite(days) || days <= 0) return { error: "Skriv inn antall dager." };
   const { data, error } = await ctx.supabase.rpc("propose_carryover", {
     p_employee: employee, p_from_year: year, p_days: days, p_reason: reason, p_note: text(fd, "note"),
+    p_signature: reason === "agreement" ? text(fd, "signature") : null,
   });
   if (error) return { error: error.message };
   refresh();
   redirect(`/ferie/overforing/${data}`);
 }
 
-export async function answerCarryover(fd: FormData) {
+/** Signer avtalen. */
+export async function signCarryover(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireOrg();
   const id = text(fd, "id")!;
-  await ctx.supabase.rpc("answer_carryover", { p_id: id, p_accept: text(fd, "answer") === "yes" });
+  const { error } = await ctx.supabase.rpc("answer_carryover", { p_id: id, p_accept: true, p_signature: text(fd, "signature") });
+  if (error) return { error: error.message };
+  refresh();
+  redirect(`/ferie/overforing/${id}`);
+}
+
+/** Avslå, eller trekk forslaget. */
+export async function declineCarryover(fd: FormData) {
+  const ctx = await requireOrg();
+  const id = text(fd, "id")!;
+  await ctx.supabase.rpc("answer_carryover", { p_id: id, p_accept: false });
   refresh();
   redirect(`/ferie/overforing/${id}`);
 }

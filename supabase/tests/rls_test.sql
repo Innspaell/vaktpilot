@@ -417,33 +417,47 @@ select :'org_a', id, :'open_shift', now() - interval '60 days', now() - interval
 select pg_temp.check(not exists (select 1 from notifications where link = '/timer?bekreft=' || :'open_shift' and read_at is null), 'påminnelse ble ikke lest etter bekreftelse');
 select pg_temp.check(resolve_stale_notifications() >= 0, 'rydding feilet');
 
--- Ferieoverføring: ansatt ber, leder godtar, regnskapet bokføres; grense og tilgang
+-- Ferieoverføring: bare leder lager avtalen, begge signerer; grense og tilgang
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
-select propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 6, 'agreement', 'Skal på langtur') as co_id \gset
 do $$ begin
   begin
-    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 5, 'agreement', null);
-    raise exception 'FEIL: kunne overføre mer enn grensen';
-  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
-  end;
-  begin
-    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 3, 'sick', null);
-    raise exception 'FEIL: ansatt kunne registrere sykdomsoverføring';
+    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 5, 'agreement', null, 'data:image/png;base64,' || repeat('A', 300));
+    raise exception 'FEIL: ansatt kunne lage avtale';
   exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
   end;
 end $$;
-select pg_temp.check(answer_carryover(:'co_id', true) = 'pending', 'ansatt kunne godta på vegne av bedriften');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin
+  begin
+    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 5, 'agreement', null, null);
+    raise exception 'FEIL: avtale uten signatur';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+  begin
+    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 13, 'agreement', null, 'data:image/png;base64,' || repeat('A', 300));
+    raise exception 'FEIL: kunne overføre mer enn 12';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+select propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 6, 'agreement', 'Langtur', 'data:image/png;base64,' || repeat('A', 300)) as co_id \gset
 select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
 select pg_temp.check((select count(*) from vacation_carryovers) = 0, 'Kari ser Olas ferieavtale');
-select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
-select pg_temp.check(answer_carryover(:'co_id', true) = 'signed', 'avtalen ble ikke inngått');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  begin
+    perform answer_carryover((select id from vacation_carryovers limit 1), true, null);
+    raise exception 'FEIL: signerte uten signatur';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+select pg_temp.check(answer_carryover(:'co_id', true, 'data:image/png;base64,' || repeat('A', 300)) = 'signed', 'avtalen ble ikke inngått');
 reset role;
 select pg_temp.check((select sum(amount) from leave_ledger where source = 'carryover_in' and effective_date = '2027-01-01') = 6, 'overføring ble ikke lagt til 2027');
 select pg_temp.check((select sum(amount) from leave_ledger where source = 'carryover_out' and effective_date = '2026-01-01') = -6, 'overføring ble ikke trukket fra 2026');
 select pg_temp.check(not exists (select 1 from notifications where ref_id = :'co_id' and kind = 'vacation_carryover' and read_at is null
-  and user_id = '00000000-0000-0000-0000-0000000000a1'), 'ledervarsel ble ikke lest');
-select pg_temp.check(exists (select 1 from vacation_carryovers where id = :'co_id' and employee_accepted_at is not null and employer_accepted_at is not null and employer_name is not null), 'signaturer mangler');
+  and user_id = '00000000-0000-0000-0000-0000000000a3' and title like '%venter%'), 'varselet til Ola ble ikke lest');
+select pg_temp.check(exists (select 1 from vacation_carryovers where id = :'co_id' and employee_signature is not null and employer_signature is not null and employer_name is not null), 'signaturer mangler');
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
 select mark_intro_seen(:'org_a');

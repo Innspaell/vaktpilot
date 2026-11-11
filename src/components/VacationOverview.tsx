@@ -3,6 +3,7 @@ import type { AppContext } from "@/lib/context";
 import { loadVacation, relevantYears } from "@/lib/vacation-data";
 import { ADJUSTMENT_TYPES, CARRYOVER_REASONS, type VacationYear } from "@/lib/vacation";
 import { ActionForm, Field } from "./Form";
+import { SignaturePad } from "./SignaturePad";
 import { addVacationAdjustment, deleteVacationAdjustment, proposeCarryover } from "@/app/(app)/ferie/actions";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
@@ -10,7 +11,7 @@ type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
 const n = (x: number) => x.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
 const STATUS: Record<string, [string, string]> = {
   pending: ["Venter på signatur", "bg-warn-soft text-warn"],
-  signed: ["Avtalt", "bg-good-soft text-good"],
+  signed: ["Signert", "bg-good-soft text-good"],
   rejected: ["Avslått", "bg-bad-soft text-bad"],
   cancelled: ["Trukket", "bg-paper text-muted"],
 };
@@ -47,10 +48,6 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
   const hasNext = Boolean(next && (next.booked || next.pending || next.carriedIn || next.adjustments));
   const years = relevantYears(data.currentYear, data.today, hasNext).map((y) => all.find((v) => v.year === y)).filter(Boolean) as VacationYear[];
   const carryovers = data.carryovers;
-  const agreedFromCur = carryovers.filter((c) => c.from_year === data.currentYear && c.reason === "agreement" && (c.status === "pending" || c.status === "signed"))
-    .reduce((s, c) => s + Number(c.days), 0);
-  const canAsk = cur && cur.remaining > 0 && agreedFromCur < data.maxCarryover;
-  const maxAsk = cur ? Math.min(cur.remaining, data.maxCarryover - agreedFromCur) : 0;
 
   return (
     <div className="space-y-3">
@@ -88,9 +85,11 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
       <section className="card">
         <h2 className="h2">Overføre ferie til neste år</h2>
         <p className="mt-1 text-sm text-muted">
-          Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil {n(data.maxCarryover)} dager
-          (2 uker, 12 virkedager etter ferieloven) overføres til neste år. Vaktpilot lager avtalen, og den er inngått når både du og lederen har godtatt den i appen.
-          Ferie som ikke kunne tas på grunn av sykdom eller foreldrepermisjon overføres uten avtale. Det registrerer lederen.
+          Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil {n(data.maxCarryover)} dager overføres til neste år.
+          {admin
+            ? " Du lager avtalen og signerer for bedriften. Den ansatte får varsel og signerer med fingeren i appen. Når begge har signert, flyttes dagene av seg selv."
+            : " Ønsker du å overføre ferie, ta det opp med lederen din. Lederen lager avtalen, og du signerer den her i appen."}
+          {" "}Ferie som ikke kunne tas på grunn av sykdom eller foreldrepermisjon overføres uten avtale. Det registrerer lederen.
         </p>
         {carryovers.length > 0 && (
           <ul className="mt-3 divide-y divide-line text-sm">
@@ -107,36 +106,46 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
             })}
           </ul>
         )}
-        {admin ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-sm font-semibold text-brand">Foreslå eller registrer overføring</summary>
-            <ActionForm action={proposeCarryover} submitLabel="Lag avtale" className="mt-3 grid gap-3 md:grid-cols-4">
-              <input type="hidden" name="employee_id" value={employeeId} />
-              <Field label="Fra ferieår">
-                <select name="from_year" defaultValue={data.currentYear} className="input">
-                  {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
-                </select>
-              </Field>
-              <Field label="Dager"><input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.maxCarryover) : ""} className="input" /></Field>
-              <Field label="Grunnlag">
-                <select name="reason" className="input">
-                  {Object.entries(CARRYOVER_REASONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
-              </Field>
-              <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
-            </ActionForm>
-            <p className="mt-2 text-xs text-muted">Ved avtale må den ansatte også godta. Ved sykdom, permisjon eller arbeidsgivers forhold registreres overføringen med en gang.</p>
-          </details>
-        ) : canAsk ? (
-          <ActionForm action={proposeCarryover} submitLabel="Be om avtale" className="mt-3 grid gap-3 md:grid-cols-3">
-            <input type="hidden" name="from_year" value={data.currentYear} />
-            <input type="hidden" name="reason" value="agreement" />
-            <Field label={`Dager fra ${data.currentYear} til ${data.currentYear + 1}`} hint={`Du har ${n(cur!.remaining)} igjen. Maks ${n(maxAsk)}.`}>
-              <input name="days" inputMode="decimal" required defaultValue={n(maxAsk)} className="input" />
-            </Field>
-            <div className="md:col-span-2"><Field label="Kommentar til lederen"><input name="note" placeholder="Valgfritt" className="input" /></Field></div>
-          </ActionForm>
-        ) : null}
+        {admin && (
+          <div className="mt-3 space-y-2">
+            <details className="rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-brand">Lag avtale om overføring</summary>
+              <ActionForm action={proposeCarryover} submitLabel="Signer og send til den ansatte" className="mt-3 grid gap-3 md:grid-cols-3">
+                <input type="hidden" name="employee_id" value={employeeId} />
+                <input type="hidden" name="reason" value="agreement" />
+                <Field label="Fra ferieår">
+                  <select name="from_year" defaultValue={data.currentYear} className="input">
+                    {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
+                  </select>
+                </Field>
+                <Field label="Dager" hint={`Inntil ${n(data.maxCarryover)} per år.`}>
+                  <input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.maxCarryover) : ""} className="input" />
+                </Field>
+                <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
+                <div className="md:col-span-3"><SignaturePad label="Din signatur, for bedriften" /></div>
+              </ActionForm>
+            </details>
+            <details className="rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-brand">Registrer overføring som følger av loven</summary>
+              <p className="mt-2 text-xs text-muted">Sykdom, foreldrepermisjon eller forhold arbeidsgiver har ansvaret for. Ingen avtale eller grense. Den ansatte får beskjed.</p>
+              <ActionForm action={proposeCarryover} submitLabel="Registrer" className="mt-3 grid gap-3 md:grid-cols-4">
+                <input type="hidden" name="employee_id" value={employeeId} />
+                <Field label="Fra ferieår">
+                  <select name="from_year" defaultValue={data.currentYear} className="input">
+                    {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
+                  </select>
+                </Field>
+                <Field label="Dager"><input name="days" inputMode="decimal" required className="input" /></Field>
+                <Field label="Grunnlag">
+                  <select name="reason" className="input">
+                    {Object.entries(CARRYOVER_REASONS).filter(([k]) => k !== "agreement").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </Field>
+                <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
+              </ActionForm>
+            </details>
+          </div>
+        )}
       </section>
     </div>
   );

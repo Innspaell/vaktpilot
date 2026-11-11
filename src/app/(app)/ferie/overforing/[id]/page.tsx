@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/context";
 import { CARRYOVER_REASONS } from "@/lib/vacation";
-import { answerCarryover } from "../../actions";
+import { declineCarryover, signCarryover } from "../../actions";
+import { ActionForm } from "@/components/Form";
+import { SignaturePad } from "@/components/SignaturePad";
 import { PrintButton } from "@/components/PrintButton";
 
 const fmt = (iso: string | null, tz: string) =>
@@ -16,7 +18,7 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
   const { data: c } = await ctx.supabase.from("vacation_carryovers")
     .select("*, employees(full_name, employee_number, user_id)").eq("id", id).maybeSingle();
   if (!c) notFound();
-  const { data: org } = await ctx.supabase.from("organizations").select("name, org_number, address, postal_code, city, vacation_year_start_month").eq("id", c.org_id).single();
+  const { data: org } = await ctx.supabase.from("organizations").select("name, org_number, address, postal_code, city, vacation_year_start_month, vacation_carryover_max_days").eq("id", c.org_id).single();
   const emp = c.employees as unknown as { full_name: string; employee_number: string | null; user_id: string | null };
   const isEmployee = emp.user_id === ctx.userId;
   const statutory = c.reason !== "agreement";
@@ -26,7 +28,7 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
   const sm = org?.vacation_year_start_month ?? 1;
   const yearText = (y: number) => (sm === 1 ? String(y) : `${y}/${y + 1}`);
   const statusText: Record<string, string> = {
-    pending: "Venter på at begge parter godtar",
+    pending: "Venter på signatur",
     signed: statutory ? "Registrert" : "Inngått",
     rejected: "Ikke inngått (avslått)",
     cancelled: "Ikke inngått (trukket)",
@@ -41,22 +43,27 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
 
       {(needsEmployee || needsEmployer) && (
         <section className="card border-brand/30 bg-brand-soft print:hidden">
-          <h2 className="h2">Avtalen venter på deg</h2>
+          <h2 className="h2">Avtalen venter på signaturen din</h2>
           <p className="mt-1 text-sm">
-            Les avtalen under. Når du trykker «Godta», lagres navnet ditt og tidspunktet som din underskrift.
-            {needsEmployer && isEmployee && " Du godtar her både som ansatt og på vegne av bedriften, fordi du er eneste administrator."}
+            Les avtalen under. Signer med fingeren (eller musa) og trykk «Signer avtalen». Signaturen, navnet ditt og tidspunktet lagres i avtalen.
+            {needsEmployer && isEmployee && " Du signerer for bedriften fordi du er eneste administrator."}
           </p>
-          <form action={answerCarryover} className="mt-3 flex flex-wrap gap-2">
+          <ActionForm action={signCarryover} submitLabel="Signer avtalen" className="mt-3 space-y-3">
             <input type="hidden" name="id" value={c.id} />
-            <button name="answer" value="yes" className="btn-primary">Godta avtalen</button>
-            <button name="answer" value="no" className="btn-ghost">{canWithdraw ? "Trekk forslaget" : "Avslå"}</button>
-          </form>
+            <SignaturePad label={needsEmployee ? "Din signatur" : "Din signatur, for bedriften"} />
+          </ActionForm>
+          {!canWithdraw && (
+            <form action={declineCarryover} className="mt-3">
+              <input type="hidden" name="id" value={c.id} />
+              <button name="answer" value="no" className="text-sm font-semibold text-bad">Jeg vil ikke inngå avtalen</button>
+            </form>
+          )}
         </section>
       )}
-      {!needsEmployee && !needsEmployer && canWithdraw && (
-        <form action={answerCarryover} className="print:hidden">
+      {canWithdraw && (
+        <form action={declineCarryover} className="print:hidden">
           <input type="hidden" name="id" value={c.id} />
-          <button name="answer" value="no" className="btn-ghost">Trekk forslaget</button>
+          <button className="btn-ghost">Trekk avtalen</button>
         </form>
       )}
 
@@ -93,10 +100,10 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
             <>
               <p>
                 Arbeidsgiver og arbeidstaker avtaler at <b>{n(Number(c.days))} feriedager</b> fra ferieåret {yearText(c.from_year)} overføres
-                til ferieåret {yearText(c.from_year + 1)}. Dagene er telt mandag–fredag. {n(Number(c.days))} slike dager tilsvarer {n(Number(c.days) * 1.2)} virkedager etter ferieloven.
+                til ferieåret {yearText(c.from_year + 1)}.
               </p>
               <p>
-                Avtalen er inngått etter ferieloven § 7 tredje ledd, som tillater at inntil 12 virkedager (2 uker) overføres til neste ferieår etter skriftlig avtale.
+                Avtalen er inngått etter ferieloven § 7 tredje ledd. Etter avtale kan inntil {n(Number(org?.vacation_carryover_max_days ?? 12))} dager overføres til neste ferieår.
                 Den overførte ferien kommer i tillegg til ferien for {yearText(c.from_year + 1)}, og tidspunktet for avviklingen avtales på vanlig måte.
               </p>
               <p>
@@ -109,12 +116,12 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
         </section>
 
         <section className="grid gap-4 border-t border-line pt-4 text-sm sm:grid-cols-2">
-          <Signature title="For arbeidsgiver" name={c.employer_name} at={fmt(c.employer_accepted_at, tz)} statutory={statutory} />
-          <Signature title="Arbeidstaker" name={c.employee_accepted_at ? emp.full_name : null} at={fmt(c.employee_accepted_at, tz)} statutory={statutory} />
+          <Signature title="For arbeidsgiver" name={c.employer_name} at={fmt(c.employer_accepted_at, tz)} image={c.employer_signature} statutory={statutory} />
+          <Signature title="Arbeidstaker" name={c.employee_accepted_at ? emp.full_name : null} at={fmt(c.employee_accepted_at, tz)} image={c.employee_signature} statutory={statutory} />
         </section>
 
         <footer className="border-t border-line pt-3 text-xs text-muted">
-          Avtalen er inngått elektronisk i Vaktpilot. Hver part har godtatt den innlogget med egen e-post. Navn og tidspunkt er lagret.
+          Avtalen er signert elektronisk i Vaktpilot. Hver part har signert innlogget med egen e-post, med håndskrevet signatur på skjermen. Signatur, navn og tidspunkt er lagret.
           Laget {fmt(c.created_at, tz)}. Mal {c.doc_version}.
         </footer>
       </article>
@@ -122,14 +129,18 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
   );
 }
 
-function Signature({ title, name, at, statutory }: { title: string; name: string | null; at: string | null; statutory: boolean }) {
+function Signature({ title, name, at, image, statutory }: { title: string; name: string | null; at: string | null; image: string | null; statutory: boolean }) {
   return (
     <div>
       <div className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</div>
       {at ? (
         <>
+          {image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt={`Signatur: ${name ?? ""}`} className="mt-1 h-20 w-auto max-w-full border-b border-ink/40 object-contain" />
+          )}
           <div className="mt-1 font-medium">{name}</div>
-          <div className="text-muted">Godtatt elektronisk {at}</div>
+          <div className="text-muted">{image ? "Signert" : "Godtatt"} i Vaktpilot {at}</div>
         </>
       ) : (
         <div className="mt-1 text-muted">{statutory ? "Ikke nødvendig" : "Ikke godtatt ennå"}</div>
