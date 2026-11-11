@@ -4,6 +4,7 @@ import { clockState } from "@/lib/clock";
 import { colleagues } from "@/lib/data";
 import { ClockButton } from "@/components/ClockButton";
 import { EntryForm } from "@/components/EntryForm";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { addDays, dayBounds, formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
 import { approveEntries, confirmShift, deleteEntry } from "./actions";
 import { loadPayroll } from "@/lib/payroll-data";
@@ -244,7 +245,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                       <summary className="cursor-pointer font-semibold text-brand">Rett</summary>
                       <div className="mt-2 space-y-2">
                         <EntryForm id={e.id} date={date} start={fmtTime(e.starts_at)} end={fmtTime(e.ends_at!)} breakMinutes={e.break_minutes} comment={e.comment} maxDate={today} />
-                        <form action={deleteEntry}><input type="hidden" name="id" value={e.id} /><button className="text-sm text-bad">Slett registreringen</button></form>
+                        <form action={deleteEntry}><input type="hidden" name="id" value={e.id} /><ConfirmButton label="Slett registreringen" confirmLabel="Ja, slett" /></form>
                       </div>
                     </details>
                   )}

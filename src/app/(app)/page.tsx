@@ -7,6 +7,8 @@ import { ClockButton } from "@/components/ClockButton";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { Board } from "@/components/Board";
 import { requestOpenShift } from "./vaktplan/actions";
+import { VacationLine } from "@/components/VacationOverview";
+import { Intro } from "@/components/Intro";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -143,11 +145,12 @@ export default async function Home() {
   const mine = shifts.filter((s) => s.employee_id === ctx.employeeId);
   const next = mine.find((s) => new Date(s.ends_at) > new Date());
   const monthStart = date.slice(0, 8) + "01";
-  const [{ data: entries }, { data: requests }, { data: notes }] = await Promise.all([
+  const [{ data: entries }, { data: requests }, { data: notes }, { data: meRow }] = await Promise.all([
     ctx.supabase.from("time_entries").select("starts_at, ends_at, break_minutes").eq("employee_id", ctx.employeeId ?? "")
       .gte("starts_at", dayBounds(monthStart, tz).start.toISOString()).not("ends_at", "is", null),
     ctx.supabase.from("shift_requests").select("id, status, created_at, shift_id").eq("employee_id", ctx.employeeId ?? "").order("created_at", { ascending: false }).limit(3),
     ctx.supabase.from("notifications").select("id, title, created_at").is("read_at", null).order("created_at", { ascending: false }).limit(3),
+    ctx.supabase.from("employees").select("full_name, intro_seen_at").eq("id", ctx.employeeId ?? "").maybeSingle(),
   ]);
   const claimed = new Set((requests ?? []).filter((r) => r.status === "pending").map((r) => r.shift_id));
   const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
@@ -164,6 +167,7 @@ export default async function Home() {
 
   return (
     <div className="space-y-4">
+      {meRow && !meRow.intro_seen_at && <Intro name={meRow.full_name} />}
       {todaysOwn && unconfirmed && (
         <section className="card flex flex-wrap items-center justify-between gap-3 border-brand/30 bg-brand-soft">
           <div>
@@ -206,7 +210,10 @@ export default async function Home() {
             </ul>
           )}
         </section>
-        <Stat label="Registrert denne måneden" value={formatHours(monthMinutes)} />
+        <div className="space-y-4">
+          <Stat label="Registrert denne måneden" value={formatHours(monthMinutes)} />
+          <VacationLine ctx={org as Parameters<typeof VacationLine>[0]["ctx"]} />
+        </div>
       </div>
 
       {((requests ?? []).length > 0 || (notes ?? []).length > 0) && (

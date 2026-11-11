@@ -1,8 +1,9 @@
 import type { AppContext } from "@/lib/context";
 import { colleagues } from "@/lib/data";
 import { formatDateLong, localDate, addDays } from "@/lib/time";
-import { workdaysBetween, vacationYear, overlapDays } from "@/lib/absence";
+import { workdaysBetween } from "@/lib/absence";
 import { ActionForm, Field } from "./Form";
+import { VacationOverview } from "./VacationOverview";
 import { cancelAbsence, decideAbsence, registerAbsence, requestAbsence } from "@/app/(app)/foresporsler/absence-actions";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
@@ -36,11 +37,10 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
     .limit(60);
   if (!ctx.isAdmin) q = q.eq("employee_id", ctx.employeeId ?? "");
 
-  const [{ data }, { data: types }, names, { data: org }] = await Promise.all([
+  const [{ data }, { data: types }, names] = await Promise.all([
     q,
     ctx.supabase.from("absence_types").select("id, name, key, is_sick, needs_approval, unit").eq("org_id", ctx.org.id).order("name"),
     colleagues(ctx),
-    ctx.supabase.from("organizations").select("vacation_year_start_month").eq("id", ctx.org.id).single(),
   ]);
   const rows = (data ?? []) as unknown as Row[];
   const pending = rows.filter((r) => r.status === "pending");
@@ -50,21 +50,6 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
     <option key={t.id} value={t.id}>{t.name}{t.needs_approval ? "" : " (registreres uten godkjenning)"}</option>
   ));
   const people = Array.from(names, ([id, name]) => ({ id, name }));
-
-  // Feriesaldo for innlogget ansatt
-  let vacation: { total: number; used: number; planned: number } | null = null;
-  if (ctx.employeeId) {
-    const year = vacationYear(today, org?.vacation_year_start_month ?? 1);
-    const { data: terms } = await ctx.supabase.from("employment_terms").select("vacation_days")
-      .eq("employee_id", ctx.employeeId).is("valid_to", null).maybeSingle();
-    const mine = rows.filter((r) => r.employee_id === ctx.employeeId && r.absence_types?.key === "ferie");
-    const count = (r: Row) => overlapDays(r.from_date, r.to_date, year.from, year.to);
-    vacation = {
-      total: terms?.vacation_days ?? 25,
-      used: mine.filter((r) => r.status === "approved").reduce((s, r) => s + count(r), 0),
-      planned: mine.filter((r) => r.status === "pending").reduce((s, r) => s + count(r), 0),
-    };
-  }
 
   // Vakter som kolliderer med ventende søknader (for administrator)
   const conflicts = new Map<string, number>();
@@ -86,13 +71,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="space-y-4">
-      {vacation && (
-        <section className="grid grid-cols-3 gap-3">
-          <Stat label="Feriedager i år" value={vacation.total} />
-          <Stat label="Tatt eller godkjent" value={vacation.used} />
-          <Stat label="Igjen" value={vacation.total - vacation.used} hint={vacation.planned ? `${vacation.planned} venter på svar` : undefined} />
-        </section>
-      )}
+      {ctx.employeeId && <VacationOverview ctx={ctx} employeeId={ctx.employeeId} />}
 
       {ctx.employeeId && (
         <section className="card">
@@ -202,12 +181,3 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
-  return (
-    <div className="card">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
-      {hint && <div className="text-xs text-warn">{hint}</div>}
-    </div>
-  );
-}

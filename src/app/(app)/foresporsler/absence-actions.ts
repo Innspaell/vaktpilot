@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, requireOrg } from "@/lib/context";
 import { addDays, localDate } from "@/lib/time";
 import type { ActionState } from "../actions";
+import { loadVacation } from "@/lib/vacation-data";
 
 function text(fd: FormData, key: string) {
   const v = fd.get(key);
@@ -46,7 +47,15 @@ export async function requestAbsence(_: ActionState, fd: FormData): Promise<Acti
   }).select("status").single();
   if (error) return { error: error.message };
   refresh();
-  return { ok: data.status === "approved" ? "Registrert. Lederen har fått beskjed." : "Søknaden er sendt. Du får beskjed når den er behandlet." };
+  let note = "";
+  const { data: t } = await ctx.supabase.from("absence_types").select("key").eq("id", typeId).single();
+  if (t?.key === "ferie") {
+    const startYear = Number(p.from.slice(0, 4)), endYear = Number(p.to.slice(0, 4));
+    const v = await loadVacation(ctx, Array.from(new Set([startYear - 1, startYear, endYear])), ctx.employeeId);
+    const over = (v.byEmployee.get(ctx.employeeId) ?? []).filter((y) => y.from <= p.to && y.to >= p.from && y.remainingIfApproved < 0);
+    if (over.length) note = ` Obs: Dette er mer ferie enn du har igjen i ${over.map((y) => y.year).join(" og ")} (${over.map((y) => y.remainingIfApproved.toLocaleString("nb-NO")).join(" / ")} dager). Lederen ser det når søknaden behandles.`;
+  }
+  return { ok: (data.status === "approved" ? "Registrert. Lederen har fått beskjed." : "Søknaden er sendt. Du får beskjed når den er behandlet.") + note };
 }
 
 export async function cancelAbsence(fd: FormData) {

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { addDays, formatDateLong, localDate } from "@/lib/time";
-import { overlapDays, vacationYear } from "@/lib/absence";
+import { vacationYearOf } from "@/lib/vacation";
+import { loadVacation } from "@/lib/vacation-data";
 import { absenceWorkdays, employedWorkdays, selfCertification, sickLeavePercent, type StatAbsence, type StatEmployee } from "@/lib/absence-stats";
 
 const MON = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
@@ -47,7 +48,8 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
     return { label: MON[i], self: sickLeavePercent(active, approved, mFrom, mTo < to ? mTo : to, ["syk"]), doc: sickLeavePercent(active, approved, mFrom, mTo < to ? mTo : to, ["sykmelding"]) };
   });
   const maxMonth = Math.max(5, ...months.map((m) => m.self + m.doc));
-  const vy = vacationYear(today, org?.vacation_year_start_month ?? 1);
+  const vy = vacationYearOf(today, org?.vacation_year_start_month ?? 1);
+  const vac = await loadVacation(ctx, [vy]);
   const upcoming = rawAbs.filter((a) => a.from_date > today && a.from_date <= addDays(today, 45)).sort((a, b) => a.from_date.localeCompare(b.from_date));
   const name = new Map(employees.map((e) => [e.id, e.name]));
 
@@ -98,7 +100,7 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
               <th className="px-2 py-2 text-right font-medium">Egenmelding siste 12 mnd</th>
               <th className="px-2 py-2 text-right font-medium">Legemeldt {year}</th>
               <th className="px-2 py-2 text-right font-medium">Sykt barn {year}</th>
-              <th className="px-2 py-2 text-right font-medium">Ferie (tatt / rett)</th>
+              <th className="px-2 py-2 text-right font-medium">Ferie {vac.currentYear} (brukt / igjen)</th>
               <th className="px-4 py-2 text-right font-medium">Annet fravær</th>
             </tr>
           </thead>
@@ -106,9 +108,7 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
             {active.map((e) => {
               const sc = selfCertification(approved, e.id, today);
               const sick = sickLeavePercent([e], approved, from, to);
-              const vacUsed = rawAbs.filter((a) => a.employee_id === e.id && a.status === "approved" && a.absence_types?.key === "ferie")
-                .reduce((s, a) => s + overlapDays(a.from_date, a.to_date, vy.from, vy.to), 0);
-              const vacRight = (terms ?? []).find((t) => t.employee_id === e.id)?.vacation_days ?? 25;
+              const v = vac.byEmployee.get(e.id)?.[0];
               const warn = sc.periods >= 4 || sc.days >= 12;
               return (
                 <tr key={e.id}>
@@ -119,7 +119,9 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["sykmelding"], from, to)} d</td>
                   <td className="px-2 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["sykt_barn"], from, to)} d</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{vacUsed} / {vacRight}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${v && v.remaining < 0 ? "text-bad" : ""}`}>
+                    {v ? <Link href={`/ansatte/${e.id}`} className="hover:text-brand">{(v.taken + v.booked).toLocaleString("nb-NO")} / {v.remaining.toLocaleString("nb-NO")}</Link> : "–"}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["velferd", "permisjon", "annet", "avspasering"], from, to)} d</td>
                 </tr>
               );

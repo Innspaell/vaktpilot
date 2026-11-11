@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { addTerms, setMemberRole, updateEmployee } from "../../actions";
+import { VacationOverview } from "@/components/VacationOverview";
 
 export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ny?: string }> }) {
   const { id } = await params;
@@ -124,6 +125,11 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           </ul>
         )}
       </section>
+
+      <div>
+        <h2 className="h2 mb-2 px-1">Ferie</h2>
+        <VacationOverview ctx={ctx} employeeId={e.id} admin />
+      </div>
 
       {e.user_id && membershipRole && membershipRole !== "owner" && e.user_id !== ctx.userId && (
         <section className="card">
