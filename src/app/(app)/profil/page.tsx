@@ -15,8 +15,19 @@ async function resetCalendar() {
 export default async function ProfilePage() {
   const ctx = await getContext();
   let calendarUrl: string | null = null;
+  let me: { name: string; roles: string; terms: string } | null = null;
   if (ctx.employeeId) {
-    const { data } = await ctx.supabase.from("employees").select("calendar_token").eq("id", ctx.employeeId).single();
+    const [{ data }, { data: roleRows }, { data: term }] = await Promise.all([
+      ctx.supabase.from("employees").select("calendar_token, full_name").eq("id", ctx.employeeId).single(),
+      ctx.supabase.from("employee_work_roles").select("work_roles(name)").eq("employee_id", ctx.employeeId),
+      ctx.supabase.from("employment_terms").select("position_pct, hours_per_week").eq("employee_id", ctx.employeeId).is("valid_to", null).maybeSingle(),
+    ]);
+    const roleNames = (roleRows ?? []).map((r) => (r.work_roles as unknown as { name: string } | null)?.name).filter(Boolean).join(", ");
+    me = {
+      name: data?.full_name ?? "",
+      roles: roleNames,
+      terms: term ? `${Number(term.position_pct ?? 0).toLocaleString("nb-NO")} % · ${Number(term.hours_per_week ?? 0).toLocaleString("nb-NO")} t/uke` : "",
+    };
     const h = await headers();
     const host = h.get("x-forwarded-host") ?? h.get("host");
     if (data?.calendar_token && host) calendarUrl = `${host}/api/kalender/${data.calendar_token}.ics`;
@@ -25,8 +36,16 @@ export default async function ProfilePage() {
     <div className="space-y-4">
       <h1 className="h1">Profil</h1>
       <section className="card">
-        <div className="text-sm text-muted">Innlogget som</div>
-        <div className="font-medium">{ctx.email}</div>
+        {me?.name && <div className="text-lg font-semibold">{me.name}</div>}
+        <div className="text-sm text-muted">Innlogget som {ctx.email}</div>
+        {me && (me.roles || me.terms || ctx.org) && (
+          <dl className="mt-3 divide-y divide-line text-sm">
+            {ctx.org && <div className="flex justify-between gap-3 py-1.5"><dt className="text-muted">Bedrift</dt><dd className="text-right">{ctx.org.name}</dd></div>}
+            {me.roles && <div className="flex justify-between gap-3 py-1.5"><dt className="text-muted">Rolle</dt><dd className="text-right">{me.roles}</dd></div>}
+            {me.terms && <div className="flex justify-between gap-3 py-1.5"><dt className="text-muted">Stilling</dt><dd className="text-right">{me.terms}</dd></div>}
+          </dl>
+        )}
+        <p className="mt-2 text-xs text-muted">Er noe feil? Si fra til lederen din.</p>
       </section>
       {calendarUrl && (
         <section className="card">

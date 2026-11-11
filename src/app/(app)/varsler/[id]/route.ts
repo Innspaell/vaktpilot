@@ -10,12 +10,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { data } = await ctx.supabase.from("notifications")
     .update({ read_at: new Date().toISOString() })
     .eq("id", id).eq("user_id", ctx.userId).is("read_at", null)
-    .select("link").maybeSingle();
-  let link = data?.link;
-  if (!data) {
-    const { data: n } = await ctx.supabase.from("notifications").select("link").eq("id", id).eq("user_id", ctx.userId).maybeSingle();
-    link = n?.link;
+    .select("link, kind, ref_id").maybeSingle();
+  let n = data;
+  if (!n) {
+    const { data: again } = await ctx.supabase.from("notifications").select("link, kind, ref_id").eq("id", id).eq("user_id", ctx.userId).maybeSingle();
+    n = again;
   }
+  let link = n?.link;
+  // Varsler om én bestemt vakt åpner uka der vakta ligger
+  if (n?.ref_id && ["shift_changed", "shift_assigned", "open_shifts"].includes(n.kind) && link === "/vaktplan") link = `/vaktplan?vakt=${n.ref_id}`;
   // Bare lenker innenfor appen
   const target = link && link.startsWith("/") && !link.startsWith("//") ? link : "/varsler";
   return NextResponse.redirect(new URL(target, request.url), 303);

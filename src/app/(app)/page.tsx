@@ -6,6 +6,7 @@ import { clockState } from "@/lib/clock";
 import { ClockButton } from "@/components/ClockButton";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { Board } from "@/components/Board";
+import { requestOpenShift } from "./vaktplan/actions";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -145,9 +146,10 @@ export default async function Home() {
   const [{ data: entries }, { data: requests }, { data: notes }] = await Promise.all([
     ctx.supabase.from("time_entries").select("starts_at, ends_at, break_minutes").eq("employee_id", ctx.employeeId ?? "")
       .gte("starts_at", dayBounds(monthStart, tz).start.toISOString()).not("ends_at", "is", null),
-    ctx.supabase.from("shift_requests").select("id, status, created_at").eq("employee_id", ctx.employeeId ?? "").order("created_at", { ascending: false }).limit(3),
+    ctx.supabase.from("shift_requests").select("id, status, created_at, shift_id").eq("employee_id", ctx.employeeId ?? "").order("created_at", { ascending: false }).limit(3),
     ctx.supabase.from("notifications").select("id, title, created_at").is("read_at", null).order("created_at", { ascending: false }).limit(3),
   ]);
+  const claimed = new Set((requests ?? []).filter((r) => r.status === "pending").map((r) => r.shift_id));
   const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
   const coworkers = next
     ? shifts.filter((s) => s.id !== next.id && s.employee_id && new Date(s.starts_at) < new Date(next.ends_at) && new Date(s.ends_at) > new Date(next.starts_at)).map((s) => names.get(s.employee_id!))
@@ -190,12 +192,12 @@ export default async function Home() {
 
       <section className="card">
         <h2 className="h2">Ledige vakter</h2>
-        <OpenShifts shifts={openShifts} tz={tz} />
+        <OpenShifts shifts={openShifts} tz={tz} claim={{ requested: claimed }} />
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <section className="card">
-          <h2 className="h2">Denne uken</h2>
+          <h2 className="h2">De neste 7 dagene</h2>
           {mine.length === 0 ? <p className="mt-2 text-sm text-muted">Ingen vakter.</p> : (
             <ul className="mt-2 space-y-1 text-sm">
               {mine.map((s) => (
@@ -222,14 +224,19 @@ export default async function Home() {
   );
 }
 
-function OpenShifts({ shifts, tz }: { shifts: ShiftRow[]; tz: string }) {
+function OpenShifts({ shifts, tz, claim }: { shifts: ShiftRow[]; tz: string; claim?: { requested: Set<string | null> } }) {
   if (shifts.length === 0) return <p className="mt-2 text-sm text-muted">Ingen ledige vakter.</p>;
   return (
-    <ul className="mt-2 space-y-1 text-sm">
+    <ul className="mt-2 space-y-2 text-sm">
       {shifts.slice(0, 5).map((s) => (
-        <li key={s.id} className="flex justify-between">
-          <span className="capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
-          <span className="tabular-nums text-muted">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span>
+        <li key={s.id} className="flex items-center justify-between gap-2">
+          <span>
+            <span className="block capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
+            <span className="tabular-nums text-muted">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span>
+          </span>
+          {claim && (claim.requested.has(s.id)
+            ? <span className="badge bg-warn-soft text-warn">Påmeldt</span>
+            : <form action={requestOpenShift}><input type="hidden" name="shift_id" value={s.id} /><button className="btn-ghost min-h-10 border-brand/30 text-brand">Jeg kan jobbe</button></form>)}
         </li>
       ))}
     </ul>

@@ -132,7 +132,8 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   const mb = monthPay.balances.get(ctx.employeeId);
   const yb = yearPay.balances.get(ctx.employeeId);
   const registered = new Set(entries.map((e) => e.shift_id).filter(Boolean));
-  const toConfirm = (shiftsData ?? []).filter((s) => !registered.has(s.id));
+  // Bare vakter som har startet kan bekreftes
+  const toConfirm = (shiftsData ?? []).filter((s) => !registered.has(s.id) && new Date(s.starts_at) <= new Date());
   const monthStart = today.slice(0, 8) + "01";
   const monthMinutes = entries
     .filter((e) => e.ends_at && localDate(new Date(e.starts_at), tz) >= monthStart)

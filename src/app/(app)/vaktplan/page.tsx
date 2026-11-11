@@ -29,11 +29,17 @@ function dayLabelLong(date: string) {
   return `${WD[isoWeekday(date) - 1]} ${Number(date.slice(8))}. ${MONTHS[Number(date.slice(5, 7)) - 1]}`;
 }
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: Who }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: Who; vakt?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
   const now = today(ctx);
+  // Lenke fra varsel: /vaktplan?vakt=<id> åpner uka der vakta ligger
+  let focusShift: string | null = null;
+  if (sp.vakt && /^[0-9a-f-]{36}$/i.test(sp.vakt) && !sp.dato) {
+    const { data: fs } = await ctx.supabase.from("shifts").select("id, starts_at").eq("id", sp.vakt).maybeSingle();
+    if (fs) { sp.dato = localDate(new Date(fs.starts_at), tz); focusShift = fs.id; }
+  }
   const view: View = sp.visning === "dag" || sp.visning === "maned" ? sp.visning : "uke";
   const who: Who = sp.vis === "alle" || sp.vis === "mine" ? sp.vis : ctx.isAdmin || !ctx.employeeId ? "alle" : "mine";
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.dato ?? "") ? sp.dato! : now;
@@ -134,7 +140,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       {/* ---------------- DAG ---------------- */}
       {view === "dag" && (
         <DayView linkFor={shiftLink} date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
-          cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.isAdmin} />
+          cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.isAdmin}
+          canClaim={!ctx.isAdmin && Boolean(ctx.employeeId)} requested={requested} />
       )}
 
       {/* ---------------- UKE ---------------- */}
@@ -206,9 +213,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {coverage.map((c) => {
               const day = shifts.filter((s) => dateOf(s) === c.date);
               const away = awayOn(c.date);
-              const open = mine ? [] : openShifts.filter((s) => dateOf(s) === c.date);
+              const open = openShifts.filter((s) => dateOf(s) === c.date);
               const isToday = c.date === now;
-              if (mine && day.length === 0 && away.length === 0) {
+              if (mine && day.length === 0 && away.length === 0 && open.length === 0) {
                 return (
                   <div key={c.date} className="flex items-center justify-between px-1 text-sm text-muted">
                     <span className="capitalize">{dayLabelLong(c.date)}</span>
@@ -222,7 +229,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     <h2 className="h2 capitalize">{dayLabelLong(c.date)}{isToday && <span className="ml-2 text-xs font-semibold uppercase text-brand">i dag</span>}</h2>
                     {c.holiday ? <span className="text-xs text-warn">{c.holiday}</span> : c.closed ? <span className="text-xs text-muted">Stengt</span> : null}
                   </div>
-                  <GroupedList shifts={day} roles={roles} roleOf={roleOf} name={name} tz={tz} highlight={ctx.employeeId} linkFor={shiftLink} />
+                  <GroupedList shifts={day} roles={roles} roleOf={roleOf} name={name} tz={tz} highlight={ctx.employeeId} linkFor={shiftLink} focus={focusShift} />
                   {away.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {away.map((a) => <span key={a.employee_id + a.from_date} className="badge bg-warn-soft text-warn">{mine ? a.type_name : `${shortName(name(a.employee_id))}: ${a.type_name.toLowerCase()}`}</span>)}
@@ -326,7 +333,7 @@ function Segmented({ items, active, link }: { items: [string, string][]; active:
   return (
     <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
       {items.map(([k, label]) => (
-        <Link key={k} href={link(k)} className={`rounded-md px-3 py-1.5 font-medium ${k === active ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
+        <Link key={k} href={link(k)} className={`flex min-h-9 items-center rounded-md px-3 font-medium ${k === active ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
       ))}
     </div>
   );
@@ -356,17 +363,17 @@ function ShiftChip({ s, tz, role, href }: { s: ShiftRow; tz: string; role?: Rost
 
 function OpenShift({ s, tz, canClaim, requested, compact }: { s: ShiftRow; tz: string; canClaim: boolean; requested: boolean; compact?: boolean }) {
   return (
-    <div className={`flex items-center justify-between gap-2 rounded-md bg-brand-soft px-2 py-1 ${compact ? "mb-1 flex-col items-start" : ""}`}>
+    <div className={`flex items-center justify-between gap-2 rounded-md bg-brand-soft ${compact ? "mb-1 flex-col items-start px-2 py-1" : "px-3 py-2"}`}>
       <span className="text-sm"><span className="font-medium text-brand">Ledig</span> <span className="tabular-nums">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</span></span>
       {canClaim && (requested
         ? <span className="badge bg-warn-soft text-warn">Påmeldt</span>
-        : <form action={requestOpenShift}><input type="hidden" name="shift_id" value={s.id} /><button className="rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white">Jeg kan jobbe</button></form>)}
+        : <form action={requestOpenShift}><input type="hidden" name="shift_id" value={s.id} /><button className={`rounded-md bg-brand font-semibold text-white ${compact ? "px-2 py-1 text-xs" : "min-h-10 px-3 text-sm"}`}>Jeg kan jobbe</button></form>)}
     </div>
   );
 }
 
-function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor }: {
-  shifts: ShiftRow[]; roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; highlight: string | null;
+function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor, focus }: {
+  shifts: ShiftRow[]; roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; highlight: string | null; focus?: string | null;
   linkFor?: (s: ShiftRow) => string;
 }) {
   const assigned = shifts.filter((s) => s.employee_id);
@@ -379,7 +386,7 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor }: {
           <RoleLabel role={g.role} />
           <ul className="mt-1 divide-y divide-line">
             {g.items.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || name(a.employee_id).localeCompare(name(b.employee_id), "nb")).map((s) => (
-              <li key={s.id} className={s.employee_id === highlight ? "font-semibold" : ""}>
+              <li key={s.id} className={`${s.employee_id === highlight ? "font-semibold" : ""} ${s.id === focus ? "-mx-2 rounded-lg bg-brand-soft px-2" : ""}`}>
                 {(() => {
                   const inner = (
                     <>
@@ -408,8 +415,8 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor }: {
   );
 }
 
-function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor }: {
-  linkFor?: (s: ShiftRow) => string;
+function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor, canClaim, requested }: {
+  linkFor?: (s: ShiftRow) => string; canClaim: boolean; requested: Set<string | null>;
   date: string; shifts: ShiftRow[]; away: { employee_id: string; type_name: string }[];
   cov: { closed: boolean; holiday: string | null; gaps: { start: Date; end: Date; missing: number }[]; peakRequired: number };
   roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; isAdmin: boolean;
@@ -471,7 +478,7 @@ function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, li
       {open.length > 0 && (
         <div className="space-y-1">
           <span className="text-xs font-semibold uppercase tracking-wider text-brand">Ledige vakter</span>
-          {open.map((s) => <OpenShift key={s.id} s={s} tz={tz} canClaim={false} requested={false} />)}
+          {open.map((s) => <OpenShift key={s.id} s={s} tz={tz} canClaim={canClaim} requested={requested.has(s.id)} />)}
         </div>
       )}
       {away.length > 0 && (
