@@ -25,9 +25,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const ctx = await requireOrg();
   const tab = vis === "vakter" ? "vakter" : vis === "bytte" ? "bytte" : "fri";
   const tabs = (
-    <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
+    <div className="grid w-full grid-cols-3 rounded-lg border border-line bg-white p-0.5 text-sm sm:flex sm:w-auto">
       {([["fri", "Fri og fravær"], ["vakter", "Ledige vakter"], ["bytte", "Vaktbytte"]] as const).map(([k, label]) => (
-        <Link key={k} href={`/foresporsler?vis=${k}`} className={`rounded-md px-3 py-1.5 font-medium ${tab === k ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
+        <Link key={k} href={`/foresporsler?vis=${k}`} className={`flex min-h-9 items-center justify-center rounded-md px-2 text-center font-medium leading-tight sm:px-3 ${tab === k ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
       ))}
     </div>
   );
