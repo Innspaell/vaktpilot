@@ -266,3 +266,16 @@ export async function signOut() {
   await ctx.supabase.auth.signOut();
   redirect("/login");
 }
+
+/** Gi en ansatt innlogging med brukernavn/e-post og startpassord, uten e-postbekreftelse. */
+export async function setEmployeeLogin(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const id = text(fd, "employee_id")!;
+  const login = text(fd, "login");
+  const password = typeof fd.get("password") === "string" ? String(fd.get("password")) : "";
+  const { data, error } = await ctx.supabase.rpc("admin_set_login", { p_employee: id, p_login: login, p_password: password });
+  if (error) return { error: error.message };
+  revalidatePath(`/ansatte/${id}`);
+  const shown = String(data).endsWith("@ansatt.vaktpilot.no") ? String(data).replace("@ansatt.vaktpilot.no", "") : String(data);
+  return { ok: `Innlogging klar. Brukernavn: ${shown}` };
+}

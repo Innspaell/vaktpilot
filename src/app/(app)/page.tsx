@@ -9,6 +9,7 @@ import { Board } from "@/components/Board";
 import { requestOpenShift } from "./vaktplan/actions";
 import { VacationLine } from "@/components/VacationOverview";
 import { Intro } from "@/components/Intro";
+import { ChangePassword } from "@/components/ChangePassword";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -150,7 +151,7 @@ export default async function Home() {
       .gte("starts_at", dayBounds(monthStart, tz).start.toISOString()).not("ends_at", "is", null),
     ctx.supabase.from("shift_requests").select("id, status, created_at, shift_id").eq("employee_id", ctx.employeeId ?? "").order("created_at", { ascending: false }).limit(3),
     ctx.supabase.from("notifications").select("id, title, created_at").is("read_at", null).order("created_at", { ascending: false }).limit(3),
-    ctx.supabase.from("employees").select("full_name, intro_seen_at").eq("id", ctx.employeeId ?? "").maybeSingle(),
+    ctx.supabase.from("employees").select("full_name, intro_seen_at, must_change_password").eq("id", ctx.employeeId ?? "").maybeSingle(),
   ]);
   const claimed = new Set((requests ?? []).filter((r) => r.status === "pending").map((r) => r.shift_id));
   const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
@@ -167,7 +168,14 @@ export default async function Home() {
 
   return (
     <div className="space-y-4">
-      {meRow && !meRow.intro_seen_at && <Intro name={meRow.full_name} />}
+      {meRow?.must_change_password && (
+        <section className="card border-brand/30 bg-brand-soft">
+          <h2 className="h2">Lag ditt eget passord</h2>
+          <p className="mb-3 mt-1 text-sm">Du logget inn med et startpassord fra lederen din. Velg et nytt passord som bare du kjenner.</p>
+          <ChangePassword required />
+        </section>
+      )}
+      {meRow && !meRow.intro_seen_at && !meRow.must_change_password && <Intro name={meRow.full_name} />}
       {todaysOwn && unconfirmed && (
         <section className="card flex flex-wrap items-center justify-between gap-3 border-brand/30 bg-brand-soft">
           <div>

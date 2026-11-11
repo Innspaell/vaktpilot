@@ -54,13 +54,14 @@ export default function LoginPage() {
     window.location.href = "/";
   }
 
-  // Passord finnes bare for testbrukere som er opprettet med passord i Supabase. Vanlige brukere bruker kode.
+  // Passord og brukernavn gis av lederen i Vaktpilot. Brukernavn blir en intern adresse som aldri får e-post.
   async function passwordLogin(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    const login = email.trim().toLowerCase();
+    const { error } = await supabase.auth.signInWithPassword({ email: login.includes("@") ? login : `${login}@ansatt.vaktpilot.no`, password });
     if (error) {
       setBusy(false);
       setError("Feil e-post eller passord.");
@@ -79,7 +80,7 @@ export default function LoginPage() {
           {step === "email"
             ? "Vi sender deg en kode på e-post. Bruk e-posten arbeidsgiveren din har registrert."
             : step === "password"
-              ? "Innlogging med passord er bare for testbrukere."
+              ? "Bruk brukernavnet eller e-posten og passordet du har fått av lederen din."
               : `Vi har sendt en kode til ${email}. Den gjelder i en time.`}
         </p>
       </div>
@@ -93,15 +94,15 @@ export default function LoginPage() {
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? "Sender …" : "Send kode"}</button>
-          <button type="button" className="w-full text-center text-xs text-muted hover:text-brand" onClick={() => { setStep("password"); setError(null); }}>
-            Logg inn med passord (testbruker)
+          <button type="button" className="w-full text-center text-sm text-brand" onClick={() => { setStep("password"); setError(null); }}>
+            Har du passord? Logg inn med passord
           </button>
         </form>
       ) : step === "password" ? (
         <form onSubmit={passwordLogin} className="card space-y-4">
           <div>
-            <label className="label" htmlFor="pemail">E-post</label>
-            <input id="pemail" type="email" required autoComplete="username" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <label className="label" htmlFor="pemail">Brukernavn eller e-post</label>
+            <input id="pemail" type="text" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
             <label className="label" htmlFor="password">Passord</label>

@@ -464,6 +464,45 @@ select mark_intro_seen(:'org_a');
 reset role;
 select pg_temp.check((select intro_seen_at is not null from employees where full_name = 'Ola Nordmann'), 'intro ble ikke merket');
 
+-- Leder gir innlogging med brukernavn/passord; kan ikke ta over andre administratorer
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into employees (org_id, full_name, start_date) values (:'org_a', 'Uten Epost', current_date) returning id as noemail \gset
+select pg_temp.check(admin_set_login(:'noemail', 'uten.epost', 'hemmelig123') = 'uten.epost@ansatt.vaktpilot.no', 'brukernavn ble ikke til intern e-post');
+do $$ begin
+  begin
+    perform admin_set_login((select id from employees where full_name = 'Uten Epost'), 'x', 'kort');
+    raise exception 'FEIL: godtok for kort passord';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+do $$ begin
+  begin
+    perform admin_set_login((select id from employees where full_name = 'Kari Nordmann'), 'kari2', 'hemmelig123');
+    raise exception 'FEIL: ansatt kunne sette passord';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+reset role;
+select pg_temp.check((select u.encrypted_password = extensions.crypt('hemmelig123', u.encrypted_password) and u.email_confirmed_at is not null
+  from auth.users u join employees e on e.user_id = u.id where e.full_name = 'Uten Epost'), 'passord eller bekreftelse feil');
+select pg_temp.check((select must_change_password and username = 'uten.epost' from employees where full_name = 'Uten Epost'), 'bytt-passord-flagg mangler');
+select pg_temp.check(exists (select 1 from memberships m join employees e on e.user_id = m.user_id where e.full_name = 'Uten Epost' and m.role = 'employee'), 'medlemskap mangler');
+-- lederen selv er admin: kan ikke få passord satt av en annen
+insert into employees (org_id, full_name, start_date, user_id) values (:'org_a', 'Annen Leder', current_date, '00000000-0000-0000-0000-0000000000a1') returning id as lederemp \gset
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin
+  begin
+    perform admin_set_login((select id from employees where full_name = 'Annen Leder'), 'sjefen', 'hemmelig123');
+    raise exception 'FEIL: kunne sette passord på administrator';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+reset role;
+delete from employees where full_name = 'Annen Leder';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

@@ -2,7 +2,13 @@
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
 create schema auth;
-create table auth.users (id uuid primary key, email text);
+create table auth.users (id uuid primary key, email text, instance_id uuid, aud text, role text, encrypted_password text,
+  email_confirmed_at timestamptz, raw_app_meta_data jsonb, raw_user_meta_data jsonb, created_at timestamptz, updated_at timestamptz,
+  confirmation_token text, recovery_token text, email_change_token_new text, email_change text);
+create table auth.identities (id uuid primary key, user_id uuid not null, provider_id text not null, provider text not null,
+  identity_data jsonb not null, created_at timestamptz, updated_at timestamptz, last_sign_in_at timestamptz);
+create schema if not exists extensions;
+create extension if not exists pgcrypto schema extensions;
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')::uuid;
 $$;

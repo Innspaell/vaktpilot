@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { ChangePassword } from "@/components/ChangePassword";
 import { getContext, requireOrg } from "@/lib/context";
 import { signOut, switchOrganization } from "../actions";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
@@ -92,6 +93,11 @@ export default async function ProfilePage() {
           </div>
         </section>
       )}
+      <details className="card">
+        <summary className="h2 cursor-pointer">Passord</summary>
+        <p className="mb-3 mt-1 text-sm text-muted">Med passord kan du logge inn uten å vente på kode på e-post.</p>
+        <ChangePassword />
+      </details>
       <section className="card text-sm">
         <h2 className="h2">Personvern</h2>
         <div className="mt-2 flex flex-wrap gap-3">
