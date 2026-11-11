@@ -1,12 +1,16 @@
 "use server";
 
+import { inviteEmail, sendEmail, welcomeEmail } from "@/lib/email";
+
+import { headers } from "next/headers";
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getContext, requireAdmin, requireOrg, ORG_COOKIE } from "@/lib/context";
 import { insertEmployee } from "@/lib/employees";
 
-export type ActionState = { error?: string; ok?: string } | undefined;
+export type ActionState = { error?: string; ok?: string; link?: string } | undefined;
 
 function text(fd: FormData, key: string) {
   const v = fd.get(key);
@@ -267,15 +271,51 @@ export async function signOut() {
   redirect("/login");
 }
 
-/** Gi en ansatt innlogging med brukernavn/e-post og startpassord, uten e-postbekreftelse. */
+/** Gi en ansatt innlogging med e-post og midlertidig passord, uten e-postbekreftelse. Sender velkomst-e-post. */
 export async function setEmployeeLogin(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
   const id = text(fd, "employee_id")!;
   const login = text(fd, "login");
   const password = typeof fd.get("password") === "string" ? String(fd.get("password")) : "";
+  const { data: before } = await ctx.supabase.from("employees").select("full_name, user_id").eq("id", id).single();
   const { data, error } = await ctx.supabase.rpc("admin_set_login", { p_employee: id, p_login: login, p_password: password });
   if (error) return { error: error.message };
   revalidatePath(`/ansatte/${id}`);
-  const shown = String(data).endsWith("@ansatt.vaktpilot.no") ? String(data).replace("@ansatt.vaktpilot.no", "") : String(data);
-  return { ok: `Innlogging klar. Brukernavn: ${shown}` };
+  const email = String(data);
+  if (fd.get("send_welcome") !== "on") return { ok: `Innlogging klar for ${email}. Gi den ansatte passordet.` };
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const loginUrl = `${h.get("x-forwarded-proto") ?? "https"}://${host}/login`;
+  const includePw = fd.get("include_password") === "on";
+  const mail = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: includePw ? password : null });
+  const res = await sendEmail(mail);
+  if (res.sent) {
+    return { ok: `Innlogging klar. Velkomst-e-post er sendt til ${email}${includePw ? " med det midlertidige passordet" : ". Gi den ansatte passordet"}.` };
+  }
+  // Ikke satt opp ennå: legg e-posten i kø uten passord, og be lederen gi passordet selv.
+  const queued = welcomeEmail({ name: before?.full_name ?? "", org: ctx.org.name, email, loginUrl, password: null });
+  await ctx.supabase.from("email_outbox").insert({
+    org_id: ctx.org.id, to_email: email, subject: queued.subject, html: queued.html, body_text: queued.text, kind: "welcome", created_by: ctx.userId,
+  });
+  return { ok: `Innlogging klar for ${email}. E-postutsending er ikke satt opp ennå, så velkomst-e-posten (uten passord) sendes når den er klar. Gi den ansatte passordet selv nå.` };
+}
+
+/** Send invitasjonslenke: den ansatte lager passordet selv. Lenken vises også for lederen, så den kan sendes på SMS. */
+export async function createLoginInvite(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const id = text(fd, "employee_id")!;
+  const { data: emp } = await ctx.supabase.from("employees").select("full_name").eq("id", id).single();
+  const email = text(fd, "login")?.toLowerCase() ?? "";
+  const { data: token, error } = await ctx.supabase.rpc("admin_create_invite", { p_employee: id, p_email: email });
+  if (error) return { error: error.message };
+  revalidatePath(`/ansatte/${id}`);
+  const h = await headers();
+  const link = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}/velkommen/${token}`;
+  if (fd.get("send_welcome") === "on") {
+    const res = await sendEmail(inviteEmail({ name: emp?.full_name ?? "", org: ctx.org.name, email, link }));
+    if (res.sent) return { ok: `Invitasjon er sendt til ${email}. Lenken virker i 7 dager.`, link };
+    return { ok: "E-postutsending er ikke satt opp ennå. Kopier lenken under og send den på SMS eller melding. Den virker i 7 dager og kan brukes én gang.", link };
+  }
+  return { ok: "Lenken er laget. Send den til den ansatte. Den virker i 7 dager og kan brukes én gang.", link };
 }

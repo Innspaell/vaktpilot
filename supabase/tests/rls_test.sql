@@ -464,22 +464,27 @@ select mark_intro_seen(:'org_a');
 reset role;
 select pg_temp.check((select intro_seen_at is not null from employees where full_name = 'Ola Nordmann'), 'intro ble ikke merket');
 
--- Leder gir innlogging med brukernavn/passord; kan ikke ta over andre administratorer
+-- Leder gir innlogging: e-post påkrevd, midlertidig passord eller invitasjonslenke
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
 insert into employees (org_id, full_name, start_date) values (:'org_a', 'Uten Epost', current_date) returning id as noemail \gset
-select pg_temp.check(admin_set_login(:'noemail', 'uten.epost', 'hemmelig123') = 'uten.epost@ansatt.vaktpilot.no', 'brukernavn ble ikke til intern e-post');
 do $$ begin
   begin
-    perform admin_set_login((select id from employees where full_name = 'Uten Epost'), 'x', 'kort');
+    perform admin_set_login((select id from employees where full_name = 'Uten Epost'), 'uten.epost', 'hemmelig123');
+    raise exception 'FEIL: godtok innlogging uten e-post';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+  begin
+    perform admin_set_login((select id from employees where full_name = 'Uten Epost'), 'ny@a.no', 'kort');
     raise exception 'FEIL: godtok for kort passord';
   exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
   end;
 end $$;
+select pg_temp.check(admin_set_login(:'noemail', 'Ny@A.no', 'hemmelig123') = 'ny@a.no', 'e-post ble ikke brukt');
 select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
 do $$ begin
   begin
-    perform admin_set_login((select id from employees where full_name = 'Kari Nordmann'), 'kari2', 'hemmelig123');
+    perform admin_set_login((select id from employees where full_name = 'Kari Nordmann'), 'kari2@a.no', 'hemmelig123');
     raise exception 'FEIL: ansatt kunne sette passord';
   exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
   end;
@@ -487,8 +492,27 @@ end $$;
 reset role;
 select pg_temp.check((select u.encrypted_password = extensions.crypt('hemmelig123', u.encrypted_password) and u.email_confirmed_at is not null
   from auth.users u join employees e on e.user_id = u.id where e.full_name = 'Uten Epost'), 'passord eller bekreftelse feil');
-select pg_temp.check((select must_change_password and username = 'uten.epost' from employees where full_name = 'Uten Epost'), 'bytt-passord-flagg mangler');
-select pg_temp.check(exists (select 1 from memberships m join employees e on e.user_id = m.user_id where e.full_name = 'Uten Epost' and m.role = 'employee'), 'medlemskap mangler');
+select pg_temp.check((select must_change_password and email = 'ny@a.no' from employees where full_name = 'Uten Epost'), 'bytt-passord-flagg eller e-post mangler');
+-- Invitasjonslenke: ansatt lager passord selv
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into employees (org_id, full_name, start_date) values (:'org_a', 'Invitert Person', current_date) returning id as invemp \gset
+select admin_create_invite(:'invemp', 'invitert@a.no') as invtoken \gset
+reset role;
+set role anon;
+select pg_temp.check((select email from invite_info(:'invtoken')) = 'invitert@a.no', 'lenken viser ikke riktig person');
+select pg_temp.check(accept_invite(:'invtoken', 'mittEgetPassord') = 'invitert@a.no', 'lenken virket ikke');
+do $$ begin
+  begin
+    perform accept_invite(current_setting('vp.tok', true), 'annetPassord1');
+    raise exception 'FEIL: lenken virket to ganger';
+  exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
+  end;
+end $$;
+select pg_temp.check(not exists (select 1 from invite_info(:'invtoken')), 'brukt lenke vises fortsatt');
+reset role;
+select pg_temp.check((select not must_change_password and user_id is not null from employees where full_name = 'Invitert Person'), 'invitert ble ikke koblet');
+select pg_temp.check(not exists (select 1 from login_invites where token_hash = :'invtoken'), 'lenken er lagret i klartekst');
 -- lederen selv er admin: kan ikke få passord satt av en annen
 insert into employees (org_id, full_name, start_date, user_id) values (:'org_a', 'Annen Leder', current_date, '00000000-0000-0000-0000-0000000000a1') returning id as lederemp \gset
 set role authenticated;

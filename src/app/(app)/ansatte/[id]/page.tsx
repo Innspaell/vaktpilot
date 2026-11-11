@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
-import { addTerms, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
+import { addTerms, createLoginInvite, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
 import { LoginSetup } from "@/components/LoginSetup";
 import { VacationOverview } from "@/components/VacationOverview";
 
@@ -136,14 +136,14 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         <h2 className="h2">Innlogging</h2>
         <p className="mt-1 text-sm text-muted">
           {e.user_id
-            ? `${e.full_name} har innlogging${e.username ? ` med brukernavnet «${e.username}»` : e.email ? ` med ${e.email}` : ""}.${e.must_change_password ? " Har ikke byttet startpassordet ennå." : ""}`
-            : `${e.full_name} har ikke logget inn ennå. Gi et startpassord, så kan hen logge inn med en gang. Ingen e-post må bekreftes.`}
+            ? `${e.full_name} har innlogging${e.email ? ` med ${e.email}` : ""}.${e.must_change_password ? " Har ikke byttet det midlertidige passordet ennå." : ""}`
+            : `${e.full_name} har ikke innlogging ennå. Send en lenke der hen lager passordet selv, eller sett et midlertidig passord. E-posten trenger ikke bekreftes.`}
           {" "}Den ansatte kan også logge inn med kode på e-post, hvis e-posten er registrert.
         </p>
         {membershipRole && membershipRole !== "employee" ? (
           <p className="mt-2 text-sm text-muted">Administratorer setter passord selv under Profil.</p>
         ) : (
-          <LoginSetup action={setEmployeeLogin} employeeId={e.id} defaultLogin={e.username ?? e.email ?? ""} hasLogin={Boolean(e.user_id)} />
+          <LoginSetup passwordAction={setEmployeeLogin} inviteAction={createLoginInvite} employeeId={e.id} defaultLogin={e.email ?? ""} hasLogin={Boolean(e.user_id)} />
         )}
       </section>
 

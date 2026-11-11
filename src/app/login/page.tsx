@@ -54,14 +54,13 @@ export default function LoginPage() {
     window.location.href = "/";
   }
 
-  // Passord og brukernavn gis av lederen i Vaktpilot. Brukernavn blir en intern adresse som aldri får e-post.
+  // Midlertidig passord gis av lederen i Vaktpilot; den ansatte lager eget passord ved første innlogging.
   async function passwordLogin(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     const supabase = createClient();
-    const login = email.trim().toLowerCase();
-    const { error } = await supabase.auth.signInWithPassword({ email: login.includes("@") ? login : `${login}@ansatt.vaktpilot.no`, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error) {
       setBusy(false);
       setError("Feil e-post eller passord.");
@@ -80,7 +79,7 @@ export default function LoginPage() {
           {step === "email"
             ? "Vi sender deg en kode på e-post. Bruk e-posten arbeidsgiveren din har registrert."
             : step === "password"
-              ? "Bruk brukernavnet eller e-posten og passordet du har fått av lederen din."
+              ? "Bruk e-posten din og passordet. Første gang bruker du det midlertidige passordet fra lederen din."
               : `Vi har sendt en kode til ${email}. Den gjelder i en time.`}
         </p>
       </div>
@@ -101,8 +100,8 @@ export default function LoginPage() {
       ) : step === "password" ? (
         <form onSubmit={passwordLogin} className="card space-y-4">
           <div>
-            <label className="label" htmlFor="pemail">Brukernavn eller e-post</label>
-            <input id="pemail" type="text" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <label className="label" htmlFor="pemail">E-post</label>
+            <input id="pemail" type="email" inputMode="email" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
             <label className="label" htmlFor="password">Passord</label>
