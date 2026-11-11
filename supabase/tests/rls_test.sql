@@ -435,8 +435,8 @@ do $$ begin
   exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
   end;
   begin
-    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 13, 'agreement', null, 'data:image/png;base64,' || repeat('A', 300));
-    raise exception 'FEIL: kunne overføre mer enn 12';
+    perform propose_carryover((select id from employees where full_name = 'Ola Nordmann'), 2026, 11, 'agreement', null, 'data:image/png;base64,' || repeat('A', 300));
+    raise exception 'FEIL: kunne overføre mer enn 2 uker';
   exception when others then if sqlerrm like 'FEIL:%' then raise; end if;
   end;
 end $$;

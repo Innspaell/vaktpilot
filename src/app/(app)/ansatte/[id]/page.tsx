@@ -60,7 +60,12 @@ export default async function EmployeePage({ params, searchParams }: { params: P
               <option value="fixed">Fastlønn</option>
             </select>
           </Field>
-          <div />
+          <Field label="Arbeidsdager i uka" hint="Brukes til å regne om ferien etter ferieloven. Snitt ved varierende uker.">
+            <input name="days_per_week" type="number" min={1} max={6} step="0.5" defaultValue={Number(current?.days_per_week ?? 5)} className="input" />
+          </Field>
+          <Field label="Fødselsår" hint="Valgfritt. Gir ekstra ferieuke fra året den ansatte fyller 60.">
+            <input name="birth_year" type="number" min={1940} max={2015} defaultValue={e.birth_year ?? ""} className="input" />
+          </Field>
           <label className="flex items-start gap-2 text-sm md:col-span-2">
             <input type="checkbox" name="auto_plan" defaultChecked={e.auto_plan ?? true} className="mt-0.5 h-4 w-4" />
             <span>Med i automatisk vaktplan<span className="block text-xs text-muted">Slå av for ledelse og andre som ikke skal få vakter automatisk. De kan fortsatt settes opp for hånd.</span></span>
@@ -92,7 +97,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <p className="mt-1 text-sm text-muted">
             Gjelder fra {current.valid_from}: {Number(current.position_pct)} % · {Number(current.hours_per_week)} t/uke ·{" "}
             {current.pay_type === "fixed" ? "fastlønn" : "timelønn"} · {current.paid_holidays ? "betalte helligdager" : "ikke betalte helligdager"} ·{" "}
-            {current.vacation_days} feriedager
+            {Number(current.days_per_week ?? 5)} arbeidsdager i uka
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">Ingen gjeldende avtale.</p>
@@ -111,7 +116,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
                 <option value="fixed">Fastlønn</option>
               </select>
             </Field>
-            <Field label="Feriedager per år" hint="Telt mandag–fredag."><input name="vacation_days" type="number" defaultValue={current?.vacation_days ?? 25} className="input" /></Field>
+            <Field label="Arbeidsdager i uka" hint="Brukes til ferieberegning."><input name="days_per_week" type="number" min={1} max={6} step="0.5" defaultValue={Number(current?.days_per_week ?? 5)} className="input" /></Field>
             <label className="flex items-center gap-2 self-end pb-3 text-sm">
               <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? true} className="h-4 w-4" /> Betalte helligdager
             </label>

@@ -60,8 +60,8 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
       postal_code: text(fd, "postal_code"),
       city: text(fd, "city"),
       full_time_hours_week: num(fd, "full_time_hours_week", 37.5),
-      vacation_days_year: num(fd, "vacation_days_year", 25),
-      vacation_carryover_max_days: num(fd, "vacation_carryover_max_days", 12),
+      vacation_fifth_week: fd.get("vacation_fifth_week") === "on",
+      vacation_fifth_week_transferable: fd.get("vacation_fifth_week_transferable") === "on",
       staffing_slot_minutes: num(fd, "staffing_slot_minutes", 15),
       auto_submit_clock_entries: fd.get("auto_submit_clock_entries") === "on",
     })
@@ -168,6 +168,7 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
       email: text(fd, "email")?.toLowerCase() ?? null,
       phone: text(fd, "phone"),
       employee_number: text(fd, "employee_number"),
+      birth_year: text(fd, "birth_year") ? num(fd, "birth_year", 0) || null : null,
       start_date: text(fd, "start_date") ?? undefined,
       end_date: text(fd, "end_date"),
       is_shift_worker: fd.get("is_shift_worker") === "on",
@@ -184,7 +185,10 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
     const hours = text(fd, "hours_per_week") ? num(fd, "hours_per_week", 37.5) : Math.round(Number(org?.full_time_hours_week ?? 37.5) * pct) / 100;
     const { error: tErr } = await ctx.supabase
       .from("employment_terms")
-      .update({ position_pct: pct, hours_per_week: hours, pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly" })
+      .update({
+        position_pct: pct, hours_per_week: hours, pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
+        days_per_week: Math.min(6, Math.max(1, num(fd, "days_per_week", 5))),
+      })
       .eq("employee_id", id)
       .is("valid_to", null);
     if (tErr) return { error: tErr.message };
@@ -230,7 +234,7 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
     hours_per_week: num(fd, "hours_per_week", 37.5),
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
     paid_holidays: fd.get("paid_holidays") === "on",
-    vacation_days: num(fd, "vacation_days", 25),
+    days_per_week: Math.min(6, Math.max(1, num(fd, "days_per_week", 5))),
   });
   if (error) return { error: error.message };
   revalidatePath(`/ansatte/${employeeId}`);

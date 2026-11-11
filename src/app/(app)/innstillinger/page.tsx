@@ -30,12 +30,18 @@ export default async function SettingsPage() {
           <CompanyLookup defaultName={org?.name ?? ""} defaultOrgNumber={org?.org_number ?? ""} defaultAddress={org?.address ?? ""}
             defaultPostalCode={org?.postal_code ?? ""} defaultCity={org?.city ?? ""} />
           <Field label="Heltid, timer per uke"><input name="full_time_hours_week" type="number" step="0.25" defaultValue={Number(org?.full_time_hours_week)} className="input" /></Field>
-          <Field label="Feriedager per år" hint="Standard for nye ansatte, telt mandag–fredag. 25 = 5 uker.">
-            <input name="vacation_days_year" type="number" defaultValue={org?.vacation_days_year} className="input" />
-          </Field>
-          <Field label="Ferie som kan overføres etter avtale" hint="Dager per år. Ferieloven: inntil 12 virkedager (2 uker).">
-            <input name="vacation_carryover_max_days" type="number" min={0} max={60} step="0.5" defaultValue={Number(org?.vacation_carryover_max_days ?? 12)} className="input" />
-          </Field>
+          <fieldset className="space-y-2 md:col-span-2">
+            <legend className="label">Ferie</legend>
+            <p className="text-xs text-muted">Ferieloven gir 4 uker og 1 dag. Feriedagene regnes ut per ansatt fra hvor mange dager i uka de jobber. Fra året man fyller 60 kommer én ekstra uke.</p>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="vacation_fifth_week" defaultChecked={org?.vacation_fifth_week ?? true} className="mt-0.5 h-4 w-4" />
+              <span>Avtalefestet femte ferieuke (tariff)<span className="block text-xs text-muted">Gir 5 uker i alt. Gjelder bedrifter med tariffavtale, som Bilutleieoverenskomsten.</span></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="vacation_fifth_week_transferable" defaultChecked={org?.vacation_fifth_week_transferable ?? false} className="mt-0.5 h-4 w-4" />
+              <span>Avtalefestet ferie kan også overføres til neste år<span className="block text-xs text-muted">Kryss bare av hvis tariffavtalen tillater det. Ellers gjelder lovens grense på 2 uker (12 virkedager).</span></span>
+            </label>
+          </fieldset>
           <Field label="Bemanning telles per">
             <select name="staffing_slot_minutes" defaultValue={org?.staffing_slot_minutes} className="input">
               <option value={15}>15 minutter</option>

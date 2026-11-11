@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { vacationForYear, vacationYearOf } from "./vacation";
+import { carryoverLimit, toWorkingDaysLaw, vacationDaysIn, vacationEntitlement, vacationForYear, vacationYearOf } from "./vacation";
 
 describe("feriesaldo per år", () => {
   const base = { startMonth: 1, entitlement: 25, hoursPerWeek: 37.5 };
@@ -40,5 +40,32 @@ describe("feriesaldo per år", () => {
   it("ferieår som starter i mai", () => {
     expect(vacationYearOf("2027-03-01", 5)).toBe(2026);
     expect(vacationYearOf("2027-05-01", 5)).toBe(2027);
+  });
+});
+
+describe("ferieloven omregnet til arbeidsdager", () => {
+  it("heltid mandag–fredag: 21 lovbestemt + 4 avtalefestet = 25 (5 uker), 60 år +5", () => {
+    expect(vacationEntitlement({ daysPerWeek: 5, fifthWeek: true, age60: false })).toEqual({ statutory: 21, contractual: 4, senior: 0, total: 25 });
+    expect(vacationEntitlement({ daysPerWeek: 5, fifthWeek: true, age60: true }).total).toBe(30);
+    expect(vacationEntitlement({ daysPerWeek: 5, fifthWeek: false, age60: false }).total).toBe(21);
+  });
+  it("deltid 3 dager i uka: 4 uker og 1 dag = 13, femte uke +2", () => {
+    expect(vacationEntitlement({ daysPerWeek: 3, fifthWeek: true, age60: false })).toEqual({ statutory: 13, contractual: 2, senior: 0, total: 15 });
+  });
+  it("overføring: 2 uker = 12 virkedager", () => {
+    expect(carryoverLimit(5, true, false)).toBe(10);
+    expect(carryoverLimit(3, true, false)).toBe(6);
+    expect(carryoverLimit(5, true, true)).toBe(14);
+    expect(toWorkingDaysLaw(10, 5)).toBe(12);
+  });
+  it("hel uke teller arbeidsdagene i uka, enkeltdager maks d per uke", () => {
+    const week = { from: "2026-11-16", to: "2026-11-22", status: "approved" as const, partialHours: null };
+    expect(vacationDaysIn(week, "2026-01-01", "2026-12-31", 7.5, 5)).toBe(5);
+    expect(vacationDaysIn(week, "2026-01-01", "2026-12-31", 7.5, 3)).toBe(3);
+    const twoDays = { from: "2026-11-16", to: "2026-11-17", status: "approved" as const, partialHours: null };
+    expect(vacationDaysIn(twoDays, "2026-01-01", "2026-12-31", 7.5, 3)).toBe(2);
+    // uka etter påske 2027: 2. påskedag 29.3 er helligdag, så hel uke = 4 dager for heltid
+    const easter = { from: "2027-03-29", to: "2027-04-04", status: "approved" as const, partialHours: null };
+    expect(vacationDaysIn(easter, "2027-01-01", "2027-12-31", 7.5, 5)).toBe(4);
   });
 });

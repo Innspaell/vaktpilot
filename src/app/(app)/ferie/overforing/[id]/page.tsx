@@ -18,7 +18,7 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
   const { data: c } = await ctx.supabase.from("vacation_carryovers")
     .select("*, employees(full_name, employee_number, user_id)").eq("id", id).maybeSingle();
   if (!c) notFound();
-  const { data: org } = await ctx.supabase.from("organizations").select("name, org_number, address, postal_code, city, vacation_year_start_month, vacation_carryover_max_days").eq("id", c.org_id).single();
+  const { data: org } = await ctx.supabase.from("organizations").select("name, org_number, address, postal_code, city, vacation_year_start_month").eq("id", c.org_id).single();
   const emp = c.employees as unknown as { full_name: string; employee_number: string | null; user_id: string | null };
   const isEmployee = emp.user_id === ctx.userId;
   const statutory = c.reason !== "agreement";
@@ -100,10 +100,11 @@ export default async function CarryoverDocument({ params }: { params: Promise<{ 
             <>
               <p>
                 Arbeidsgiver og arbeidstaker avtaler at <b>{n(Number(c.days))} feriedager</b> fra ferieåret {yearText(c.from_year)} overføres
-                til ferieåret {yearText(c.from_year + 1)}.
+                til ferieåret {yearText(c.from_year + 1)}. Dagene er arbeidsdager for en arbeidstaker som jobber {n(Number(c.days_per_week ?? 5))} dager i uka,
+                og tilsvarer {n(Math.round(((Number(c.days) * 6) / Number(c.days_per_week ?? 5)) * 10) / 10)} virkedager etter ferieloven.
               </p>
               <p>
-                Avtalen er inngått etter ferieloven § 7 tredje ledd. Etter avtale kan inntil {n(Number(org?.vacation_carryover_max_days ?? 12))} dager overføres til neste ferieår.
+                Avtalen er inngått etter ferieloven § 7 nr. 3, som tillater at inntil 12 virkedager (2 uker) overføres til neste ferieår etter skriftlig avtale.
                 Den overførte ferien kommer i tillegg til ferien for {yearText(c.from_year + 1)}, og tidspunktet for avviklingen avtales på vanlig måte.
               </p>
               <p>

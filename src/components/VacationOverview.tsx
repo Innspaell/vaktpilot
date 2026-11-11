@@ -52,7 +52,7 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
   return (
     <div className="space-y-3">
       <div className={`grid gap-3 ${years.length > 1 ? "md:grid-cols-2" : ""}`}>
-        {years.map((y) => <YearCard key={y.year} y={y} admin={admin} />)}
+        {years.map((y) => <YearCard key={y.year} y={y} admin={admin} ent={data.entitlement(employeeId, y.year)} dpw={data.daysPerWeek(employeeId)} />)}
       </div>
 
       {admin && (
@@ -85,7 +85,8 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
       <section className="card">
         <h2 className="h2">Overføre ferie til neste år</h2>
         <p className="mt-1 text-sm text-muted">
-          Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil {n(data.maxCarryover)} dager overføres til neste år.
+          Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil 2 uker (12 virkedager etter ferieloven) overføres til neste år.
+          For {admin ? "denne ansatte" : "deg"} er det {n(data.carryoverLimit(employeeId))} arbeidsdager.
           {admin
             ? " Du lager avtalen og signerer for bedriften. Den ansatte får varsel og signerer med fingeren i appen. Når begge har signert, flyttes dagene av seg selv."
             : " Ønsker du å overføre ferie, ta det opp med lederen din. Lederen lager avtalen, og du signerer den her i appen."}
@@ -118,8 +119,8 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
                     {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
                   </select>
                 </Field>
-                <Field label="Dager" hint={`Inntil ${n(data.maxCarryover)} per år.`}>
-                  <input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.maxCarryover) : ""} className="input" />
+                <Field label="Arbeidsdager" hint={`Inntil ${n(data.carryoverLimit(employeeId))} (2 uker).`}>
+                  <input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.carryoverLimit(employeeId)) : ""} className="input" />
                 </Field>
                 <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
                 <div className="md:col-span-3"><SignaturePad label="Din signatur, for bedriften" /></div>
@@ -151,9 +152,15 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
   );
 }
 
-function YearCard({ y, admin }: { y: VacationYear; admin?: boolean }) {
+function YearCard({ y, admin, ent, dpw }: { y: VacationYear; admin?: boolean; dpw: number; ent?: { statutory: number; contractual: number; senior: number } }) {
   const rows: [string, number, string?][] = [
-    ["Rett etter avtalen", y.entitlement],
+    ...(ent
+      ? [
+          ["Lovbestemt ferie (4 uker og 1 dag)", ent.statutory] as [string, number],
+          ...(ent.contractual ? [["Avtalefestet ferie (femte uke)", ent.contractual] as [string, number]] : []),
+          ...(ent.senior ? [["Ekstra uke fra fylte 60 år", ent.senior] as [string, number]] : []),
+        ]
+      : [["Rett", y.entitlement] as [string, number]]),
     ...(y.adjustments ? [["Startsaldo / justering", y.adjustments] as [string, number]] : []),
     ...(y.carriedIn ? [["Overført fra året før", y.carriedIn] as [string, number]] : []),
     ...(y.carriedOut ? [["Overført til året etter", -y.carriedOut] as [string, number]] : []),
@@ -186,7 +193,9 @@ function YearCard({ y, admin }: { y: VacationYear; admin?: boolean }) {
           ))}
         </ul>
       )}
-      <p className="mt-2 text-xs text-muted">Telt mandag–fredag uten helligdager. Ferie trekkes fra året den tas.</p>
+      <p className="mt-2 text-xs text-muted">
+        Telt i arbeidsdager ({n(dpw)} dager i uka). Én ferieuke = {n(dpw)} arbeidsdager = 6 virkedager etter ferieloven. Helligdager trekkes ikke. Ferie trekkes fra året den tas.
+      </p>
     </section>
   );
 }

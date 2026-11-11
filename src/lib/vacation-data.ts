@@ -1,7 +1,7 @@
 import "server-only";
 import type { AppContext } from "./context";
 import { localDate } from "./time";
-import { vacationForYear, vacationYearOf, type VacAbsence, type VacLedger, type VacationYear } from "./vacation";
+import { carryoverLimit, vacationEntitlement, vacationForYear, vacationYearOf, type VacAbsence, type VacLedger, type VacationYear } from "./vacation";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
 
@@ -12,13 +12,13 @@ export interface Carryover {
 
 /** Feriesaldo for gitte år, for én ansatt eller alle. */
 export async function loadVacation(ctx: Ctx, years: number[], onlyEmployee?: string) {
-  const { data: org } = await ctx.supabase.from("organizations").select("vacation_year_start_month, vacation_days_year, vacation_carryover_max_days").eq("id", ctx.org.id).single();
+  const { data: org } = await ctx.supabase.from("organizations").select("vacation_year_start_month, vacation_fifth_week, vacation_fifth_week_transferable").eq("id", ctx.org.id).single();
   const startMonth = org?.vacation_year_start_month ?? 1;
   const today = localDate(new Date(), ctx.org.timezone);
   const mm = String(startMonth).padStart(2, "0");
   const minFrom = `${Math.min(...years)}-${mm}-01`;
 
-  let termQ = ctx.supabase.from("employment_terms").select("employee_id, vacation_days, hours_per_week").eq("org_id", ctx.org.id).is("valid_to", null);
+  let termQ = ctx.supabase.from("employment_terms").select("employee_id, days_per_week, hours_per_week").eq("org_id", ctx.org.id).is("valid_to", null);
   let ledQ = ctx.supabase.from("leave_ledger").select("id, employee_id, amount, effective_date, source, note").eq("org_id", ctx.org.id).eq("kind", "vacation").gte("effective_date", minFrom).order("effective_date");
   let absQ = ctx.supabase.from("absence_requests").select("employee_id, from_date, to_date, partial_hours, status, absence_types!inner(key)")
     .eq("org_id", ctx.org.id).eq("absence_types.key", "ferie").in("status", ["approved", "pending"]).gte("to_date", minFrom);
@@ -30,7 +30,13 @@ export async function loadVacation(ctx: Ctx, years: number[], onlyEmployee?: str
     absQ = absQ.eq("employee_id", onlyEmployee);
     coQ = coQ.eq("employee_id", onlyEmployee);
   }
-  const [{ data: terms }, { data: led }, { data: abs }, { data: co }] = await Promise.all([termQ, ledQ, absQ, coQ]);
+  let empQ = ctx.supabase.from("employees").select("id, birth_year").eq("org_id", ctx.org.id);
+  if (onlyEmployee) empQ = empQ.eq("id", onlyEmployee);
+  const [{ data: terms }, { data: led }, { data: abs }, { data: co }, { data: emps }] = await Promise.all([termQ, ledQ, absQ, coQ, empQ]);
+  const fifthWeek = org?.vacation_fifth_week ?? true;
+  const fifthTransferable = org?.vacation_fifth_week_transferable ?? false;
+  const limits = new Map<string, number>();
+  const entitlements = new Map<string, Map<number, ReturnType<typeof vacationEntitlement>>>();
 
   const ids = new Set<string>([...(terms ?? []).map((t) => t.employee_id), ...(onlyEmployee ? [onlyEmployee] : [])]);
   const result = new Map<string, VacationYear[]>();
@@ -40,19 +46,27 @@ export async function loadVacation(ctx: Ctx, years: number[], onlyEmployee?: str
       .map((l) => ({ id: l.id, amount: Number(l.amount), date: l.effective_date, source: l.source, note: l.note }));
     const absences: VacAbsence[] = (abs ?? []).filter((a) => a.employee_id === id)
       .map((a) => ({ from: a.from_date, to: a.to_date, status: a.status as "approved" | "pending", partialHours: a.partial_hours ? Number(a.partial_hours) : null }));
-    result.set(id, years.map((year) => vacationForYear({
-      year, startMonth, today,
-      entitlement: Number(t?.vacation_days ?? org?.vacation_days_year ?? 25),
-      hoursPerWeek: Number(t?.hours_per_week ?? 37.5),
-      ledger, absences,
-    })));
+    const dpw = Number(t?.days_per_week ?? 5);
+    const birth = (emps ?? []).find((e) => e.id === id)?.birth_year as number | null | undefined;
+    limits.set(id, carryoverLimit(dpw, fifthWeek, fifthTransferable));
+    const ent = new Map<number, ReturnType<typeof vacationEntitlement>>();
+    result.set(id, years.map((year) => {
+      // Ekstra uke fra og med ferieåret man fyller 60
+      const e = vacationEntitlement({ daysPerWeek: dpw, fifthWeek, age60: Boolean(birth && year - birth >= 60) });
+      ent.set(year, e);
+      return vacationForYear({ year, startMonth, today, entitlement: e.total, hoursPerWeek: Number(t?.hours_per_week ?? 37.5), daysPerWeek: dpw, ledger, absences });
+    }));
+    entitlements.set(id, ent);
   }
   return {
     byEmployee: result,
     carryovers: (co ?? []) as Carryover[],
     startMonth,
     currentYear: vacationYearOf(today, startMonth),
-    maxCarryover: Number(org?.vacation_carryover_max_days ?? 10),
+    carryoverLimit: (id: string) => limits.get(id) ?? carryoverLimit(5, fifthWeek, fifthTransferable),
+    entitlement: (id: string, year: number) => entitlements.get(id)?.get(year),
+    daysPerWeek: (id: string) => Number((terms ?? []).find((x) => x.employee_id === id)?.days_per_week ?? 5),
+    fifthWeek, fifthTransferable,
     today,
   };
 }
