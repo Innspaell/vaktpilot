@@ -20,21 +20,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-24 pt-4 md:pb-10 md:pt-8">
       <aside className="hidden w-52 shrink-0 md:block">
-        <div className="mb-6 px-3">
+        {/* Logo og bjelle på samme linje, «Vaktpilot» under, så menyen starter høyt */}
+        <div className="mb-3 flex items-start justify-between gap-2 pl-3">
           {ctx.org?.logoUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={ctx.org.logoUrl} alt={ctx.org.name} className="max-h-16 w-auto max-w-full object-contain" />
-              <div className="mt-2 text-xs font-semibold uppercase tracking-wider text-muted">Vaktpilot</div>
-            </>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ctx.org.logoUrl} alt={ctx.org.name} className="max-h-14 w-auto min-w-0 max-w-[75%] object-contain" />
           ) : (
-            <>
-              <div className="text-sm font-semibold uppercase tracking-wider text-brand">Vaktpilot</div>
-              {ctx.org && <div className="mt-0.5 truncate text-sm text-muted">{ctx.org.name}</div>}
-            </>
+            <div className="min-w-0 pt-1.5">
+              <div className="truncate text-sm font-semibold text-ink">{ctx.org?.name ?? "Vaktpilot"}</div>
+            </div>
           )}
+          {bell}
         </div>
-        {ctx.org && <div className="mb-2 px-1">{bell}</div>}
+        <div className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-brand">Vaktpilot</div>
         {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} isPlatformAdmin={ctx.isPlatformAdmin} counts={counts} />}
       </aside>
       <main className="min-w-0 flex-1 space-y-4">
