@@ -20,20 +20,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-24 pt-4 md:pb-10 md:pt-8">
       <aside className="hidden w-52 shrink-0 md:block">
-        {/* Logo og bjelle på samme linje, «Vaktpilot» under, så menyen starter høyt */}
-        <div className="mb-3 flex items-start justify-between gap-2 pl-3">
+        {/* Kundens logo og bjella øverst. Uten logo står Vaktpilot der. */}
+        <div className="mb-2 flex items-start justify-between gap-2 pl-3">
           {ctx.org?.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ctx.org.logoUrl} alt={ctx.org.name} className="max-h-14 w-auto min-w-0 max-w-[75%] object-contain" />
           ) : (
-            <div className="min-w-0 pt-1.5">
-              <div className="truncate text-sm font-semibold text-ink">{ctx.org?.name ?? "Vaktpilot"}</div>
+            <div className="min-w-0 pt-1">
+              <VaktpilotMark size="lg" />
+              {ctx.org && <div className="mt-1 truncate text-sm text-muted">{ctx.org.name}</div>}
             </div>
           )}
           {bell}
         </div>
-        <div className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-brand">Vaktpilot</div>
         {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} isPlatformAdmin={ctx.isPlatformAdmin} counts={counts} />}
+        {ctx.org?.logoUrl && (
+          <div className="mt-6 border-t border-line px-3 pt-3">
+            <VaktpilotMark size="sm" />
+          </div>
+        )}
       </aside>
       <main className="min-w-0 flex-1 space-y-4">
         <div className="flex items-center justify-between gap-3 md:hidden">
@@ -56,3 +61,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 }
 
+
+/** «Vaktpilot» med appikonet. Stor øverst når bedriften ikke har logo, liten nederst som signatur ellers. */
+function VaktpilotMark({ size }: { size: "sm" | "lg" }) {
+  return (
+    <span className={`flex items-center gap-2 font-bold tracking-tight text-ink ${size === "lg" ? "text-xl" : "text-sm"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/icons/icon-192.png" alt="" className={`${size === "lg" ? "h-8 w-8" : "h-5 w-5"} rounded-md`} />
+      Vaktpilot
+    </span>
+  );
+}
