@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireOrg } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { formatDateLong, localDate } from "@/lib/time";
@@ -10,8 +11,19 @@ export default async function AvailabilityPage() {
   const ctx = await requireOrg();
   const today = localDate(new Date(), ctx.org.timezone);
 
-  if (ctx.isAdmin && !ctx.employeeId) return <AdminOverview ctx={ctx} today={today} />;
+  if (!ctx.org.availabilityEnabled) {
+    return (
+      <div className="space-y-4">
+        <h1 className="h1">Når kan jeg jobbe</h1>
+        <p className="card text-sm text-muted">
+          {ctx.isAdmin ? <>Denne funksjonen er ikke slått på. Du kan slå den på under <Link href="/innstillinger" className="text-brand">Innstillinger</Link>.</> : "Bedriften bruker ikke denne funksjonen."}
+        </p>
+      </div>
+    );
+  }
+  if (ctx.isAdmin && (!ctx.employeeId || !ctx.canSetAvailability)) return <AdminOverview ctx={ctx} today={today} />;
   if (!ctx.employeeId) return <p className="card text-sm text-muted">Du er ikke registrert som ansatt.</p>;
+  if (!ctx.canSetAvailability) return <p className="card text-sm text-muted">Lederen din har ikke slått på denne funksjonen for deg.</p>;
 
   const { data } = await ctx.supabase.from("availability").select("id, kind, date, weekday, note")
     .eq("employee_id", ctx.employeeId).order("date");

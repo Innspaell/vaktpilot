@@ -83,7 +83,13 @@ export async function autoPlanWeek(_: AutoPlanState, fd: FormData): Promise<Auto
   if (employeesRaw.length === 0) return { error: "Ingen ansatte er med i automatisk vaktplan. Slå det på i ansattkortet." };
 
   const allDates = needs.map((n) => n.date);
-  const availability = availRes.data ?? [];
+  // «Når kan jeg jobbe» brukes bare når bedriften og den ansatte har det slått på
+  let availability = ctx.org.availabilityEnabled ? (availRes.data ?? []) : [];
+  if (availability.length) {
+    const { data: on } = await ctx.supabase.from("employees").select("id").eq("org_id", ctx.org.id).eq("availability_enabled", true);
+    const allowed = new Set((on ?? []).map((x) => x.id));
+    availability = availability.filter((a) => allowed.has(a.employee_id));
+  }
   const baseEmployees = (weekStart: string): PlanEmployee[] =>
     employeesRaw.map((e) => {
       // Avtalen som gjelder den uka

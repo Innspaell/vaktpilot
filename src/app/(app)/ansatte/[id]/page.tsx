@@ -67,6 +67,13 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <Field label="Fødselsår" hint="Valgfritt. Gir ekstra ferieuke fra året den ansatte fyller 60.">
             <input name="birth_year" type="number" min={1940} max={2015} defaultValue={e.birth_year ?? ""} className="input" />
           </Field>
+          {ctx.org.availabilityEnabled && (
+            <label className="flex items-start gap-2 text-sm md:col-span-2">
+              <input type="hidden" name="availability_shown" value="1" />
+              <input type="checkbox" name="availability_enabled" defaultChecked={Boolean(e.availability_enabled)} className="mt-0.5 h-4 w-4" />
+              <span>Kan si fra om når hen kan jobbe<span className="block text-xs text-muted">For ekstrahjelp og folk på tilkalling. Fast ansatte med fast turnus trenger det sjelden.</span></span>
+            </label>
+          )}
           <label className="flex items-start gap-2 text-sm md:col-span-2">
             <input type="checkbox" name="auto_plan" defaultChecked={e.auto_plan ?? true} className="mt-0.5 h-4 w-4" />
             <span>Med i automatisk vaktplan<span className="block text-xs text-muted">Slå av for ledelse og andre som ikke skal få vakter automatisk. De kan fortsatt settes opp for hånd.</span></span>

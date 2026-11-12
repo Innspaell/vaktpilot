@@ -53,12 +53,44 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
   const upcoming = rawAbs.filter((a) => a.from_date > today && a.from_date <= addDays(today, 45)).sort((a, b) => a.from_date.localeCompare(b.from_date));
   const name = new Map(employees.map((e) => [e.id, e.name]));
 
+  // Det som venter på svar fra leder
+  const head = { count: "exact" as const, head: true };
+  const [pAbs, pShift, pSwap, { data: pCarry }] = await Promise.all([
+    ctx.supabase.from("absence_requests").select("id", head).eq("org_id", ctx.org.id).eq("status", "pending"),
+    ctx.supabase.from("shift_requests").select("id", head).eq("org_id", ctx.org.id).eq("status", "pending"),
+    ctx.supabase.from("shift_swaps").select("id", head).eq("org_id", ctx.org.id).eq("status", "pending").or("to_employee_id.is.null,to_accepted.eq.true"),
+    ctx.supabase.from("vacation_carryovers").select("id, employee_id, days, from_year").eq("org_id", ctx.org.id).eq("status", "pending").is("employer_accepted_at", null),
+  ]);
+  const waiting: { label: string; n: number; href: string }[] = [
+    { label: "Søknader om fri", n: pAbs.count ?? 0, href: "/foresporsler?vis=fri" },
+    { label: "Påmeldinger til ledige vakter", n: pShift.count ?? 0, href: "/foresporsler?vis=vakter" },
+    { label: "Vaktbytter", n: pSwap.count ?? 0, href: "/foresporsler?vis=bytte" },
+  ].filter((w) => w.n > 0);
+
   return (
     <div className="space-y-4">
+      <section className={`card ${waiting.length || pCarry?.length ? "border-brand/30 bg-brand-soft" : ""}`}>
+        <h2 className="h2">Venter på svar fra deg</h2>
+        {waiting.length === 0 && !pCarry?.length ? (
+          <p className="mt-1 text-sm text-muted">Ingenting venter. Alt er behandlet.</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-line/70 text-sm">
+            {waiting.map((w) => (
+              <li key={w.href}><Link href={w.href} className="flex items-center justify-between py-2 hover:text-brand"><span>{w.label}</span><span className="badge bg-bad text-white">{w.n}</span></Link></li>
+            ))}
+            {(pCarry ?? []).map((c) => (
+              <li key={c.id}><Link href={`/ferie/overforing/${c.id}`} className="flex items-center justify-between py-2 hover:text-brand">
+                <span>Ferieoverføring: {name.get(c.employee_id) ?? "Ansatt"}, {Number(c.days).toLocaleString("nb-NO")} dager fra {c.from_year}</span><span className="text-brand">Signer ›</span>
+              </Link></li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Link href={`/fravaer?aar=${year - 1}`} className="btn-ghost px-3" aria-label="Forrige år">‹</Link>
-          <h1 className="h1">Fravær {year}</h1>
+          <h1 className="h1">Fravær og godkjenning {year}</h1>
           {year < Number(today.slice(0, 4)) && <Link href={`/fravaer?aar=${year + 1}`} className="btn-ghost px-3" aria-label="Neste år">›</Link>}
         </div>
         <Link href="/foresporsler?vis=fri" className="btn-primary">Registrer eller godkjenn fravær</Link>

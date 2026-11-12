@@ -527,6 +527,23 @@ end $$;
 reset role;
 delete from employees where full_name = 'Annen Leder';
 
+-- «Når kan jeg jobbe»: den som har sagt «kan ikke» får ikke varsel om ledig vakt den dagen
+update organizations set availability_enabled = true where id = :'org_a';
+update employees set availability_enabled = true where full_name = 'Kari Nordmann';
+insert into availability (org_id, employee_id, kind, date)
+select :'org_a', id, 'unavailable', (now() + interval '50 days')::date from employees where full_name = 'Kari Nordmann';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+values (:'org_a', null, ((now() + interval '50 days')::date + time '10:00') at time zone 'Europe/Oslo', ((now() + interval '50 days')::date + time '15:00') at time zone 'Europe/Oslo', 'published')
+returning id as busy_shift \gset
+reset role;
+select pg_temp.check(not exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Kari Nordmann' and n.ref_id = :'busy_shift'), 'Kari fikk varsel selv om hun ikke kan');
+select pg_temp.check(exists (select 1 from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.ref_id = :'busy_shift'), 'Ola fikk ikke varsel om ledig vakt');
+update organizations set availability_enabled = false where id = :'org_a';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

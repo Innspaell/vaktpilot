@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { getContext } from "@/lib/context";
-import { BottomNav, SideNav, AdminStrip } from "@/components/Nav";
+import { AreaTabs, BottomNav, SideNav } from "@/components/Nav";
+import { navCounts } from "@/lib/nav-counts";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getContext();
   const { count: unread } = ctx.org
     ? await ctx.supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", ctx.userId).eq("org_id", ctx.org.id).is("read_at", null)
     : { count: 0 };
+  const counts = ctx.org ? await navCounts(ctx) : { approvals: 0, mine: 0 };
   const bell = ctx.org && (
     <Link href="/varsler" className="relative rounded-lg p-1.5 text-muted hover:bg-white hover:text-ink" aria-label={`Varsler${unread ? `, ${unread} uleste` : ""}`}>
       <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -33,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
         </div>
         {ctx.org && <div className="mb-2 px-1">{bell}</div>}
-        {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} isPlatformAdmin={ctx.isPlatformAdmin} />}
+        {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} isPlatformAdmin={ctx.isPlatformAdmin} counts={counts} />}
       </aside>
       <main className="min-w-0 flex-1 space-y-4">
         <div className="flex items-center justify-between gap-3 md:hidden">
@@ -48,10 +50,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {bell}
           </div>
         </div>
-        {ctx.isAdmin && <AdminStrip />}
+        {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} />}
         {children}
       </main>
-      {ctx.org && <BottomNav />}
+      {ctx.org && <BottomNav isAdmin={ctx.isAdmin} counts={counts} />}
     </div>
   );
 }
+

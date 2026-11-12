@@ -31,6 +31,15 @@ export default async function SettingsPage() {
             defaultPostalCode={org?.postal_code ?? ""} defaultCity={org?.city ?? ""} />
           <Field label="Heltid, timer per uke"><input name="full_time_hours_week" type="number" step="0.25" defaultValue={Number(org?.full_time_hours_week)} className="input" /></Field>
           <fieldset className="space-y-2 md:col-span-2">
+            <legend className="label">Når kan jeg jobbe</legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="availability_enabled" defaultChecked={org?.availability_enabled ?? false} className="mt-0.5 h-4 w-4" />
+              <span>Ansatte kan si fra om når de kan jobbe
+                <span className="block text-xs text-muted">Nyttig med mange på tilkalling eller ekstrahjelp. Du velger hvem det gjelder på siden til hver ansatt. Autoplanen og varsler om ledige vakter tar hensyn til det.</span>
+              </span>
+            </label>
+          </fieldset>
+          <fieldset className="space-y-2 md:col-span-2">
             <legend className="label">Ferie</legend>
             <p className="text-xs text-muted">Ferieloven gir 4 uker og 1 dag. Feriedagene regnes ut per ansatt fra hvor mange dager i uka de jobber. Fra året man fyller 60 kommer én ekstra uke.</p>
             <label className="flex items-start gap-2 text-sm">

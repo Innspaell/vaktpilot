@@ -64,7 +64,7 @@ export default async function ProfilePage() {
           </details>
         </section>
       )}
-      {ctx.org && ctx.employeeId && (
+      {ctx.org && ctx.employeeId && ctx.canSetAvailability && (
         <section className="card flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="h2">Når kan du jobbe?</h2>

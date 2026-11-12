@@ -34,7 +34,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   if (tab === "bytte") {
     return (
       <div className="space-y-4">
-        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
+        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Fri og bytte</h1>{tabs}</header>
         {feil && <p className="card bg-bad-soft text-sm text-bad">{feil}</p>}
         <SwapSection ctx={ctx} preselect={vakt} />
       </div>
@@ -43,7 +43,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   if (tab === "fri") {
     return (
       <div className="space-y-4">
-        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
+        <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Fri og bytte</h1>{tabs}</header>
         <AbsenceSection ctx={ctx} />
       </div>
     );
@@ -69,7 +69,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Forespørsler</h1>{tabs}</header>
+      <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="h1">Fri og bytte</h1>{tabs}</header>
       {feil && <p className="card bg-bad-soft text-sm text-bad">{feil}</p>}
 
       <section className="card p-0">

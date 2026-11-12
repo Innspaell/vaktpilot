@@ -34,7 +34,7 @@ export default async function StaffingPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="h1">Bemanning</h1>
+      <h1 className="h1">Bemanningsbehov</h1>
 
       <section className="card">
         <h2 className="h2">Fast behov per ukedag</h2>

@@ -3,7 +3,7 @@ import { markIntroSeen } from "@/app/(app)/ferie/actions";
 const STEPS: [string, string][] = [
   ["Se vaktene dine", "Under Vaktplan ser du dine vakter og ledige vakter. Trykk «Jeg kan jobbe» for å melde deg på en ledig vakt."],
   ["Bekreft arbeidsdagen", "Når vakta er ferdig, trykker du «Bekreft arbeidsdag» på forsiden. Da er timene registrert. Jobbet du annerledes, endrer du før du bekrefter."],
-  ["Søk om fri og bytt vakter", "Under Forespørsler søker du om ferie eller fri, ser feriedagene dine og spør kolleger om å bytte vakt."],
+  ["Søk om fri og bytt vakter", "Under «Fri og bytte» søker du om ferie eller fri, ser feriedagene dine og spør kolleger om å bytte vakt."],
   ["Få vaktene i kalenderen", "Under Profil legger du vaktene inn i kalenderen på telefonen. Der kan du også si fra om når du kan jobbe."],
 ];
 
