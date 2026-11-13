@@ -544,6 +544,40 @@ select pg_temp.check(exists (select 1 from notifications n join employees e on e
   where e.full_name = 'Ola Nordmann' and n.ref_id = :'busy_shift'), 'Ola fikk ikke varsel om ledig vakt');
 update organizations set availability_enabled = false where id = :'org_a';
 
+-- E-postvarsler: av som standard, slås på per type, den enkelte kan reservere seg
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select set_my_email_notifications(:'org_a', false);
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+do $$ begin
+  perform set_email_prefs((select id from organizations where name = 'Æ e trønder AS'), '{"open_shifts": true}', 'x');
+  raise exception 'FEIL: leder i annen bedrift kunne endre e-postvalg';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(set_email_prefs(:'org_a', '{"open_shifts": true}', 'Ledige vakter sendes nå på e-post.') > 0, 'ingen fikk beskjed om e-post');
+select pg_temp.check(set_email_prefs(:'org_a', '{"open_shifts": true}', 'Ledige vakter sendes nå på e-post.') = 0, 'beskjed sendt på nytt uten endring');
+insert into shifts (org_id, employee_id, starts_at, ends_at, status)
+values (:'org_a', null, now() + interval '60 days', now() + interval '60 days 5 hours', 'published') returning id as mail_shift \gset
+select pg_temp.check((select count(*) from employees_login_status(:'org_a')) > 0, 'leder ser ikke innloggingsstatus');
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+select pg_temp.check((select count(*) from employees_login_status(:'org_a')) = 0, 'annen bedrift ser innloggingsstatus');
+reset role;
+select pg_temp.check((select email_status from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.ref_id = :'mail_shift') = 'pending', 'Olas varsel ble ikke lagt i e-postkø');
+select pg_temp.check((select email_status from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Kari Nordmann' and n.ref_id = :'mail_shift') is null, 'Kari får e-post selv om hun har reservert seg');
+select pg_temp.check(send_notification_emails() = 0, 'sendte uten nøkkel');
+insert into vault.decrypted_secrets values ('resend_api_key', 're_test');
+select pg_temp.check(send_notification_emails() = 0, 'sendte før ventetiden');
+update notifications set created_at = created_at - interval '5 minutes' where email_status = 'pending';
+select pg_temp.check(send_notification_emails() >= 1, 'sendte ingen e-post');
+select pg_temp.check(exists (select 1 from net.test_requests r, jsonb_array_elements(r.body) m
+  where m -> 'to' ->> 0 = 'ola@a.no' and m ->> 'html' like '%/varsler/%'), 'e-post til Ola mangler');
+select pg_temp.check((select email_status from notifications n join employees e on e.user_id = n.user_id
+  where e.full_name = 'Ola Nordmann' and n.ref_id = :'mail_shift') = 'sent', 'Olas varsel ikke merket sendt');
+select pg_temp.check(send_notification_emails() = 0, 'sendte samme e-post to ganger');
+update organizations set email_prefs = '{}' where id = :'org_a';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

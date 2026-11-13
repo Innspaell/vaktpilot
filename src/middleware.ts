@@ -40,7 +40,11 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC.some((p) => request.nextUrl.pathname.startsWith(p));
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
+    const back = request.nextUrl.pathname + request.nextUrl.search;
     url.pathname = "/login";
+    url.search = "";
+    // Etter innlogging: tilbake dit man skulle, f.eks. et varsel fra e-post
+    if (back !== "/" && request.method === "GET") url.searchParams.set("next", back);
     return NextResponse.redirect(url);
   }
   return response;

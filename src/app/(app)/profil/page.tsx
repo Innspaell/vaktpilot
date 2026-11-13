@@ -5,6 +5,7 @@ import { ChangePassword } from "@/components/ChangePassword";
 import { getContext, requireOrg } from "@/lib/context";
 import { signOut, switchOrganization } from "../actions";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
+import { NOTIFICATION_GROUPS } from "@/lib/notification-kinds";
 
 async function resetCalendar() {
   "use server";
@@ -13,8 +14,30 @@ async function resetCalendar() {
   revalidatePath("/profil");
 }
 
-export default async function ProfilePage() {
+async function setEmailNotifications(fd: FormData) {
+  "use server";
+  const ctx = await requireOrg();
+  await ctx.supabase.rpc("set_my_email_notifications", { p_org: ctx.org.id, p_on: fd.get("on") === "1" });
+  revalidatePath("/profil");
+}
+
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ passord?: string }> }) {
+  const sp = await searchParams;
   const ctx = await getContext();
+  // E-postvarsler: hvilke typer bedriften sender på e-post, og om jeg har reservert meg
+  let emailGroups: string[] = [];
+  let emailOn = true;
+  if (ctx.org && ctx.userId) {
+    const [{ data: o }, { data: m }] = await Promise.all([
+      ctx.supabase.from("organizations").select("email_prefs").eq("id", ctx.org.id).single(),
+      ctx.supabase.from("memberships").select("email_notifications").eq("org_id", ctx.org.id).eq("user_id", ctx.userId).maybeSingle(),
+    ]);
+    const prefs = (o?.email_prefs ?? {}) as Record<string, unknown>;
+    emailGroups = NOTIFICATION_GROUPS
+      .filter((g) => (g.to === "ansatte" || ctx.isAdmin) && g.kinds.some((k) => prefs[k] === true))
+      .map((g) => g.label);
+    emailOn = m?.email_notifications !== false;
+  }
   let calendarUrl: string | null = null;
   let me: { name: string; roles: string; terms: string } | null = null;
   if (ctx.employeeId) {
@@ -93,7 +116,28 @@ export default async function ProfilePage() {
           </div>
         </section>
       )}
-      <details className="card">
+      {ctx.org && (
+        <section className="card">
+          <h2 className="h2">Varsler på e-post</h2>
+          {emailGroups.length === 0 ? (
+            <p className="mt-1 text-sm text-muted">{ctx.org.name} sender ikke varsler på e-post. Du ser varslene under bjella i appen.</p>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-muted">
+                {ctx.org.name} sender disse varslene på e-post{ctx.email ? ` til ${ctx.email}` : ""}, i tillegg til i appen:
+              </p>
+              <ul className="mt-2 list-disc pl-5 text-sm">{emailGroups.map((g) => <li key={g}>{g}</li>)}</ul>
+              <p className="mt-2 text-xs text-muted">Leser du varselet i appen innen to minutter, kommer det ingen e-post. Flere varsler samtidig kommer i én e-post.</p>
+              <form action={setEmailNotifications} className="mt-3 flex flex-wrap items-center gap-3">
+                <input type="hidden" name="on" value={emailOn ? "0" : "1"} />
+                <span className={`badge ${emailOn ? "bg-good-soft text-good" : "bg-paper text-muted"}`}>{emailOn ? "Du får e-post" : "Du får ikke e-post"}</span>
+                <button className="btn-ghost">{emailOn ? "Slå av e-post" : "Slå på e-post"}</button>
+              </form>
+            </>
+          )}
+        </section>
+      )}
+      <details id="passord" className="card" open={sp.passord === "1"}>
         <summary className="h2 cursor-pointer">Passord</summary>
         <p className="mb-3 mt-1 text-sm text-muted">Med passord kan du logge inn uten å vente på kode på e-post.</p>
         <ChangePassword />

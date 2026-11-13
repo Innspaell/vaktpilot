@@ -8,6 +8,12 @@ import { createClient } from "@/lib/supabase/client";
  * i appen på hjemskjermen (en lenke åpnes ofte i Safari i stedet).
  * E-posten inneholder også en lenke som reserve.
  */
+/** Hvor man skal etter innlogging. Bare stier innenfor appen. */
+function nextPath() {
+  const n = new URLSearchParams(window.location.search).get("next");
+  return n && n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") ? n : "/";
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [step, setStep] = useState<"email" | "code" | "password">("email");
@@ -15,6 +21,7 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   async function sendCode(e?: React.FormEvent) {
@@ -57,7 +64,7 @@ export default function LoginPage() {
       return;
     }
     await supabase.rpc("claim_invites");
-    window.location.href = "/";
+    window.location.href = forgot ? "/profil?passord=1#passord" : nextPath();
   }
 
   // Midlertidig passord gis av lederen i Vaktpilot; den ansatte lager eget passord ved første innlogging.
@@ -73,7 +80,7 @@ export default function LoginPage() {
       return;
     }
     await supabase.rpc("claim_invites");
-    window.location.href = "/";
+    window.location.href = nextPath();
   }
 
   return (
@@ -86,7 +93,7 @@ export default function LoginPage() {
             ? "Vi sender deg en kode på e-post. Bruk e-posten arbeidsgiveren din har registrert."
             : step === "password"
               ? "Bruk e-posten din og passordet. Første gang bruker du det midlertidige passordet fra lederen din."
-              : `Vi har sendt en kode til ${email}. Den gjelder i en time.`}
+              : `Vi har sendt en kode til ${email}. Den gjelder i en time.${forgot ? " Når du er logget inn, kommer du rett til siden der du lager nytt passord." : ""}`}
         </p>
       </div>
 
@@ -115,7 +122,14 @@ export default function LoginPage() {
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? "Logger inn …" : "Logg inn"}</button>
-          <button type="button" className="w-full text-center text-sm text-brand" onClick={() => { setStep("email"); setError(null); }}>Tilbake til innlogging med kode</button>
+          <button type="button" className="w-full text-center text-sm text-brand" disabled={busy}
+            onClick={() => {
+              if (!email.trim()) { setError("Skriv inn e-posten din først, så sender vi en kode."); return; }
+              setForgot(true); sendCode();
+            }}>
+            Glemt passordet? Få en kode på e-post
+          </button>
+          <button type="button" className="w-full text-center text-sm text-muted" onClick={() => { setStep("email"); setError(null); }}>Tilbake til innlogging med kode</button>
         </form>
       ) : (
         <form onSubmit={verify} className="card space-y-4">
@@ -123,7 +137,7 @@ export default function LoginPage() {
             <label className="label" htmlFor="code">Kode fra e-posten</label>
             <input id="code" ref={codeRef} required autoComplete="one-time-code" inputMode="numeric" pattern="[0-9 ]*" maxLength={10}
               className="input text-center text-2xl font-semibold tracking-[0.4em] tabular-nums"
-              value={code} onChange={(e) => setCode(e.target.value)} placeholder="Koden fra e-posten" />
+              value={code} onChange={(e) => setCode(e.target.value)} />
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? "Logger inn …" : "Logg inn"}</button>

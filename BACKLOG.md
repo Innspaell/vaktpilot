@@ -3,7 +3,6 @@
 Ting som er bestemt eller foreslått, men ikke bygget ennå. Sortert etter prioritet.
 
 ## 1. Varsler utenfor appen
-- **E-post fra ikkesvar@vaktpilot.no** via Resend (sett RESEND_API_KEY i Vercel; invitasjoner og velkomst-e-post sendes da av seg selv, og e-post i utboksen bør sendes ut) når domenet er klart (DNS hos Domeneshop). Egen SMTP i Supabase, 6-sifret innloggingskode i e-postmalen, og påminnelser på e-post etter de samme varselvalgene som i appen.
 - **Push-varsler på mobil** når Vaktpilot er lagt på hjemskjermen (også iPhone).
 
 ## 2. Lov og plikter

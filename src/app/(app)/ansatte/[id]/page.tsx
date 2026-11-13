@@ -5,19 +5,22 @@ import { ActionForm, Field } from "@/components/Form";
 import { addTerms, createLoginInvite, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
 import { LoginSetup } from "@/components/LoginSetup";
 import { VacationOverview } from "@/components/VacationOverview";
+import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status";
 
 export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ny?: string }> }) {
   const { id } = await params;
   const { ny } = await searchParams;
   const ctx = await requireAdmin();
 
-  const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }] = await Promise.all([
+  const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }, { data: statusRows }] = await Promise.all([
     ctx.supabase.from("employees").select("*").eq("id", id).eq("org_id", ctx.org.id).maybeSingle(),
     ctx.supabase.from("employment_terms").select("*").eq("employee_id", id).order("valid_from", { ascending: false }),
     ctx.supabase.from("work_roles").select("id, name").eq("org_id", ctx.org.id).order("name"),
     ctx.supabase.from("employee_work_roles").select("work_role_id").eq("employee_id", id),
+    ctx.supabase.rpc("employees_login_status", { p_org: ctx.org.id }),
   ]);
   if (!e) notFound();
+  const ls = loginStatus(e, ((statusRows ?? []) as LoginStatusRow[]).find((r) => r.employee_id === e.id));
 
   let membershipRole: string | null = null;
   if (e.user_id) {
@@ -140,7 +143,11 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       </section>
 
       <section className="card">
-        <h2 className="h2">Innlogging</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="h2">Innlogging</h2>
+          <span className={`badge ${TONE_CLASS[ls.tone]}`}>{ls.short}</span>
+        </div>
+        <p className="mt-1 text-sm">{ls.long}</p>
         <p className="mt-1 text-sm text-muted">
           {e.user_id
             ? `${e.full_name} har innlogging${e.email ? ` med ${e.email}` : ""}.${e.must_change_password ? " Har ikke byttet det midlertidige passordet ennå." : ""}`

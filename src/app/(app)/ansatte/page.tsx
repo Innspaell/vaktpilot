@@ -3,16 +3,21 @@ import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { addEmployee } from "../actions";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
+import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status";
 
 export default async function EmployeesPage() {
   const ctx = await requireAdmin();
-  const { data: employees } = await ctx.supabase
-    .from("employees")
-    .select("id, full_name, email, user_id, end_date, auto_plan, employment_terms(position_pct, pay_type, valid_to)")
-    .eq("org_id", ctx.org.id)
-    .order("full_name");
+  const [{ data: employees }, { data: statusRows }] = await Promise.all([
+    ctx.supabase
+      .from("employees")
+      .select("id, full_name, email, user_id, end_date, auto_plan, must_change_password, employment_terms(position_pct, pay_type, valid_to)")
+      .eq("org_id", ctx.org.id)
+      .order("full_name"),
+    ctx.supabase.rpc("employees_login_status", { p_org: ctx.org.id }),
+  ]);
+  const status = new Map(((statusRows ?? []) as LoginStatusRow[]).map((r) => [r.employee_id, r]));
 
-  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null; auto_plan: boolean;
+  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null; auto_plan: boolean; must_change_password: boolean | null;
     employment_terms: { position_pct: number; pay_type: string; valid_to: string | null }[] };
   const rows = (employees ?? []) as Row[];
   const today = new Date().toISOString().slice(0, 10);
@@ -30,6 +35,7 @@ export default async function EmployeesPage() {
             {rows.map((e) => {
               const terms = e.employment_terms.find((t) => !t.valid_to);
               const ended = e.end_date && e.end_date < today;
+              const ls = loginStatus(e, status.get(e.id));
               return (
                 <li key={e.id}>
                   <Link href={`/ansatte/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper">
@@ -41,8 +47,7 @@ export default async function EmployeesPage() {
                       {!e.auto_plan && <span className="badge bg-paper text-muted ring-1 ring-line">ikke i autoplan</span>}
                       {terms && <span className="text-muted">{Number(terms.position_pct)} % · {terms.pay_type === "fixed" ? "fast" : "time"}</span>}
                       {ended ? <span className="badge bg-paper text-muted">Sluttet</span>
-                        : e.user_id ? <span className="badge bg-good-soft text-good">Aktiv</span>
-                        : <span className="badge bg-warn-soft text-warn">Ikke logget inn</span>}
+                        : <span className={`badge ${TONE_CLASS[ls.tone]}`} title={ls.long}>{ls.short}</span>}
                     </div>
                   </Link>
                 </li>
