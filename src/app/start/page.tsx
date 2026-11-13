@@ -97,6 +97,23 @@ export default function StartPage() {
         </div>
       </section>
 
+      <section className="bg-paper">
+        <div className="mx-auto max-w-3xl px-4 py-16">
+          <h2 className="text-2xl font-bold">Ofte stilte spørsmål</h2>
+          <div className="mt-6 divide-y divide-line rounded-xl border border-line bg-white">
+            {FAQ.map(([q, a]) => (
+              <details key={q} className="group px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold">
+                  {q}
+                  <span className="text-brand transition group-open:rotate-45" aria-hidden>+</span>
+                </summary>
+                <p className="mt-2 text-sm text-muted">{a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-muted">
           <span>Vaktpilot er laget i {VENDOR.place} av {VENDOR.name} · org.nr. {VENDOR.orgNumber}</span>
@@ -111,6 +128,17 @@ export default function StartPage() {
 }
 
 /** Knapp som vises, men ikke virker ennå. */
+const FAQ: [string, string][] = [
+  ["Hva koster Vaktpilot?", "Lanseringsprisen er 299 kr i måneden eks. mva. med 5 aktive ansatte inkludert. Hver aktiv ansatt utover det koster 39 kr i måneden. De første kundene beholder lanseringsprisen i 12 måneder."],
+  ["Hva er en aktiv ansatt?", "En ansatt som har hatt en vakt eller registrert timer i løpet av måneden. Ekstrahjelp som ikke har jobbet, og ansatte som har sluttet, koster ingenting."],
+  ["Er det bindingstid?", "Nei. Abonnementet løper fra måned til måned, og dere kan si opp når dere vil."],
+  ["Kan vi prøve gratis?", "Ja. De første 30 dagene er gratis, og dere forplikter dere ikke til noe."],
+  ["Må de ansatte laste ned en app?", "Nei. Vaktpilot åpnes i nettleseren på mobilen og kan legges på hjemskjermen som en app, både på iPhone og Android. De ansatte får en lenke og lager passordet selv."],
+  ["Hvilket regnskaps- eller lønnsprogram kan vi bruke?", "Lønnsgrunnlaget kan lastes ned som Excel-fil og som fil for import i regnskaps- eller lønnsprogrammet. Si fra hvilket program dere bruker, så sørger vi for at fila passer."],
+  ["Hvor lagres dataene, og hvem ser dem?", "Alt lagres i EU, i Stockholm. Hver bedrift ser bare sine egne data, og de ansatte ser bare det som gjelder dem selv. Databehandleravtale er innebygd i løsningen."],
+  ["Hva skjer med dataene hvis vi slutter?", "Dere kan laste ned alle data før dere avslutter. Deretter sletter vi bedriftens data innen 90 dager, bortsett fra det loven krever at vi oppbevarer."],
+];
+
 function ComingSoon({ children, className }: { children: React.ReactNode; className: string }) {
   return (
     <button type="button" aria-disabled="true" title="Kommer snart" className={`${className} relative cursor-not-allowed`}>
