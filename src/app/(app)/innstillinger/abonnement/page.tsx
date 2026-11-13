@@ -7,6 +7,8 @@ export default async function SubscriptionPage() {
   await ctx.supabase.rpc("refresh_my_usage", { p_org: ctx.org.id });
   const { data } = await ctx.supabase.from("usage_months").select("*").eq("org_id", ctx.org.id).order("month", { ascending: false }).limit(13);
   const months = (data ?? []) as UsageMonth[];
+  const { data: org } = await ctx.supabase.from("organizations").select("price_locked_until").eq("id", ctx.org.id).single();
+  const lockedUntil = org?.price_locked_until as string | null;
   const cm = currentMonth();
   const cur = months.find((m) => m.month === cm);
   const history = months.filter((m) => m.month !== cm);
@@ -27,7 +29,14 @@ export default async function SubscriptionPage() {
 
       {cur && (
         <section className="card">
-          <h2 className="h2">Pris</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="h2">Pris</h2>
+            {lockedUntil && lockedUntil >= cm && (
+              <span className="badge bg-good-soft text-good">
+                Lanseringspris – fast til {new Date(lockedUntil).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-2xl font-bold">{kr(cur.base_price)} <span className="text-sm font-normal text-muted">per måned, eks. mva.</span></p>
           <p className="mt-1 text-sm text-muted">
             {cur.included} aktive ansatte er inkludert.

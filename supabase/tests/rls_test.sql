@@ -591,7 +591,7 @@ update organizations set clock_enabled = true where id = :'org_a';
 
 -- Aktive ansatte per måned
 select set_config('request.jwt.claims', '{}', false);
-update platform_settings set per_employee_price = 49 where id = 1;
+update platform_settings set per_employee_price = 49, base_price = 299 where id = 1;
 update organizations set price_included = 1 where id = :'org_a';
 select run_usage();
 select pg_temp.check((select active_count from usage_months where org_id = :'org_a' and month = date_trunc('month', now() at time zone 'Europe/Oslo')::date) >= 1, 'aktive ansatte ble ikke telt');

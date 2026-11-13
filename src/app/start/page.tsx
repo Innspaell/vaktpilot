@@ -88,8 +88,12 @@ export default function StartPage() {
           <p className="mt-2 text-sm text-muted">Alt lagres i EU, i Stockholm. Hver bedrift ser bare sine egne data. Databehandleravtale er innebygd.</p>
         </div>
         <div>
-          <h2 className="text-xl font-bold">Forutsigbar pris</h2>
-          <p className="mt-2 text-sm text-muted">Fast pris per bedrift og en liten sum per ansatt. Priser kommer når testfasen er over.</p>
+          <h2 className="text-xl font-bold">Lanseringspris</h2>
+          <p className="mt-2 text-sm text-muted">
+            <b className="text-ink">299 kr i måneden</b> med 5 aktive ansatte inkludert, og 39 kr for hver ansatt utover det. Priser eks. mva.
+            De første kundene beholder lanseringsprisen i 12 måneder.
+          </p>
+          <p className="mt-1 text-xs text-muted">Aktiv ansatt = har hatt vakt eller timer i måneden.</p>
         </div>
       </section>
 

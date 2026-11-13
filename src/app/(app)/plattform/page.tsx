@@ -27,7 +27,11 @@ async function saveOrgPrice(fd: FormData) {
     return t === "" ? null : Math.max(0, Number(t) || 0);
   };
   const incl = v("incl");
-  await ctx.supabase.rpc("platform_set_org_price", { p_org: String(fd.get("org")), p_base: v("base"), p_included: incl === null ? null : Math.round(incl), p_per: v("per") });
+  const until = String(fd.get("until") ?? "").trim();
+  await ctx.supabase.rpc("platform_set_org_price", {
+    p_org: String(fd.get("org")), p_base: v("base"), p_included: incl === null ? null : Math.round(incl), p_per: v("per"),
+    p_locked_until: /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : null,
+  });
   revalidatePath("/plattform");
 }
 
@@ -58,7 +62,7 @@ export default async function PlatformPage() {
     ctx.supabase.rpc("platform_overview"),
     ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees").eq("id", 1).maybeSingle(),
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
-    ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra"),
+    ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until"),
   ]);
   const usage = new Map(((usageRows ?? []) as UsageMonth[]).map((u) => [`${u.org_id}|${u.month}`, u]));
   const custom = new Map((priceRows ?? []).map((p) => [p.id as string, p]));
@@ -155,12 +159,13 @@ export default async function PlatformPage() {
                     const has = c && (c.price_base !== null || c.price_included !== null || c.price_per_extra !== null);
                     return (
                       <details className="mt-1 text-left text-xs">
-                        <summary className={`cursor-pointer ${has ? "font-semibold text-brand" : "text-muted"}`}>{has ? "Egen avtale" : "Standard"}</summary>
+                        <summary className={`cursor-pointer ${has ? "font-semibold text-brand" : "text-muted"}`}>{has ? (c?.price_locked_until ? `Fast til ${fmt.format(new Date(c.price_locked_until))}` : "Egen avtale") : "Standard"}</summary>
                         <form action={saveOrgPrice} className="mt-2 grid w-48 gap-1">
                           <input type="hidden" name="org" value={r.org_id} />
                           <label>Fast (kr)<input name="base" inputMode="decimal" defaultValue={c?.price_base ?? ""} placeholder={String(base)} className="input py-1" /></label>
                           <label>Inkludert<input name="incl" inputMode="numeric" defaultValue={c?.price_included ?? ""} placeholder={String(incl)} className="input py-1" /></label>
                           <label>Per ekstra (kr)<input name="per" inputMode="decimal" defaultValue={c?.price_per_extra ?? ""} placeholder={String(per)} className="input py-1" /></label>
+                          <label>Fast pris til<input name="until" type="date" defaultValue={c?.price_locked_until ?? ""} className="input py-1" /></label>
                           <button className="btn-ghost mt-1 py-1">Lagre</button>
                           <span className="text-muted">Tomt felt = standard.</span>
                         </form>
