@@ -123,7 +123,7 @@ export default function LoginPage() {
             <label className="label" htmlFor="code">Kode fra e-posten</label>
             <input id="code" ref={codeRef} required autoComplete="one-time-code" inputMode="numeric" pattern="[0-9 ]*" maxLength={10}
               className="input text-center text-2xl font-semibold tracking-[0.4em] tabular-nums"
-              value={code} onChange={(e) => setCode(e.target.value)} placeholder="••••••" />
+              value={code} onChange={(e) => setCode(e.target.value)} placeholder="Koden fra e-posten" />
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           <button className="btn-primary w-full" disabled={busy}>{busy ? "Logger inn …" : "Logg inn"}</button>
