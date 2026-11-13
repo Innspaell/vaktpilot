@@ -704,6 +704,11 @@ reset role;
 delete from platform_admin_emails where email = 'leder@b.no';
 select run_health_check();
 
+-- Kapasitetssjekk kjører og lagrer måling
+select run_capacity_check();
+select run_capacity_check();
+select pg_temp.check((select count(*) from capacity_snapshots) = 2, 'kapasitetsmåling ikke lagret');
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

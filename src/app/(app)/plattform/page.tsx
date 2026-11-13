@@ -84,6 +84,8 @@ export default async function PlatformPage() {
   ]);
   const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
     .gte("last_seen", new Date(Date.now() - 7 * 86400000).toISOString()).order("last_seen", { ascending: false }).limit(50);
+  const { data: capacity } = await ctx.supabase.from("capacity_snapshots")
+    .select("taken_at, db_bytes, connections, max_connections, cache_hit_pct, slow_queries, warnings").order("taken_at", { ascending: false }).limit(8);
   const openErrors = (errors ?? []).filter((x) => !x.resolved_at);
   const usage = new Map(((usageRows ?? []) as UsageMonth[]).map((u) => [`${u.org_id}|${u.month}`, u]));
   const custom = new Map((priceRows ?? []).map((p) => [p.id as string, p]));
@@ -217,6 +219,49 @@ export default async function PlatformPage() {
         </table>
       </section>
       <p className="text-xs text-muted">«Gå inn» gir deg administratortilgang i bedriften for support, og registreres i bedriftens endringslogg. En deaktivert bedrift får ikke påminnelser eller kalender.</p>
+
+      <section id="kapasitet" className="card scroll-mt-20">
+        <h2 className="h2">Kapasitet (databasen)</h2>
+        <p className="mt-1 text-xs text-muted">
+          Måles hver mandag morgen. Du får varsel når noe nærmer seg grensen for maskinen dere har (Micro: 1 GB minne, 60 tilkoblinger, 8 GB disk inkludert).
+          Prosessor og minne i detalj: Supabase › Reports › Database.
+        </p>
+        {(capacity ?? []).length === 0 ? <p className="mt-2 text-sm text-muted">Første måling kommer mandag.</p> : (
+          <>
+            {(capacity![0].warnings as string[]).length > 0
+              ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">{(capacity![0].warnings as string[]).map((w) => <li key={w}>{w}</li>)}</ul>
+              : <p className="mt-2 text-sm text-good">Alt innenfor. Ingen grunn til å bytte maskin.</p>}
+            <table className="mt-3 w-full text-sm">
+              <thead><tr className="border-b border-line text-left text-xs text-muted">
+                <th className="py-1 font-medium">Uke</th><th className="py-1 text-right font-medium">Database</th>
+                <th className="py-1 text-right font-medium">Tilkoblinger</th><th className="py-1 text-right font-medium">Treff i minnet</th>
+                <th className="py-1 text-right font-medium">Trege spørringer</th>
+              </tr></thead>
+              <tbody className="divide-y divide-line">
+                {capacity!.map((c) => (
+                  <tr key={c.taken_at}>
+                    <td className="py-1">{new Date(c.taken_at).toLocaleDateString("nb-NO", { timeZone: "Europe/Oslo" })}</td>
+                    <td className="py-1 text-right tabular-nums">{(Number(c.db_bytes) / 1024 / 1024).toLocaleString("nb-NO", { maximumFractionDigits: 0 })} MB</td>
+                    <td className="py-1 text-right tabular-nums">{c.connections} / {c.max_connections}</td>
+                    <td className="py-1 text-right tabular-nums">{c.cache_hit_pct !== null ? `${Number(c.cache_hit_pct).toLocaleString("nb-NO")} %` : "–"}</td>
+                    <td className="py-1 text-right tabular-nums">{(c.slow_queries as unknown[]).length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(capacity![0].slow_queries as { query: string; mean_ms: number; calls: number }[]).length > 0 && (
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer text-brand">Trege spørringer</summary>
+                <ul className="mt-1 space-y-1">
+                  {(capacity![0].slow_queries as { query: string; mean_ms: number; calls: number }[]).map((q) => (
+                    <li key={q.query}><code className="break-all">{q.query}</code> · {q.mean_ms} ms i snitt · {q.calls} ganger</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </section>
 
       <section id="feil" className="card scroll-mt-20">
         <div className="flex flex-wrap items-center justify-between gap-2">
