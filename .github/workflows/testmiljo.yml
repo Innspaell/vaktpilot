@@ -1,0 +1,23 @@
+name: Testmiljø – database
+
+# Nye migreringer går først til testdatabasen (vaktpilot-test) når de pushes til grenen «test».
+# Kan også kjøres for hånd under Actions. Krever hemmeligheten TEST_DB_URL (tilkoblingsstreng til testprosjektet).
+on:
+  push:
+    branches: [test]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Kjør migreringer mot testdatabasen
+        run: supabase db push --db-url "$TEST_DB_URL" --include-all --yes
+        env:
+          TEST_DB_URL: ${{ secrets.TEST_DB_URL }}
