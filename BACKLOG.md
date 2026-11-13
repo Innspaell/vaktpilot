@@ -22,8 +22,10 @@ Ting som er bestemt eller foreslått, men ikke bygget ennå. Sortert etter prior
 - **Automatiske tester av hele flyten** (innlogging, vakt, bekreftelse, lønnsfil) som kjøres før hver publisering.
 
 ## 3b. Tariffer
-- **Prøveberegning** før første lønnskjøring: en vanlig uke og en helgeuke, til sammenligning med det kunden får i dag.
-- **Ferdige tariffer** for de vanligste bransjene (f.eks. Reiselivsoverenskomsten, Butikkoverenskomsten, Renholdsoverenskomsten), lagt inn og kontrollert mot gjeldende avtaletekst.
+- **Kontroller og publiser tariffutkastene** (Virke–HK handel, NHO butikk, Riksavtalen, Renhold, Bilutleie Virke) mot avtaletekstene etter oppgjøret 2026.
+- **100 % på overtid etter dags-/ukegrense** når overtiden faller på kveld/natt, søndag eller helligdag (i dag 50 % på slik overtid; tidsbasert 100 % fungerer).
+- **Høytidsaftener** (julaften, nyttårsaften, påskeaften, pinseaften) som egne tidsrom for tillegg og overtid.
+- **Skifttillegg per skift** og **prøveberegning** før første lønnskjøring.
 
 ## 4. Sjekkes før første lønnskjøring
 - Satsene i lønnsberegningen mot Bilutleieoverenskomsten 2026.
