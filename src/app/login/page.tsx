@@ -23,11 +23,17 @@ export default function LoginPage() {
     setError(null);
     const { error } = await createClient().auth.signInWithOtp({
       email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback`, shouldCreateUser: true },
+      // Nye brukere kommer inn via invitasjon fra lederen. Innlogging med kode er for dem som allerede har konto.
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback`, shouldCreateUser: false },
     });
     setBusy(false);
     if (error) {
-      setError(error.status === 429 ? "For mange forsøk. Vent et minutt og prøv igjen." : "Kunne ikke sende kode. Prøv igjen om litt.");
+      const noUser = /signup|not allowed|not found|otp_disabled/i.test(`${error.code ?? ""} ${error.message}`);
+      setError(
+        error.status === 429 ? "For mange forsøk. Vent et minutt og prøv igjen."
+        : noUser ? "Vi fant ingen bruker med denne e-posten. Første gang får du en invitasjon fra lederen din. Be om den, eller sjekk at e-posten er skrevet riktig."
+        : "Kunne ikke sende kode. Prøv igjen om litt.",
+      );
       return;
     }
     setStep("code");
