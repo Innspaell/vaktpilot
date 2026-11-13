@@ -22,6 +22,14 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Innloggingslenke som havnet på forsiden (Supabase faller tilbake til Site URL): send den videre til innloggingen
+  const code = request.nextUrl.searchParams.get("code");
+  if (code && request.nextUrl.pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   // Forsiden: besøkende som ikke er logget inn ser produktsiden
   if (!user && request.nextUrl.pathname === "/") {
     const url = request.nextUrl.clone();
