@@ -18,6 +18,24 @@ async function savePrices(fd: FormData) {
   revalidatePath("/plattform");
 }
 
+async function resolveError(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  const id = String(fd.get("id") ?? "");
+  const q = ctx.supabase.from("app_errors").update({ resolved_at: new Date().toISOString() });
+  await (id === "alle" ? q.is("resolved_at", null) : q.eq("id", id));
+  revalidatePath("/plattform");
+}
+
+async function resetMfaByEmail(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  await ctx.supabase.rpc("platform_reset_mfa_by_email", { p_email: String(fd.get("email") ?? "") });
+  revalidatePath("/plattform");
+}
+
 async function saveOrgPrice(fd: FormData) {
   "use server";
   const ctx = await getContext();
@@ -64,6 +82,9 @@ export default async function PlatformPage() {
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
     ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until"),
   ]);
+  const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
+    .gte("last_seen", new Date(Date.now() - 7 * 86400000).toISOString()).order("last_seen", { ascending: false }).limit(50);
+  const openErrors = (errors ?? []).filter((x) => !x.resolved_at);
   const usage = new Map(((usageRows ?? []) as UsageMonth[]).map((u) => [`${u.org_id}|${u.month}`, u]));
   const custom = new Map((priceRows ?? []).map((p) => [p.id as string, p]));
   type Row = { org_id: string; name: string; org_number: string | null; active: boolean; created_at: string; employees: number; logged_in: number;
@@ -196,6 +217,40 @@ export default async function PlatformPage() {
         </table>
       </section>
       <p className="text-xs text-muted">«Gå inn» gir deg administratortilgang i bedriften for support, og registreres i bedriftens endringslogg. En deaktivert bedrift får ikke påminnelser eller kalender.</p>
+
+      <section id="feil" className="card scroll-mt-20">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="h2">Feil siste 7 dager</h2>
+          {openErrors.length > 0 && <form action={resolveError}><input type="hidden" name="id" value="alle" /><button className="text-xs text-brand">Marker alle som løst</button></form>}
+        </div>
+        <p className="mt-1 text-xs text-muted">
+          Feil fra appen og de faste jobbene. Du får varsel når en ny feil dukker opp. Oppetid: la en tjeneste som UptimeRobot sjekke https://vaktpilot.no/api/helse hvert 5. minutt.
+        </p>
+        {(errors ?? []).length === 0 ? <p className="mt-2 text-sm text-good">Ingen feil.</p> : (
+          <ul className="mt-2 divide-y divide-line text-sm">
+            {(errors ?? []).map((x) => (
+              <li key={x.id} className={`flex flex-wrap items-start justify-between gap-2 py-2 ${x.resolved_at ? "opacity-50" : ""}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words font-medium">{x.message}</span>
+                  <span className="block text-xs text-muted">
+                    {x.source} · {x.path ?? "–"} · {x.count} gang{x.count === 1 ? "" : "er"} · sist {new Date(x.last_seen).toLocaleString("nb-NO", { timeZone: "Europe/Oslo" })}
+                  </span>
+                </span>
+                {!x.resolved_at && <form action={resolveError}><input type="hidden" name="id" value={x.id} /><button className="text-xs text-brand">Løst</button></form>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="card">
+        <h2 className="h2">Nullstill tofaktor</h2>
+        <p className="mt-1 text-sm text-muted">For en leder som har mistet mobilen. Sjekk at det er riktig person (ring tilbake på kjent nummer) før du nullstiller. Brukeren setter opp tofaktor på nytt ved neste innlogging. Logges.</p>
+        <form action={resetMfaByEmail} className="mt-3 flex flex-wrap gap-2">
+          <input name="email" type="email" required placeholder="E-postadressen til lederen" className="input flex-1" />
+          <button className="btn-ghost">Nullstill</button>
+        </form>
+      </section>
     </div>
   );
 }

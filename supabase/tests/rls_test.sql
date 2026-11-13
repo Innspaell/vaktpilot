@@ -17,7 +17,7 @@ begin if ok is not true then raise exception 'FEIL: %', msg; end if; end $$;
 
 create or replace function pg_temp.login(p uuid, p_email text) returns void language plpgsql as $$
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', p, 'email', p_email)::text, false);
+  perform set_config('request.jwt.claims', json_build_object('sub', p, 'email', p_email, 'aal', 'aal2')::text, false);
 end $$;
 
 -- Plattformadmin lager to bedrifter og gir eierskap videre
@@ -672,6 +672,37 @@ do $$ begin
   insert into pay_events (org_id, employee_id, date, key) select org_id, id, '2025-01-10', 'utlevering' from employees where full_name = 'Ola Nordmann';
   raise exception 'FEIL: hendelse registrert i låst periode';
 exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+
+-- Tofaktor: leder uten bekreftet tofaktor i økta har ikke lederrettigheter
+set role authenticated;
+select set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-0000-0000-0000000000a1', 'email', 'leder@a.no', 'aal', 'aal1')::text, false);
+select pg_temp.check(not is_admin(:'org_a'), 'leder er admin uten tofaktor');
+select pg_temp.check(mfa_required(), 'leder må ha tofaktor');
+select pg_temp.check(not exists (select 1 from pay_rule_requests), 'leder uten tofaktor ser lederdata');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(is_admin(:'org_a'), 'leder med tofaktor er ikke admin');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check(not mfa_required(), 'ansatt krever tofaktor');
+do $$ begin
+  perform reset_mfa('00000000-0000-0000-0000-0000000000a1');
+  raise exception 'FEIL: ansatt kunne nullstille lederens tofaktor';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+reset role;
+
+-- Feilvarsling: samme feil telles opp, InnSpæll får ett varsel; vanlige brukere ser ikke feillisten
+insert into platform_admin_emails values ('leder@b.no') on conflict do nothing;
+set role anon;
+select log_app_error('server', 'Testfeil', '/lonn/00000000-0000-0000-0000-000000000001');
+select log_app_error('server', 'Testfeil', '/lonn/00000000-0000-0000-0000-000000000002');
+reset role;
+select pg_temp.check((select count from app_errors where message = 'Testfeil') = 2, 'feil ble ikke telt opp');
+select pg_temp.check((select count(*) from notifications where kind = 'platform_error') = (select count(distinct user_id) from notifications where kind = 'platform_error') and exists (select 1 from notifications where kind = 'platform_error'), 'feil skal gi ett varsel per plattformadmin');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(not exists (select 1 from app_errors), 'kunde ser feillisten');
+reset role;
+delete from platform_admin_emails where email = 'leder@b.no';
+select run_health_check();
 
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';

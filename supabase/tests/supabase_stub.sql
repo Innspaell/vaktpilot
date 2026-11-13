@@ -26,3 +26,5 @@ create table net.test_requests (id bigserial primary key, url text, body jsonb, 
 create function net.http_post(url text, body jsonb default '{}'::jsonb, params jsonb default '{}'::jsonb,
   headers jsonb default '{}'::jsonb, timeout_milliseconds int default 5000) returns bigint
 language sql as $$ insert into net.test_requests (url, body, headers) values (url, body, headers) returning id $$;
+
+create table if not exists auth.mfa_factors (id uuid primary key default gen_random_uuid(), user_id uuid, status text);

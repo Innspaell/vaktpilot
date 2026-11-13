@@ -28,10 +28,14 @@ export const getContext = cache(async (): Promise<AppContext> => {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: memberships }, { data: platform }] = await Promise.all([
+  const [{ data: memberships }, { data: platform }, { data: aal }, { data: mfaRequired }] = await Promise.all([
     supabase.from("memberships").select("role, organizations(id, name, timezone, logo_url, availability_enabled, clock_enabled)").eq("user_id", user.id),
     supabase.rpc("is_platform_admin"),
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.rpc("mfa_required"),
   ]);
+  // Tofaktor: ledere og InnSpæll må ha det; andre som har skrudd det på, må bekrefte koden ved innlogging
+  if (aal?.currentLevel !== "aal2" && (aal?.nextLevel === "aal2" || mfaRequired)) redirect("/tofaktor");
 
   type Row = { role: Role; organizations: { id: string; name: string; timezone: string; logo_url: string | null; availability_enabled: boolean | null; clock_enabled: boolean | null } | null };
   const rows = ((memberships ?? []) as unknown as Row[]).filter((m) => m.organizations);

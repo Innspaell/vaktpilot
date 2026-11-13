@@ -53,6 +53,14 @@ export async function switchOrganization(fd: FormData) {
   redirect("/");
 }
 
+/** Nullstill tofaktor for en ansatt som har mistet mobilen. */
+export async function resetEmployeeMfa(fd: FormData) {
+  const ctx = await requireAdmin();
+  const user = text(fd, "user_id");
+  if (user) await ctx.supabase.rpc("reset_mfa", { p_user: user });
+  revalidatePath(`/ansatte/${text(fd, "employee_id")}`);
+}
+
 /** Kunden bekrefter at satsene i en tariffversjon stemmer med avtalen. */
 export async function confirmPayRuleVersion(fd: FormData) {
   const ctx = await requireAdmin();

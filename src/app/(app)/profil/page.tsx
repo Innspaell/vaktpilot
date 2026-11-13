@@ -6,6 +6,7 @@ import { getContext, requireOrg } from "@/lib/context";
 import { signOut, switchOrganization } from "../actions";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { NOTIFICATION_GROUPS } from "@/lib/notification-kinds";
+import { MfaSettings } from "@/components/MfaSettings";
 
 async function resetCalendar() {
   "use server";
@@ -137,6 +138,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           )}
         </section>
       )}
+      <section className="card">
+        <h2 className="h2">Tofaktor</h2>
+        <div className="mt-2"><MfaSettings required={ctx.isAdmin || ctx.isPlatformAdmin} /></div>
+      </section>
       <details id="passord" className="card" open={sp.passord === "1"}>
         <summary className="h2 cursor-pointer">Passord</summary>
         <p className="mb-3 mt-1 text-sm text-muted">Med passord kan du logge inn uten å vente på kode på e-post.</p>

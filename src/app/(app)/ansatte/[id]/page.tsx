@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
-import { addTerms, createLoginInvite, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
+import { addTerms, createLoginInvite, resetEmployeeMfa, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
 import { LoginSetup } from "@/components/LoginSetup";
 import { VacationOverview } from "@/components/VacationOverview";
 import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status";
@@ -21,6 +21,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
     ctx.supabase.from("pay_rule_sets").select("id, name, pay_rule_versions!inner(status)").eq("pay_rule_versions.status", "published").order("name"),
   ]);
   if (!e) notFound();
+  const { data: mfaRows } = e.user_id ? await ctx.supabase.rpc("users_mfa_status", { p_users: [e.user_id] }) : { data: [] };
+  const hasMfa = Boolean((mfaRows as { has_mfa: boolean }[] | null)?.[0]?.has_mfa);
   const ls = loginStatus(e, ((statusRows ?? []) as LoginStatusRow[]).find((r) => r.employee_id === e.id));
 
   let membershipRole: string | null = null;
@@ -167,6 +169,19 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             : `${e.full_name} har ikke innlogging ennå. Send en lenke der hen lager passordet selv, eller sett et midlertidig passord. E-posten trenger ikke bekreftes.`}
           {" "}Den ansatte kan også logge inn med kode på e-post, hvis e-posten er registrert.
         </p>
+        {e.user_id && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted">Tofaktor:</span>
+            <span className={`badge ${hasMfa ? "bg-good-soft text-good" : "bg-paper text-muted"}`}>{hasMfa ? "På" : "Av"}</span>
+            {hasMfa && (membershipRole === "employee" || ctx.isPlatformAdmin) && (
+              <form action={resetEmployeeMfa}>
+                <input type="hidden" name="user_id" value={e.user_id} />
+                <input type="hidden" name="employee_id" value={e.id} />
+                <button className="text-brand">Nullstill (mistet mobil)</button>
+              </form>
+            )}
+          </div>
+        )}
         {membershipRole && membershipRole !== "employee" ? (
           <p className="mt-2 text-sm text-muted">Administratorer setter passord selv under Profil.</p>
         ) : (
