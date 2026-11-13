@@ -58,10 +58,17 @@ export default async function SettingsPage() {
               <option value={60}>time</option>
             </select>
           </Field>
-          <label className="flex items-center gap-2 self-end pb-3 text-sm">
-            <input type="checkbox" name="auto_submit_clock_entries" defaultChecked={org?.auto_submit_clock_entries} className="h-4 w-4" />
-            Send inn stemplede timer automatisk
-          </label>
+          <fieldset className="space-y-2 rounded-lg border border-line p-3 md:col-span-2">
+            <legend className="px-1 text-sm font-semibold">Timer</legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="clock_enabled" defaultChecked={org?.clock_enabled ?? true} className="mt-0.5 h-4 w-4" />
+              <span>Ansatte kan stemple inn og ut<span className="block text-xs text-muted">Slå av hvis det holder at de ansatte bekrefter vakta etterpå. Da forsvinner stempleknappen. Timer for dager uten vakt kan fortsatt føres under Timer.</span></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="auto_submit_clock_entries" defaultChecked={org?.auto_submit_clock_entries} className="mt-0.5 h-4 w-4" />
+              <span>Send inn stemplede timer automatisk<span className="block text-xs text-muted">Gjelder bare når stempling er på.</span></span>
+            </label>
+          </fieldset>
         </ActionForm>
       </section>
 

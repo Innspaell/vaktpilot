@@ -209,7 +209,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
 
       <details className="card">
         <summary className="h2 cursor-pointer">Registrer timer manuelt</summary>
-        <p className="mt-1 text-sm text-muted">For dager uten vakt i planen, eller hvis du glemte å stemple.</p>
+        <p className="mt-1 text-sm text-muted">{ctx.org.clockEnabled ? "For dager uten vakt i planen, eller hvis du glemte å stemple." : "For dager uten vakt i planen."}</p>
         <div className="mt-3"><EntryForm date={today} start="08:00" end="16:00" maxDate={today} /></div>
       </details>
 

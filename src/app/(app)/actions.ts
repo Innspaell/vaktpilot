@@ -69,6 +69,7 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
       vacation_fifth_week_transferable: fd.get("vacation_fifth_week_transferable") === "on",
       staffing_slot_minutes: num(fd, "staffing_slot_minutes", 15),
       auto_submit_clock_entries: fd.get("auto_submit_clock_entries") === "on",
+      clock_enabled: fd.get("clock_enabled") === "on",
     })
     .eq("id", ctx.org.id);
   if (error) return { error: error.message };

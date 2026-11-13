@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 const FEATURES: { title: string; text: string; icon: string }[] = [
   { title: "Vaktplan på et blunk", text: "Legg inn bemanningsbehovet, og la autoplanen fordele vaktene etter stillingsprosent og ønsker. Du godkjenner før noe publiseres.", icon: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4" },
-  { title: "Timer uten papir", text: "De ansatte bekrefter arbeidsdagen med ett trykk. Du godkjenner, og lønnsgrunnlaget er klart for Fiken.", icon: "M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { title: "Timer uten papir", text: "De ansatte bekrefter arbeidsdagen med ett trykk. Du godkjenner, og lønnsgrunnlaget er klart for regnskapsprogrammet deres.", icon: "M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
   { title: "Ferie etter ferieloven", text: "Feriesaldo per år, regnet om for deltid. Avtale om overføring lages og signeres med fingeren i appen.", icon: "M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16l-7-4z" },
   { title: "Fravær og sykefravær", text: "Egenmelding, sykmelding, permisjon og avspasering på ett sted, med sykefraværsprosent og uten helseopplysninger.", icon: "M12 21s-7-4.5-9.5-9A5.5 5.5 0 0112 6a5.5 5.5 0 019.5 6C19 16.5 12 21 12 21z" },
   { title: "Vaktbytte og ledige vakter", text: "Ansatte bytter vakter seg imellom og melder seg på ledige vakter. Du får varsel og godkjenner.", icon: "M7 7h11l-3-3M17 17H6l3 3" },

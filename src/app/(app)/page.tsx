@@ -137,7 +137,7 @@ export default async function Home() {
           </section>
         </div>
 
-        {ctx.employeeId && clock ? <ClockButton state={clock.state} since={clock.since} /> : <SelfEmployeeCard email={ctx.email} />}
+        {ctx.employeeId ? (clock && <ClockButton state={clock.state} since={clock.since} />) : <SelfEmployeeCard email={ctx.email} />}
       </div>
     );
   }

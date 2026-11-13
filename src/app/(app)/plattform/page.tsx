@@ -72,7 +72,7 @@ export default async function PlatformPage() {
           <label className="block"><span className="label">Per aktiv ansatt / mnd (kr)</span><input name="per" type="number" min={0} step="1" defaultValue={per} className="input w-40" /></label>
           <button className="btn-ghost">Lagre</button>
         </form>
-        <p className="mt-2 text-xs text-muted">Aktive ansatte = ansattkort uten passert sluttdato. Grunnlag for fakturering, for eksempel i Fiken.</p>
+        <p className="mt-2 text-xs text-muted">Aktive ansatte = ansattkort uten passert sluttdato. Grunnlag for fakturering.</p>
       </section>
 
       <section className="card overflow-x-auto p-0">

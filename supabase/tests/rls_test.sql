@@ -578,6 +578,17 @@ select pg_temp.check((select email_status from notifications n join employees e 
 select pg_temp.check(send_notification_emails() = 0, 'sendte samme e-post to ganger');
 update organizations set email_prefs = '{}' where id = :'org_a';
 
+-- Stempling slått av: kan ikke stemple inn
+update organizations set clock_enabled = false where id = :'org_a';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  perform clock((select id from organizations where name = 'Æ e trønder AS'), 'in');
+  raise exception 'FEIL: kunne stemple selv om stempling er av';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+reset role;
+update organizations set clock_enabled = true where id = :'org_a';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

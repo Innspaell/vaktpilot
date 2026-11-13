@@ -24,7 +24,7 @@ export async function lockPeriod(_: ActionState, fd: FormData): Promise<ActionSt
   if (error) return { error: error.message };
   revalidatePath("/lonn");
   revalidatePath("/timer");
-  return { ok: "Perioden er låst. Last ned lønnsgrunnlaget og legg det inn i Fiken." };
+  return { ok: "Perioden er låst. Last ned lønnsgrunnlaget og legg det inn i regnskaps- eller lønnsprogrammet." };
 }
 
 export async function reopenPeriod(fd: FormData) {
