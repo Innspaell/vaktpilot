@@ -22,7 +22,7 @@ export async function createRuleSet(_: ActionState, fd: FormData): Promise<Actio
   const key = (s(fd, "key") || name).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
   const org = s(fd, "org_id") || null;
   const { data: set, error } = await ctx.supabase.from("pay_rule_sets")
-    .insert({ key, name, description: s(fd, "description") || null, kind: s(fd, "kind") === "law" ? "law" : "tariff", org_id: org })
+    .insert({ key, name, description: s(fd, "description") || null, kind: s(fd, "kind") === "law" ? "law" : "tariff", org_id: org, area: s(fd, "area") || "ingen" })
     .select("id").single();
   if (error) return { error: error.code === "23505" ? "Det finnes allerede et regelsett med denne nøkkelen." : error.message };
   const copy = s(fd, "copy_from");
@@ -32,7 +32,7 @@ export async function createRuleSet(_: ActionState, fd: FormData): Promise<Actio
     const from = s(fd, "valid_from");
     if (v) {
       const { error: e2 } = await ctx.supabase.from("pay_rule_versions")
-        .insert({ rule_set_id: set.id, valid_from: isDate(from) ? from : "2000-01-01", rules: v.rules, note: "Kopiert, må kontrolleres" });
+        .insert({ rule_set_id: set.id, valid_from: isDate(from) ? from : "2000-01-01", rules: v.rules, note: "Kopiert, må kontrolleres", status: "draft" });
       if (e2) return { error: e2.message };
     }
   }
@@ -43,7 +43,7 @@ export async function updateRuleSet(_: ActionState, fd: FormData): Promise<Actio
   const ctx = await platform();
   const id = s(fd, "id");
   const { error } = await ctx.supabase.from("pay_rule_sets")
-    .update({ name: s(fd, "name"), description: s(fd, "description") || null }).eq("id", id);
+    .update({ name: s(fd, "name"), description: s(fd, "description") || null, area: s(fd, "area") || "ingen" }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/plattform/lonnsregler/${id}`);
   return { ok: "Lagret." };
@@ -58,14 +58,20 @@ export async function saveVersion(_: ActionState, fd: FormData): Promise<ActionS
   if (!isDate(from)) return { error: "Velg datoen satsene gjelder fra." };
   const { rules, error } = rulesFromForm(fd);
   if (error || !rules) return { error };
-  const row = { rule_set_id: setId, valid_from: from, rules, note: s(fd, "note") || null };
+  const status = ["draft", "review", "published"].includes(s(fd, "status")) ? s(fd, "status") : "draft";
+  const row = {
+    rule_set_id: setId, valid_from: from, rules, note: s(fd, "note") || null, status,
+    source_text: s(fd, "source_text") || null, source_url: s(fd, "source_url") || null,
+    ...(status === "published" ? { published_at: new Date().toISOString(), published_by: ctx.userId } : {}),
+  };
+  if (status === "published" && !row.source_text) return { error: "Skriv inn kilden før satsene publiseres." };
   const res = versionId
     ? await ctx.supabase.from("pay_rule_versions").update(row).eq("id", versionId)
     : await ctx.supabase.from("pay_rule_versions").insert(row);
   if (res.error) return { error: res.error.code === "23505" ? "Det finnes allerede satser fra denne datoen. Endre dem i stedet." : res.error.message };
   revalidatePath(`/plattform/lonnsregler/${setId}`);
   revalidatePath("/plattform/lonnsregler");
-  return { ok: versionId ? "Satsene er endret." : "Nye satser er lagt inn. Bedriftene som bruker tariffen har fått beskjed." };
+  return { ok: status === "published" ? "Lagret og publisert. Bedriftene som bruker tariffen får beskjed." : "Lagret som " + (status === "review" ? "under revisjon" : "utkast") + ". Ikke synlig for kundene ennå." };
 }
 
 export async function deleteVersion(fd: FormData) {

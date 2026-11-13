@@ -1,18 +1,27 @@
 import "server-only";
-import type { EmployeePay } from "./pay";
+import { wageTypeFor, type EmployeePay } from "./pay";
 import type { Cell, Sheet } from "./xlsx";
 import { localDate, localTime } from "./time";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Lønnsgrunnlag: én rad per ansatt og lønnsart. Samme innhold som CSV-filen. */
-export function payrollSheet(pay: EmployeePay[], period: { from: string; to: string }): Sheet {
-  const rows: Cell[][] = [["Ansattnummer", "Ansatt", "Periode fra", "Periode til", "Lønnstype", "Kode", "Beskrivelse", "Timer", "Dager", "Sats (kr)", "Beløp (kr)"]];
+export function payrollSheet(pay: EmployeePay[], period: { from: string; to: string }, wageTypes?: Map<string, string>, name = "Lønnsgrunnlag"): Sheet {
+  const rows: Cell[][] = [["Ansattnummer", "Ansatt", "Periode fra", "Periode til", "Lønnstype", "Lønnsart", "Kode", "Beskrivelse", "Timer", "Dager", "Antall", "Sats (kr)", "Prosent", "Beløp (kr)"]];
   for (const p of pay) for (const l of p.lines) {
     rows.push([p.employee.employeeNumber ?? "", p.employee.name, period.from, period.to, p.employee.payType === "fixed" ? "Fastlønn" : "Timelønn",
-      l.code, l.label, l.hours, l.days ?? null, l.rate ?? null, l.amount ?? null]);
+      wageTypeFor(l.code, wageTypes) ?? "", l.code, l.label, l.hours, l.days ?? null, l.quantity ?? null, l.rate ?? null, l.percent ?? null, l.amount ?? null]);
   }
-  return { name: "Lønnsgrunnlag", rows, widths: [13, 24, 12, 12, 11, 16, 34, 8, 7, 10, 11] };
+  return { name, rows, widths: [13, 24, 12, 12, 11, 10, 16, 34, 8, 7, 7, 10, 8, 11] };
+}
+
+/** Forklaring: hvorfor hver linje er der, og hvilke dager den gjelder. */
+export function explanationSheet(pay: EmployeePay[]): Sheet {
+  const rows: Cell[][] = [["Ansatt", "Beskrivelse", "Timer/antall", "Regel", "Dager"]];
+  for (const p of pay) for (const l of p.lines) {
+    rows.push([p.employee.name, l.label, l.quantity ?? l.hours, l.why ?? "", (l.details ?? []).join("; ")]);
+  }
+  return { name: "Forklaring", rows, widths: [24, 34, 11, 60, 80] };
 }
 
 type EntryRow = { employee_id: string; starts_at: string; ends_at: string; break_minutes: number; status: string;

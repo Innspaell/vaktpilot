@@ -7,6 +7,7 @@ const v = (n: number | null | undefined) => (n === null || n === undefined ? "" 
 /** Skjemafelt for et regelsett. Brukes inne i et ActionForm. */
 export function RulesEditor({ rules }: { rules: PayRules }) {
   const rows = [...rules.supplements, ...Array.from({ length: SUPPLEMENT_ROWS_EXTRA }, () => null)];
+  const evRows = [...(rules.eventSupplements ?? []), ...Array.from({ length: 2 }, () => null)];
   return (
     <div className="space-y-5">
       <fieldset className="space-y-2">
@@ -50,13 +51,14 @@ export function RulesEditor({ rules }: { rules: PayRules }) {
         <legend className="text-sm font-semibold">Tillegg (kroner per time)</legend>
         <input type="hidden" name="supp_rows" value={rows.length} />
         {rows.map((s, i) => (
-          <div key={i} className="grid gap-2 rounded-lg border border-line p-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div key={i} className="grid gap-2 rounded-lg border border-line p-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
             <input type="hidden" name={`s${i}_key`} value={s?.key ?? ""} />
             <label className="block"><span className="label">Navn</span><input name={`s${i}_label`} defaultValue={s?.label ?? ""} placeholder={s ? "" : "Nytt tillegg, f.eks. Søndagstillegg"} className="input" /></label>
-            <label className="block"><span className="label">Kr per time</span><input name={`s${i}_rate`} inputMode="decimal" defaultValue={s ? s.ratePerHour : ""} className="input" /></label>
+            <label className="block"><span className="label">Kr per time</span><input name={`s${i}_rate`} inputMode="decimal" defaultValue={s && !s.percent ? s.ratePerHour : ""} className="input" /></label>
+            <label className="block"><span className="label">eller prosent</span><input name={`s${i}_percent`} inputMode="decimal" defaultValue={s?.percent ?? ""} placeholder="%" className="input" /></label>
             <label className="block"><span className="label">Fra kl.</span><input name={`s${i}_from`} inputMode="decimal" defaultValue={s ? s.fromHour : ""} className="input" /></label>
             <label className="block"><span className="label">Til kl.</span><input name={`s${i}_to`} inputMode="decimal" defaultValue={s ? s.toHour : ""} className="input" /></label>
-            <div className="flex flex-wrap items-center gap-2 md:col-span-4">
+            <div className="flex flex-wrap items-center gap-2 md:col-span-5">
               {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                 <label key={d} className="flex items-center gap-1"><input type="checkbox" name={`s${i}_d${d}`} defaultChecked={s ? s.days.includes(d) : false} />{DAYS[d]}</label>
               ))}
@@ -68,11 +70,37 @@ export function RulesEditor({ rules }: { rules: PayRules }) {
                 <option value="all">Alle ansatte</option>
                 <option value="shift_workers">Bare turnus/skift</option>
               </select>
+              <input name={`s${i}_group`} defaultValue={s?.group ?? ""} placeholder="Gruppe (kombineres ikke)" className="input w-48 py-1" />
+              <label className="flex items-center gap-1"><input type="checkbox" name={`s${i}_noot`} defaultChecked={s?.notOnOvertime ?? false} /> Ikke på overtid</label>
               {s && <label className="ml-auto flex items-center gap-1 text-bad"><input type="checkbox" name={`s${i}_delete`} /> Fjern</label>}
             </div>
           </div>
         ))}
-        <p className="text-xs text-muted">Over midnatt: fra 18 til 6. Hele dagen: 0 til 24. Trenger du flere rader, lagre og åpne igjen.</p>
+        <p className="text-xs text-muted">
+          Over midnatt: fra 18 til 6. Hele dagen: 0 til 24. Prosent: Vaktpilot regner timene, lønnssystemet regner beløpet.
+          Tillegg med samme gruppe kombineres ikke: det første i listen som gjelder, blir gitt. Trenger du flere rader, lagre og åpne igjen.
+        </p>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold">Tillegg per gang (f.eks. utlevering utenfor ordinær tid)</legend>
+        <input type="hidden" name="ev_rows" value={evRows.length} />
+        {evRows.map((e, i) => (
+          <div key={i} className="grid gap-2 rounded-lg border border-line p-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+            <input type="hidden" name={`e${i}_key`} value={e?.key ?? ""} />
+            <label className="block"><span className="label">Navn</span><input name={`e${i}_label`} defaultValue={e?.label ?? ""} placeholder={e ? "" : "Nytt, f.eks. Utlevering"} className="input" /></label>
+            <label className="block"><span className="label">Kr per gang</span><input name={`e${i}_rate`} inputMode="decimal" defaultValue={e?.ratePerEvent ?? ""} className="input" /></label>
+            <label className="block"><span className="label">Kr på helligdag</span><input name={`e${i}_holiday`} inputMode="decimal" defaultValue={e?.holidayRatePerEvent ?? ""} placeholder="samme" className="input" /></label>
+            <label className="block"><span className="label">Hvem</span>
+              <select name={`e${i}_applies`} defaultValue={e?.appliesTo ?? "all"} className="input">
+                <option value="all">Alle ansatte</option>
+                <option value="shift_workers">Bare turnus/skift</option>
+              </select>
+            </label>
+            {e && <label className="flex items-center gap-1 self-end pb-2 text-bad"><input type="checkbox" name={`e${i}_delete`} /> Fjern</label>}
+          </div>
+        ))}
+        <p className="text-xs text-muted">Ansatte registrerer antall under Timer. Beløpet kommer som egen linje i lønnsgrunnlaget.</p>
       </fieldset>
 
       <fieldset className="grid gap-3 sm:grid-cols-2">

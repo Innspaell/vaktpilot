@@ -2,8 +2,8 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
-import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, requestPayRules, setPayRules, updateOrganization, uploadLogo } from "../actions";
-import { loadPayRules } from "@/lib/pay-rules-data";
+import { addWorkRole, confirmPayRuleVersion, deleteWorkRole, moveWorkRole, removeLogo, requestPayRules, setPayRules, updateOrganization, uploadLogo } from "../actions";
+import { AREAS, loadPayRules } from "@/lib/pay-rules-data";
 import { describeRules } from "@/lib/pay-rules-text";
 import { localDate } from "@/lib/time";
 
@@ -99,22 +99,43 @@ export default async function SettingsPage() {
                 <div className="font-semibold">{cur?.name ?? "Uten tariff (arbeidsmiljøloven)"}</div>
                 <div className="text-xs text-muted">
                   {fromRow && fromRow.valid_from > "2000-01-01" ? `Valgt fra ${fromRow.valid_from.split("-").reverse().join(".")}. ` : ""}
-                  {ver && ver > "2000-01-01" ? `Satser gjeldende fra ${ver.split("-").reverse().join(".")}.` : ""}
+                  {ver && ver.valid_from > "2000-01-01" ? `Satser gjeldende fra ${ver.valid_from.split("-").reverse().join(".")}. ` : ""}
+                  {fromRow?.confirmed_at ? `Bekreftet av dere ${new Date(fromRow.confirmed_at).toLocaleDateString("nb-NO")}. ` : ""}
+                  {ver?.source_text ? <>Kilde: {ver.source_url ? <a href={ver.source_url} target="_blank" rel="noreferrer" className="text-brand">{ver.source_text}</a> : ver.source_text}.</> : null}
                 </div>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{describeRules(rules).map((l) => <li key={l}>{l}</li>)}</ul>
-                {cur?.kind === "tariff" && <p className="mt-2 text-xs text-muted">Kontroller satsene mot avtalen dere har. Si fra hvis noe ikke stemmer.</p>}
+                {cur?.kind === "tariff" && ver && (payRules.versionConfirmed(ver.id) ? (
+                  <p className="mt-2 text-xs text-good">Dere har bekreftet at satsene stemmer med avtalen.</p>
+                ) : (
+                  <form action={confirmPayRuleVersion} className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-warn/40 bg-warn-soft p-2 text-sm text-warn">
+                    <input type="hidden" name="version_id" value={ver.id} />
+                    <span className="flex-1">Kontroller satsene over mot avtalen dere har, og bekreft at de stemmer. Si fra hvis noe er feil.</span>
+                    <button className="btn-ghost bg-white">Satsene stemmer</button>
+                  </form>
+                ))}
               </div>
+              <p className="mt-2 text-sm"><Link href="/innstillinger/lonnsarter" className="text-brand">Lønnsarter i regnskaps- eller lønnsprogrammet ›</Link></p>
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm font-semibold text-brand">Bytt lønnsregler</summary>
                 <ActionForm action={setPayRules} submitLabel="Lagre" className="mt-3 grid gap-3 md:grid-cols-2">
-                  <Field label="Regler">
+                  <Field label="Tariffområde og avtale">
                     <select name="rule_set_id" defaultValue={cur?.id} className="input">
-                      {payRules.sets.filter((s) => payRules.hasVersions(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {Object.entries(AREAS).map(([area, label]) => {
+                        const list = payRules.sets.filter((s) => (s.area ?? "ingen") === area && payRules.hasVersions(s.id));
+                        return list.length ? (
+                          <optgroup key={area} label={label}>{list.map((s) => <option key={s.id} value={s.id}>{s.name}{s.org_id ? " (deres avtale)" : ""}</option>)}</optgroup>
+                        ) : null;
+                      })}
                     </select>
                   </Field>
                   <Field label="Gjelder fra" hint="Timer fra og med denne datoen beregnes med de nye reglene. Låste lønnsperioder endres ikke.">
                     <input name="valid_from" type="date" required defaultValue={today.slice(0, 8) + "01"} className="input" />
                   </Field>
+                  <label className="flex items-start gap-2 text-sm md:col-span-2">
+                    <input type="checkbox" name="confirm" className="mt-0.5 h-4 w-4" />
+                    <span>Vi bekrefter at bedriften er bundet av eller følger denne avtalen.<span className="block text-xs text-muted">Kreves for tariffavtaler. Å velge en tariff her gjør ikke bedriften bundet av den.</span></span>
+                  </label>
+                  <p className="text-xs text-muted md:col-span-2">Ansatte med en annen avtale kan få egen tariff under arbeidsvilkårene på ansattsiden.</p>
                 </ActionForm>
               </details>
               <details className="mt-2">

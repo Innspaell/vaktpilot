@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { getContext } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { createRuleSet, handleRequest, markChecked, openAttachment } from "./actions";
+import { AREAS } from "@/lib/pay-rules-data";
 
 export default async function PayRulesAdminPage() {
   const ctx = await getContext();
   if (!ctx.isPlatformAdmin) redirect("/");
   const [{ data: sets }, { data: versions }, { data: usage }, { data: requests }, { data: orgs }] = await Promise.all([
-    ctx.supabase.from("pay_rule_sets").select("id, key, name, description, kind, org_id, checked_year").order("kind").order("name"),
-    ctx.supabase.from("pay_rule_versions").select("rule_set_id, valid_from").order("valid_from", { ascending: false }),
+    ctx.supabase.from("pay_rule_sets").select("id, key, name, description, kind, org_id, checked_year, area").order("area").order("name"),
+    ctx.supabase.from("pay_rule_versions").select("rule_set_id, valid_from, status").order("valid_from", { ascending: false }),
     ctx.supabase.rpc("pay_rule_usage"),
     ctx.supabase.from("pay_rule_requests").select("id, org_id, message, file_path, file_name, status, reply, created_at").order("created_at", { ascending: false }).limit(30),
     ctx.supabase.from("organizations").select("id, name").order("name"),
@@ -81,7 +82,9 @@ export default async function PayRulesAdminPage() {
                   <span className="min-w-0">
                     <span className="block font-medium">{x.name}</span>
                     <span className="block text-xs text-muted">
-                      {x.kind === "law" ? "Lov" : x.org_id ? `Egen avtale for ${orgName.get(x.org_id) ?? "bedrift"}` : "Tariff"}
+                      {AREAS[x.area ?? "ingen"]} · {x.kind === "law" ? "Lov" : x.org_id ? `Egen avtale for ${orgName.get(x.org_id) ?? "bedrift"}` : "Tariff"}
+                      {(versions ?? []).some((v) => v.rule_set_id === x.id && v.status !== "published") ? " · har utkast" : ""}
+                      {!(versions ?? []).some((v) => v.rule_set_id === x.id && v.status === "published") ? " · ikke publisert" : ""}
                       {" · "}{latest(x.id) ? `satser fra ${fmt(latest(x.id)!)}` : "ingen satser ennå"}
                       {x.kind === "tariff" && ` · kontrollert ${x.checked_year ?? "aldri"}`}
                     </span>
@@ -112,6 +115,11 @@ export default async function PayRulesAdminPage() {
             </select>
           </Field>
           <Field label="Satsene gjelder fra"><input name="valid_from" type="date" className="input" /></Field>
+          <Field label="Tariffområde">
+            <select name="area" className="input" defaultValue="handel">
+              {Object.entries(AREAS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </Field>
           <div className="md:col-span-2"><Field label="Beskrivelse"><input name="description" placeholder="Partene, hvem den gjelder for" className="input" /></Field></div>
         </ActionForm>
       </section>

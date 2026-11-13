@@ -6,7 +6,8 @@ import { ClockButton } from "@/components/ClockButton";
 import { EntryForm } from "@/components/EntryForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { addDays, dayBounds, formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
-import { approveEntries, confirmShift, deleteEntry } from "./actions";
+import { addPayEvent, approveEntries, confirmShift, deleteEntry, deletePayEvent } from "./actions";
+import { ActionForm, Field } from "@/components/Form";
 import { loadPayroll } from "@/lib/payroll-data";
 import { loadCompTime } from "@/lib/report-data";
 
@@ -206,6 +207,36 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       )}
 
       {clock && <ClockButton state={clock.state} since={clock.since} />}
+
+      {(() => {
+        const defs = monthPay.rules.resolve(today, ctx.employeeId!).eventSupplements;
+        if (!defs.length) return null;
+        const mine = monthPay.events;
+        return (
+          <section className="card">
+            <h2 className="h2">{defs.length === 1 ? defs[0].label : "Tillegg per gang"}</h2>
+            <p className="mt-1 text-sm text-muted">Registrer hver gang du har hatt {defs.map((d) => d.label.toLowerCase()).join(" eller ")}. Det kommer med i lønnsgrunnlaget.</p>
+            <ActionForm action={addPayEvent} submitLabel="Registrer" className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Field label="Dato"><input name="date" type="date" required defaultValue={today} max={today} className="input" /></Field>
+              <Field label="Type">
+                <select name="key" className="input">{defs.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
+              </Field>
+              <Field label="Antall"><input name="count" type="number" min={1} max={100} defaultValue={1} className="input" /></Field>
+              <div className="sm:col-span-3"><Field label="Merknad"><input name="note" placeholder="Valgfritt, f.eks. kundenavn eller sted" className="input" /></Field></div>
+            </ActionForm>
+            {mine.length > 0 && (
+              <ul className="mt-3 divide-y divide-line text-sm">
+                {mine.map((v) => (
+                  <li key={v.id} className="flex items-center justify-between gap-2 py-1.5">
+                    <span>{v.date.split("-").reverse().join(".")} · {defs.find((d) => d.key === v.key)?.label ?? v.key} × {v.count}{v.note ? ` · ${v.note}` : ""}</span>
+                    <form action={deletePayEvent}><input type="hidden" name="id" value={v.id} /><button className="text-xs text-bad">Fjern</button></form>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })()}
 
       <details className="card">
         <summary className="h2 cursor-pointer">Registrer timer manuelt</summary>

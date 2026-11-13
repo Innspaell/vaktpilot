@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getContext } from "@/lib/context";
 import { loadPayroll } from "@/lib/payroll-data";
-import { payrollCsv } from "@/lib/pay";
+import { diffPay, payrollCsv } from "@/lib/pay";
 import { localDate, localTime } from "@/lib/time";
 import { buildXlsx, xlsxResponseHeaders } from "@/lib/xlsx";
-import { entriesSheet, payrollSheet } from "@/lib/report-sheets";
+import { entriesSheet, explanationSheet, payrollSheet } from "@/lib/report-sheets";
 
-/** Last ned lønnsgrunnlag (?type=lonn) eller kontrollark per dag (?type=dager) som CSV, eller som Excel med &format=xlsx. */
+/**
+ * Last ned lønnsgrunnlag (?type=lonn), differanse/etterbetaling for en låst periode (?type=diff)
+ * eller kontrollark per dag (?type=dager) som CSV, eller som Excel med &format=xlsx.
+ * En låst periode gir alltid det lagrede grunnlaget fra låsingen.
+ */
 export async function GET(request: Request) {
   const ctx = await getContext();
   if (!ctx.org || !ctx.isAdmin) return NextResponse.json({ error: "Ikke tillatt" }, { status: 403 });
@@ -18,18 +22,22 @@ export async function GET(request: Request) {
   }
   const org = ctx.org;
   const data = await loadPayroll({ ...ctx, org }, from, to);
-  const type = url.searchParams.get("type") === "dager" ? "dager" : "lonn";
+  const t = url.searchParams.get("type");
+  const type = t === "dager" ? "dager" : t === "diff" ? "diff" : "lonn";
+  if (type === "diff" && !data.snapshot) return NextResponse.json({ error: "Perioden er ikke låst" }, { status: 400 });
+  const pay = type === "diff" ? diffPay(data.snapshot!.pay, data.pay) : data.snapshot ? data.snapshot.pay : data.pay;
+  const fileBase = type === "lonn" ? "lonnsgrunnlag" : type === "diff" ? "etterbetaling" : "timer-per-dag";
   if (url.searchParams.get("format") === "xlsx") {
     const names = new Map(data.pay.map((p) => [p.employee.id, p.employee.name]));
-    const buf = buildXlsx(type === "lonn"
-      ? [payrollSheet(data.pay, data.period), entriesSheet(data.entries, names, org.timezone)]
-      : [entriesSheet(data.entries, names, org.timezone)]);
-    const xfile = `${type === "lonn" ? "lonnsgrunnlag" : "timer-per-dag"}_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.xlsx`;
+    const buf = buildXlsx(type === "dager"
+      ? [entriesSheet(data.entries, names, org.timezone)]
+      : [payrollSheet(pay, data.period, data.wageTypes, type === "diff" ? "Etterbetaling" : "Lønnsgrunnlag"), explanationSheet(pay), entriesSheet(data.entries, names, org.timezone)]);
+    const xfile = `${fileBase}_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.xlsx`;
     return new NextResponse(new Uint8Array(buf), { headers: xlsxResponseHeaders(xfile) });
   }
   let body: string;
-  if (type === "lonn") {
-    body = payrollCsv(data.pay, data.period);
+  if (type !== "dager") {
+    body = payrollCsv(pay, data.period, data.wageTypes);
   } else {
     const names = new Map(data.pay.map((p) => [p.employee.id, p.employee.name]));
     const head = ["Ansatt", "Dato", "Fra", "Til", "Pause (min)", "Timer", "Planlagt", "Status"];
@@ -46,7 +54,7 @@ export async function GET(request: Request) {
       });
     body = "﻿" + [head, ...rows].map((l) => l.join(";")).join("\r\n") + "\r\n";
   }
-  const file = `${type === "lonn" ? "lonnsgrunnlag" : "timer-per-dag"}_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.csv`;
+  const file = `${fileBase}_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.csv`;
   return new NextResponse(body, {
     headers: {
       "content-type": "text/csv; charset=utf-8",

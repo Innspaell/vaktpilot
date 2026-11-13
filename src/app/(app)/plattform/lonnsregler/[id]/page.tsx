@@ -5,6 +5,7 @@ import { ActionForm, Field } from "@/components/Form";
 import { RulesEditor } from "@/components/RulesEditor";
 import { ARBEIDSMILJOLOVEN, parseRules } from "@/lib/pay";
 import { describeRules } from "@/lib/pay-rules-text";
+import { AREAS } from "@/lib/pay-rules-data";
 import { deleteVersion, saveVersion, updateRuleSet } from "../actions";
 
 export default async function RuleSetPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ v?: string; ny?: string }> }) {
@@ -14,7 +15,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
   if (!ctx.isPlatformAdmin) redirect("/");
   const [{ data: set }, { data: versions }] = await Promise.all([
     ctx.supabase.from("pay_rule_sets").select("*").eq("id", id).maybeSingle(),
-    ctx.supabase.from("pay_rule_versions").select("id, valid_from, rules, note, created_at").eq("rule_set_id", id).order("valid_from", { ascending: false }),
+    ctx.supabase.from("pay_rule_versions").select("id, valid_from, rules, note, created_at, status, source_url, source_text, published_at").eq("rule_set_id", id).order("valid_from", { ascending: false }),
   ]);
   if (!set) notFound();
   const list = versions ?? [];
@@ -35,6 +36,11 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
           <input type="hidden" name="id" value={set.id} />
           <Field label="Navn"><input name="name" required defaultValue={set.name} className="input" /></Field>
           <Field label="Beskrivelse"><input name="description" defaultValue={set.description ?? ""} className="input" /></Field>
+          <Field label="Tariffområde">
+            <select name="area" defaultValue={set.area ?? "ingen"} className="input">
+              {Object.entries(AREAS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </Field>
         </ActionForm>
       </section>
 
@@ -47,6 +53,9 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
                 <Link href={`?v=${v.id}`} className={v.id === selected?.id && !isNew ? "font-semibold text-brand" : "text-brand"}>
                   Fra {fmt(v.valid_from)}{v.note ? ` · ${v.note}` : ""}
                 </Link>
+                <span className={`badge ${v.status === "published" ? "bg-good-soft text-good" : v.status === "review" ? "bg-warn-soft text-warn" : "bg-paper text-muted"}`}>
+                  {v.status === "published" ? "Publisert" : v.status === "review" ? "Under revisjon" : "Utkast"}
+                </span>
                 {list.length > 1 && (
                   <form action={deleteVersion}><input type="hidden" name="rule_set_id" value={set.id} /><input type="hidden" name="version_id" value={v.id} /><button className="text-xs text-bad">Slett</button></form>
                 )}
@@ -70,6 +79,17 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Gjelder fra"><input name="valid_from" type="date" required defaultValue={isNew ? "" : selected.valid_from} className="input" /></Field>
             <Field label="Merknad"><input name="note" defaultValue={isNew ? "" : selected.note ?? ""} placeholder="F.eks. Lønnsoppgjøret 2026" className="input" /></Field>
+            <Field label="Kilde" hint="Hvilken avtaletekst satsene er hentet fra (utgave, paragraf).">
+              <input name="source_text" defaultValue={isNew ? "" : selected.source_text ?? ""} placeholder="F.eks. Riksavtalen 2024–2026, § 3" className="input" />
+            </Field>
+            <Field label="Lenke til kilden"><input name="source_url" type="url" defaultValue={isNew ? "" : selected.source_url ?? ""} placeholder="https://" className="input" /></Field>
+            <Field label="Status" hint="Bare publiserte satser brukes i lønnsgrunnlaget og vises for kundene. Publiser først når satsene er kontrollert mot offisiell kilde og avtalen er vedtatt.">
+              <select name="status" defaultValue={isNew ? "draft" : selected.status} className="input">
+                <option value="draft">Utkast</option>
+                <option value="review">Under revisjon (oppgjør ikke avsluttet)</option>
+                <option value="published">Publisert</option>
+              </select>
+            </Field>
           </div>
           <RulesEditor rules={rules} />
         </ActionForm>

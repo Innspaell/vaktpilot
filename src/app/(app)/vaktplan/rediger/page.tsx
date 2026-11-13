@@ -7,6 +7,7 @@ import { AssignForm } from "@/components/AssignForm";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { AutoPlanPanel } from "@/components/AutoPlanPanel";
 import { assignShift, cancelShift, clearPeriod, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "../actions";
+import { checkPlannedShifts } from "@/lib/worktime-check";
 
 type View = "dag" | "uke" | "maned";
 
@@ -62,7 +63,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const absences = (absencesRes.data ?? []) as { employee_id: string; from_date: string; to_date: string; type_name: string }[];
   const pct = new Map((pctRes.data ?? []).map((t) => [t.employee_id, Number(t.position_pct)]));
   const newShiftDate = /^\d{4}-\d{2}-\d{2}$/.test(sp.ny ?? "") ? sp.ny! : null;
-  const coverage = await coverageForDays(ctx, from, days, shifts);
+  const [coverage, planWarnings] = await Promise.all([
+    coverageForDays(ctx, from, days, shifts),
+    checkPlannedShifts(ctx, from, addDays(from, days - 1)),
+  ]);
   const roles = new Map((rolesRes.data ?? []).map((r) => [r.id, r]));
   const requested = new Set((requestsRes.data ?? []).map((r) => r.shift_id));
   const drafts = shifts.filter((s) => s.status === "draft").length;
@@ -96,6 +100,20 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           ))}
         </div>
       </header>
+
+      {planWarnings.size > 0 && (
+        <details className="card border-warn/40 bg-warn-soft text-sm text-warn">
+          <summary className="cursor-pointer font-semibold">
+            Planen kan bryte arbeidstidsreglene for {planWarnings.size} {planWarnings.size === 1 ? "ansatt" : "ansatte"}
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {[...planWarnings].map(([emp, w]) => (
+              <li key={emp}><b>{names.get(emp) ?? "Ukjent"}:</b> {w.map((x) => x.text).join(" ")}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs">Sjekket mot arbeidsmiljøloven (hvile, maks arbeidstid og overtid). Noen unntak kan være avtalt.</p>
+        </details>
+      )}
 
       <Legend />
 

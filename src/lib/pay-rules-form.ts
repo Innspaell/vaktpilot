@@ -1,4 +1,4 @@
-import type { PayRules, Supplement } from "./pay";
+import type { EventSupplement, PayRules, Supplement } from "./pay";
 
 export type RulesJson = Omit<PayRules, "key" | "name">;
 export const SUPPLEMENT_ROWS_EXTRA = 3;
@@ -43,20 +43,39 @@ export function rulesFromForm(fd: FormData): { rules?: RulesJson; error?: string
     const label = String(fd.get(`s${i}_label`) ?? "").trim();
     if (!label || fd.get(`s${i}_delete`) === "on") continue;
     const rate = numOrNull(fd.get(`s${i}_rate`));
+    const percent = numOrNull(fd.get(`s${i}_percent`));
+    const group = String(fd.get(`s${i}_group`) ?? "").trim() || null;
     const from = hour(numOrNull(fd.get(`s${i}_from`)), `Fra for «${label}»`, false);
     const to = hour(numOrNull(fd.get(`s${i}_to`)), `Til for «${label}»`, false);
     const days = [1, 2, 3, 4, 5, 6, 7].filter((d) => fd.get(`s${i}_d${d}`) === "on");
     const holidays = fd.get(`s${i}_holidays`) === "only" ? "only" : "exclude";
-    if (rate === null || Number.isNaN(rate) || rate < 0) errors.push(`Sats for «${label}» mangler.`);
+    if ((rate === null || Number.isNaN(rate) || rate < 0) && (percent === null || Number.isNaN(percent) || percent <= 0)) errors.push(`Sats i kroner eller prosent for «${label}» mangler.`);
     if (holidays === "exclude" && days.length === 0) errors.push(`Velg minst én dag for «${label}».`);
     let key = String(fd.get(`s${i}_key`) ?? "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
     if (!key) key = label.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30) || `tillegg_${i}`;
     if (supplements.some((s) => s.key === key)) key = `${key}_${i}`;
     supplements.push({
-      key, label, ratePerHour: rate ?? 0, days: holidays === "only" ? [1, 2, 3, 4, 5, 6, 7] : days,
+      key, label, ratePerHour: rate && !Number.isNaN(rate) ? rate : 0, percent: percent && !Number.isNaN(percent) && percent > 0 ? percent : null,
+      days: holidays === "only" ? [1, 2, 3, 4, 5, 6, 7] : days,
       fromHour: from ?? 0, toHour: to ?? 24, holidays,
       appliesTo: fd.get(`s${i}_applies`) === "shift_workers" ? "shift_workers" : "all",
+      group, notOnOvertime: fd.get(`s${i}_noot`) === "on",
     });
+  }
+
+  const eventSupplements: EventSupplement[] = [];
+  const evRows = Number(fd.get("ev_rows") ?? 0);
+  for (let i = 0; i < evRows; i++) {
+    const label = String(fd.get(`e${i}_label`) ?? "").trim();
+    if (!label || fd.get(`e${i}_delete`) === "on") continue;
+    const rate = numOrNull(fd.get(`e${i}_rate`));
+    const hol = numOrNull(fd.get(`e${i}_holiday`));
+    if (rate === null || Number.isNaN(rate) || rate < 0) errors.push(`Sats per gang for «${label}» mangler.`);
+    let key = String(fd.get(`e${i}_key`) ?? "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    if (!key) key = label.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30) || `hendelse_${i}`;
+    if (eventSupplements.some((s) => s.key === key)) key = `${key}_${i}`;
+    eventSupplements.push({ key, label, ratePerEvent: rate ?? 0, holidayRatePerEvent: hol !== null && !Number.isNaN(hol) ? hol : null,
+      appliesTo: fd.get(`e${i}_applies`) === "shift_workers" ? "shift_workers" : "all" });
   }
 
   const hpMode = String(fd.get("holidayPay") ?? "none");
@@ -75,6 +94,7 @@ export function rulesFromForm(fd: FormData): { rules?: RulesJson; error?: string
       calledOvertimeMinMinutes: Math.round((called ?? 0) * 60),
       shiftWorkersNoOvertime: fd.get("shiftWorkersNoOvertime") === "on",
       supplements,
+      eventSupplements,
       holidayPay: hpMode === "none" ? null : hpMode === "may" ? { minDays: hpDays, onlyKinds: ["may"] } : { minDays: hpDays },
     },
   };

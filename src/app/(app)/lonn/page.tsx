@@ -3,7 +3,9 @@ import { requireAdmin } from "@/lib/context";
 import { loadPayroll } from "@/lib/payroll-data";
 import { addDays, localDate } from "@/lib/time";
 import { ActionForm } from "@/components/Form";
-import { addCompTime, lockPeriod, reopenPeriod } from "./actions";
+import { addCompTime, lockPeriod, recordDifference, reopenPeriod } from "./actions";
+import { diffPay, type PayLine } from "@/lib/pay";
+import { checkWorkTime } from "@/lib/worktime-check";
 import { loadCompTime } from "@/lib/report-data";
 
 const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
@@ -27,6 +29,12 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
   const pendingTotal = Array.from(data.pendingByEmployee.values()).reduce((a, b) => a + b, 0);
   const thisPeriod = (periods ?? []).find((p) => p.starts_on === from && p.ends_on === to);
   const locked = thisPeriod?.status === "exported";
+  // Låst periode: vis det lagrede grunnlaget. Viser ny beregning noe annet (f.eks. nye satser), vises differansen.
+  const shown = locked && data.snapshot ? data.snapshot.pay : data.pay;
+  const diff = locked && data.snapshot ? diffPay(data.snapshot.pay, data.pay) : [];
+  const ver = data.rules.versionOn(to);
+  const unconfirmed = ver && data.rules.setOn(to)?.kind === "tariff" && !data.rules.versionConfirmed(ver.id);
+  const warnings = await checkWorkTime(ctx, from, to);
 
   const monthLink = (offset: number) => {
     const d = new Date(Date.UTC(Number(from.slice(0, 4)), Number(from.slice(5, 7)) - 1 + offset, 1));
@@ -52,8 +60,41 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         <label className="block"><span className="label">Fra</span><input name="fra" type="date" defaultValue={from} className="input" /></label>
         <label className="block"><span className="label">Til</span><input name="til" type="date" defaultValue={to} className="input" /></label>
         <div className="self-end"><button className="btn-ghost w-full">Vis periode</button></div>
-        <p className="self-end text-xs text-muted">Regler: <Link href="/innstillinger#lonnsregler" className="text-brand">{data.rulesName}</Link>. Satsene må kontrolleres mot gjeldende avtale.</p>
+        <p className="self-end text-xs text-muted">
+          Regler: <Link href="/innstillinger#lonnsregler" className="text-brand">{locked && data.snapshot ? data.snapshot.rulesName : data.rulesName}</Link>.
+          {locked && data.snapshot ? ` Lagret ${new Date(data.snapshot.computedAt).toLocaleDateString("nb-NO")}.` : " Satsene må kontrolleres mot gjeldende avtale."}
+        </p>
       </form>
+
+      {unconfirmed && (
+        <p className="card border-warn/40 bg-warn-soft text-sm text-warn">
+          Satsene som gjelder fra {ver!.valid_from.split("-").reverse().join(".")} er ikke bekreftet av dere ennå.{" "}
+          <Link href="/innstillinger#lonnsregler" className="font-semibold underline">Kontroller og bekreft</Link>
+        </p>
+      )}
+
+      {diff.length > 0 && (
+        <section className="card border-brand/40">
+          <h2 className="h2">Differanse etter låsing</h2>
+          <p className="mt-1 text-sm text-muted">
+            Perioden er låst, men en ny beregning gir et annet resultat, for eksempel etter nye satser med tilbakevirkning.
+            Last ned differansen og legg den inn som etterbetaling (eller trekk). Registrer den så når den er tatt med.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {diff.map((p) => (
+              <li key={p.employee.id}><b>{p.employee.name}:</b> {p.lines.map((l) => `${l.label.replace(" (differanse)", "")} ${l.hours > 0 ? "+" : ""}${num(l.hours)} t${l.amount !== undefined ? ` (${l.amount > 0 ? "+" : ""}${num(l.amount)} kr)` : ""}`).join(" · ")}</li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <a href={`/api/lonn?type=diff&format=xlsx&fra=${from}&til=${to}`} className="btn-primary">Last ned etterbetaling (Excel)</a>
+            <a href={`/api/lonn?type=diff&fra=${from}&til=${to}`} className="btn-ghost">Som CSV</a>
+            <ActionForm action={recordDifference} submitLabel="Registrer som tatt med">
+              <input type="hidden" name="fra" value={from} /><input type="hidden" name="til" value={to} />
+              <input type="hidden" name="period_id" value={thisPeriod!.id} />
+            </ActionForm>
+          </div>
+        </section>
+      )}
 
       {pendingTotal > 0 && (
         <p className="card border-warn/40 bg-warn-soft text-sm text-warn">
@@ -83,9 +124,10 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         </p>
       </section>
 
-      {data.pay.length === 0 ? <p className="card text-sm text-muted">Ingen ansatte i perioden.</p> : (
+      {shown.length === 0 ? <p className="card text-sm text-muted">Ingen ansatte i perioden.</p> : (
         <div className="grid gap-3 md:grid-cols-2">
-          {data.pay.map((p) => {
+          {shown.map((p) => {
+            const w = warnings.get(p.employee.id) ?? [];
             const b = data.balances.get(p.employee.id)!;
             const pending = data.pendingByEmployee.get(p.employee.id) ?? 0;
             return (
@@ -97,13 +139,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                 {p.lines.length === 0 ? <p className="mt-2 text-sm text-muted">Ingen godkjente timer eller fravær.</p> : (
                   <table className="mt-2 w-full text-sm">
                     <tbody className="divide-y divide-line">
-                      {p.lines.map((l) => (
-                        <tr key={l.code}>
-                          <td className="py-1.5 pr-2">{l.label}</td>
-                          <td className="py-1.5 text-right tabular-nums">{l.days !== undefined && l.days > 0 ? `${l.days} d · ` : ""}{num(l.hours)} t</td>
-                          <td className="w-24 py-1.5 text-right tabular-nums text-muted">{l.amount !== undefined ? `${num(l.amount)} kr` : ""}</td>
-                        </tr>
-                      ))}
+                      {p.lines.map((l, i) => <Line key={`${l.code}-${i}`} l={l} />)}
                     </tbody>
                   </table>
                 )}
@@ -117,6 +153,12 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                   </div>
                 </div>
                 {pending > 0 && <p className="mt-2 text-xs text-warn">{pending} ikke godkjent</p>}
+                {w.length > 0 && (
+                  <details className="mt-2 rounded-lg border border-warn/40 bg-warn-soft p-2 text-xs text-warn">
+                    <summary className="cursor-pointer font-semibold">{w.length} mulig{w.length === 1 ? "" : "e"} brudd på arbeidstidsreglene</summary>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">{w.map((x, i) => <li key={i}>{x.text}</li>)}</ul>
+                  </details>
+                )}
                 <CompTime employeeId={p.employee.id} c={comp.balances.get(p.employee.id)} history={comp.history.filter((h) => h.employeeId === p.employee.id).slice(0, 5)} today={today} />
               </section>
             );
@@ -140,6 +182,30 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         </section>
       )}
     </div>
+  );
+}
+
+function Line({ l }: { l: PayLine }) {
+  const value = l.quantity !== undefined ? `${num(l.quantity)} stk` : `${l.days !== undefined && l.days > 0 ? `${l.days} d · ` : ""}${num(l.hours)} t`;
+  const money = l.amount !== undefined ? `${num(l.amount)} kr` : l.percent ? `${num(l.percent)} %` : "";
+  return (
+    <tr>
+      <td className="py-1.5 pr-2" colSpan={3}>
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-baseline gap-2">
+            <span className="flex-1">{l.label}</span>
+            <span className="text-right tabular-nums">{value}</span>
+            <span className="w-24 text-right tabular-nums text-muted">{money}</span>
+          </summary>
+          {(l.why || l.details?.length) && (
+            <div className="mt-1 rounded bg-paper p-2 text-xs text-muted">
+              {l.why && <p>{l.why}</p>}
+              {l.details && l.details.length > 0 && <ul className="mt-1 space-y-0.5">{l.details.map((d) => <li key={d}>{d}</li>)}</ul>}
+            </div>
+          )}
+        </details>
+      </td>
+    </tr>
   );
 }
 

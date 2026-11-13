@@ -53,13 +53,22 @@ export async function switchOrganization(fd: FormData) {
   redirect("/");
 }
 
+/** Kunden bekrefter at satsene i en tariffversjon stemmer med avtalen. */
+export async function confirmPayRuleVersion(fd: FormData) {
+  const ctx = await requireAdmin();
+  const v = text(fd, "version_id");
+  if (v) await ctx.supabase.from("pay_rule_confirmations").insert({ org_id: ctx.org.id, version_id: v, confirmed_by: ctx.userId });
+  revalidatePath("/innstillinger");
+  revalidatePath("/lonn");
+}
+
 /** Velg lønnsregler (tariff eller arbeidsmiljøloven) fra en dato. */
 export async function setPayRules(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
   const set = text(fd, "rule_set_id");
   const from = text(fd, "valid_from");
   if (!set || !from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Velg regler og en dato." };
-  const { error } = await ctx.supabase.rpc("set_org_pay_rules", { p_org: ctx.org.id, p_rule_set: set, p_from: from });
+  const { error } = await ctx.supabase.rpc("set_org_pay_rules", { p_org: ctx.org.id, p_rule_set: set, p_from: from, p_confirm: fd.get("confirm") === "on" });
   if (error) return { error: error.message };
   revalidatePath("/innstillinger");
   revalidatePath("/lonn");
@@ -285,6 +294,9 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
     paid_holidays: fd.get("paid_holidays") === "on",
     days_per_week: Math.min(6, Math.max(1, num(fd, "days_per_week", 5))),
+    pay_rule_set_id: text(fd, "pay_rule_set_id"),
+    averaging_weeks: text(fd, "averaging_weeks") ? Math.min(52, Math.max(2, Math.round(num(fd, "averaging_weeks", 0)))) : null,
+    averaging_from: text(fd, "averaging_weeks") ? (text(fd, "averaging_from") ?? validFrom) : null,
   });
   if (error) return { error: error.message };
   revalidatePath(`/ansatte/${employeeId}`);

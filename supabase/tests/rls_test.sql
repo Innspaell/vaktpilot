@@ -617,7 +617,11 @@ update organizations set price_included = null where id = :'org_a';
 -- Lønnsregler: leder velger, andre kan ikke
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
-select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'bilutleie'), date '2026-01-01');
+do $$ begin
+  perform set_org_pay_rules((select id from organizations where name = 'Æ e trønder AS'), (select id from pay_rule_sets where key = 'bilutleie'), date '2026-01-01');
+  raise exception 'FEIL: tariff valgt uten bekreftelse';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'bilutleie'), date '2026-01-01', true);
 select pg_temp.check((select count(*) from org_pay_rules where org_id = :'org_a') = 1, 'regelvalg ikke lagret');
 select pg_temp.check((select count(*) from pay_rule_versions) >= 2, 'regelsett ikke synlige');
 select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
@@ -634,7 +638,7 @@ insert into pay_rule_sets (key, name, kind, org_id) values ('lokal_a', 'Lokal av
 insert into pay_rule_versions (rule_set_id, valid_from, rules) select id, '2026-01-01', '{}' from pay_rule_sets where key = 'lokal_a';
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
-select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01');
+select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01', true);
 insert into pay_rule_requests (org_id, created_by, message) values (:'org_a', '00000000-0000-0000-0000-0000000000a1', 'Vi har Reiselivsoverenskomsten');
 select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
 select pg_temp.check(not exists (select 1 from pay_rule_requests), 'ansatt ser forespørsler');
@@ -647,11 +651,27 @@ select pg_temp.check(exists (select 1 from notifications where kind = 'pay_rules
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
 do $$ begin
-  perform set_org_pay_rules((select id from organizations where name = 'Bedrift B'), (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01');
+  perform set_org_pay_rules((select id from organizations where name = 'Bedrift B'), (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01', true);
   raise exception 'FEIL: annen bedrift kunne velge lokal avtale';
 exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 reset role;
 delete from platform_admin_emails where email = 'leder@b.no';
+
+-- Utkast er usynlige for kunder; hendelser kan ikke registreres i låst periode
+insert into pay_rule_versions (rule_set_id, valid_from, rules, status) select id, '2027-01-01', '{}', 'draft' from pay_rule_sets where key = 'lokal_a';
+select pg_temp.check(not exists (select 1 from notifications where kind = 'pay_rules_updated' and body like '%01.01.2027%'), 'varsel sendt for utkast');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(not exists (select 1 from pay_rule_versions where status = 'draft'), 'kunde ser utkast');
+reset role;
+select set_config('request.jwt.claims', '{}', false);
+update pay_rule_versions set status = 'published' where status = 'draft' and valid_from = '2027-01-01';
+select pg_temp.check(exists (select 1 from notifications where kind = 'pay_rules_updated' and body like '%01.01.2027%'), 'ikke varsel ved publisering');
+insert into pay_periods (org_id, starts_on, ends_on, status) values (:'org_a', '2025-01-01', '2025-01-31', 'exported');
+do $$ begin
+  insert into pay_events (org_id, employee_id, date, key) select org_id, id, '2025-01-10', 'utlevering' from employees where full_name = 'Ola Nordmann';
+  raise exception 'FEIL: hendelse registrert i låst periode';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';

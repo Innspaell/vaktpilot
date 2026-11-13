@@ -109,3 +109,30 @@ export async function approveEntries(fd: FormData) {
   if (ids.length) await ctx.supabase.rpc("approve_time_entries", { p_ids: ids });
   refresh();
 }
+
+/** Registrer hendelser med fast beløp (f.eks. utlevering). Ansatt for seg selv, leder for alle. */
+export async function addPayEvent(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireOrg();
+  const employee = text(fd, "employee_id") ?? ctx.employeeId;
+  const date = text(fd, "date");
+  const key = text(fd, "key");
+  const count = Math.round(Number(fd.get("count") ?? 1));
+  if (!employee || !date || !key || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Velg dato og type." };
+  if (!(count >= 1 && count <= 100)) return { error: "Antall må være mellom 1 og 100." };
+  if (date > localDate(new Date(), ctx.org.timezone)) return { error: "Datoen kan ikke være fram i tid." };
+  const { error } = await ctx.supabase.from("pay_events").insert({
+    org_id: ctx.org.id, employee_id: employee, date, key, count, note: text(fd, "note"), created_by: ctx.userId,
+  });
+  if (error) return { error: error.message.includes("låst") ? error.message : "Kunne ikke registrere." };
+  refresh();
+  revalidatePath("/lonn");
+  return { ok: "Registrert." };
+}
+
+export async function deletePayEvent(fd: FormData) {
+  const ctx = await requireOrg();
+  const id = text(fd, "id");
+  if (id) await ctx.supabase.from("pay_events").delete().eq("id", id);
+  refresh();
+  revalidatePath("/lonn");
+}

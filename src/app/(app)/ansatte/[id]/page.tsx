@@ -12,12 +12,13 @@ export default async function EmployeePage({ params, searchParams }: { params: P
   const { ny } = await searchParams;
   const ctx = await requireAdmin();
 
-  const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }, { data: statusRows }] = await Promise.all([
+  const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }, { data: statusRows }, { data: ruleSets }] = await Promise.all([
     ctx.supabase.from("employees").select("*").eq("id", id).eq("org_id", ctx.org.id).maybeSingle(),
     ctx.supabase.from("employment_terms").select("*").eq("employee_id", id).order("valid_from", { ascending: false }),
     ctx.supabase.from("work_roles").select("id, name").eq("org_id", ctx.org.id).order("name"),
     ctx.supabase.from("employee_work_roles").select("work_role_id").eq("employee_id", id),
     ctx.supabase.rpc("employees_login_status", { p_org: ctx.org.id }),
+    ctx.supabase.from("pay_rule_sets").select("id, name, pay_rule_versions!inner(status)").eq("pay_rule_versions.status", "published").order("name"),
   ]);
   if (!e) notFound();
   const ls = loginStatus(e, ((statusRows ?? []) as LoginStatusRow[]).find((r) => r.employee_id === e.id));
@@ -109,6 +110,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             Gjelder fra {current.valid_from}: {Number(current.position_pct)} % · {Number(current.hours_per_week)} t/uke ·{" "}
             {current.pay_type === "fixed" ? "fastlønn" : "timelønn"} · {current.paid_holidays ? "betalte helligdager" : "ikke betalte helligdager"} ·{" "}
             {Number(current.days_per_week ?? 5)} arbeidsdager i uka
+            {current.pay_rule_set_id ? ` · egen tariff: ${(ruleSets ?? []).find((r) => r.id === current.pay_rule_set_id)?.name ?? "ukjent"}` : ""}
+            {current.averaging_weeks ? ` · gjennomsnittsberegning over ${current.averaging_weeks} uker fra ${current.averaging_from}` : ""}
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">Ingen gjeldende avtale.</p>
@@ -128,6 +131,16 @@ export default async function EmployeePage({ params, searchParams }: { params: P
               </select>
             </Field>
             <Field label="Arbeidsdager i uka" hint="Brukes til ferieberegning."><input name="days_per_week" type="number" min={1} max={6} step="0.5" defaultValue={Number(current?.days_per_week ?? 5)} className="input" /></Field>
+            <Field label="Lønnsregler" hint="Bare hvis den ansatte har en annen avtale enn bedriften.">
+              <select name="pay_rule_set_id" defaultValue={current?.pay_rule_set_id ?? ""} className="input">
+                <option value="">Som bedriften</option>
+                {(ruleSets ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Gjennomsnittsberegning (uker)" hint="Skriftlig avtale etter aml. § 10-5. Tomt = nei.">
+              <input name="averaging_weeks" type="number" min={2} max={52} defaultValue={current?.averaging_weeks ?? ""} className="input" />
+            </Field>
+            <Field label="Snitt beregnes fra"><input name="averaging_from" type="date" defaultValue={current?.averaging_from ?? ""} className="input" /></Field>
             <label className="flex items-center gap-2 self-end pb-3 text-sm">
               <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? true} className="h-4 w-4" /> Betalte helligdager
             </label>
