@@ -53,6 +53,19 @@ export async function switchOrganization(fd: FormData) {
   redirect("/");
 }
 
+/** Velg lønnsregler (tariff eller arbeidsmiljøloven) fra en dato. */
+export async function setPayRules(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const set = text(fd, "rule_set_id");
+  const from = text(fd, "valid_from");
+  if (!set || !from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) return { error: "Velg regler og en dato." };
+  const { error } = await ctx.supabase.rpc("set_org_pay_rules", { p_org: ctx.org.id, p_rule_set: set, p_from: from });
+  if (error) return { error: error.message };
+  revalidatePath("/innstillinger");
+  revalidatePath("/lonn");
+  return { ok: `Lagret. Reglene gjelder fra ${from.split("-").reverse().join(".")}.` };
+}
+
 export async function updateOrganization(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
   const { error } = await ctx.supabase

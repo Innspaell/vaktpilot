@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { loadPayroll } from "@/lib/payroll-data";
 import { addDays, localDate } from "@/lib/time";
-import { BILUTLEIE_2024 } from "@/lib/pay";
 import { ActionForm } from "@/components/Form";
 import { addCompTime, lockPeriod, reopenPeriod } from "./actions";
 import { loadCompTime } from "@/lib/report-data";
@@ -53,7 +52,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         <label className="block"><span className="label">Fra</span><input name="fra" type="date" defaultValue={from} className="input" /></label>
         <label className="block"><span className="label">Til</span><input name="til" type="date" defaultValue={to} className="input" /></label>
         <div className="self-end"><button className="btn-ghost w-full">Vis periode</button></div>
-        <p className="self-end text-xs text-muted">Regler: {BILUTLEIE_2024.name}. Satsene må kontrolleres mot gjeldende avtale.</p>
+        <p className="self-end text-xs text-muted">Regler: <Link href="/innstillinger#lonnsregler" className="text-brand">{data.rulesName}</Link>. Satsene må kontrolleres mot gjeldende avtale.</p>
       </form>
 
       {pendingTotal > 0 && (

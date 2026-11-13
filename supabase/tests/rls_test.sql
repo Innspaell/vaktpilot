@@ -614,6 +614,20 @@ reset role;
 select set_config('request.jwt.claims', '{}', false);
 update organizations set price_included = null where id = :'org_a';
 
+-- Lønnsregler: leder velger, andre kan ikke
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'bilutleie'), date '2026-01-01');
+select pg_temp.check((select count(*) from org_pay_rules where org_id = :'org_a') = 1, 'regelvalg ikke lagret');
+select pg_temp.check((select count(*) from pay_rule_versions) >= 2, 'regelsett ikke synlige');
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+do $$ begin
+  perform set_org_pay_rules((select id from organizations where name = 'Æ e trønder AS'), (select id from pay_rule_sets where key = 'aml'), date '2026-01-01');
+  raise exception 'FEIL: annen bedrift kunne velge lønnsregler';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.check(not exists (select 1 from org_pay_rules where org_id = :'org_a'), 'annen bedrift ser regelvalg');
+reset role;
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

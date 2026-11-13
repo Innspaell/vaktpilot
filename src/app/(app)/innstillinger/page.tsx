@@ -2,14 +2,18 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
-import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, updateOrganization, uploadLogo } from "../actions";
+import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, setPayRules, updateOrganization, uploadLogo } from "../actions";
+import { loadPayRules } from "@/lib/pay-rules-data";
+import { describeRules } from "@/lib/pay-rules-text";
+import { localDate } from "@/lib/time";
 
 export default async function SettingsPage() {
   const ctx = await requireAdmin();
-  const [{ data: org }, { data: roles }, { data: absenceTypes }] = await Promise.all([
+  const [{ data: org }, { data: roles }, { data: absenceTypes }, payRules] = await Promise.all([
     ctx.supabase.from("organizations").select("*").eq("id", ctx.org.id).single(),
     ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id).order("sort_order").order("name"),
     ctx.supabase.from("absence_types").select("id, name, paid, is_sick, unit").eq("org_id", ctx.org.id).order("name"),
+    loadPayRules(ctx),
   ]);
 
   return (
@@ -74,6 +78,47 @@ export default async function SettingsPage() {
             </label>
           </fieldset>
         </ActionForm>
+      </section>
+
+      <section id="lonnsregler" className="card scroll-mt-20">
+        <h2 className="h2">Lønnsregler</h2>
+        {(() => {
+          const today = localDate(new Date(), ctx.org.timezone);
+          const cur = payRules.setOn(today);
+          const ver = payRules.versionOn(today);
+          const rules = payRules.resolve(today);
+          const fromRow = [...payRules.choices].reverse().find((c) => c.valid_from <= today);
+          return (
+            <>
+              <p className="mt-1 text-sm text-muted">
+                Reglene bestemmer hva som blir ordinær tid, overtid og tillegg i lønnsgrunnlaget. Uten tariffavtale gjelder arbeidsmiljølovens minstekrav.
+                Har dere tariffavtale som ikke står i listen, ta kontakt, så legger vi den inn.
+              </p>
+              <div className="mt-3 rounded-lg bg-paper p-3">
+                <div className="font-semibold">{cur?.name ?? "Uten tariff (arbeidsmiljøloven)"}</div>
+                <div className="text-xs text-muted">
+                  {fromRow && fromRow.valid_from > "2000-01-01" ? `Valgt fra ${fromRow.valid_from.split("-").reverse().join(".")}. ` : ""}
+                  {ver && ver > "2000-01-01" ? `Satser gjeldende fra ${ver.split("-").reverse().join(".")}.` : ""}
+                </div>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{describeRules(rules).map((l) => <li key={l}>{l}</li>)}</ul>
+                {cur?.kind === "tariff" && <p className="mt-2 text-xs text-muted">Kontroller satsene mot avtalen dere har. Si fra hvis noe ikke stemmer.</p>}
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-semibold text-brand">Bytt lønnsregler</summary>
+                <ActionForm action={setPayRules} submitLabel="Lagre" className="mt-3 grid gap-3 md:grid-cols-2">
+                  <Field label="Regler">
+                    <select name="rule_set_id" defaultValue={cur?.id} className="input">
+                      {payRules.sets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Gjelder fra" hint="Timer fra og med denne datoen beregnes med de nye reglene. Låste lønnsperioder endres ikke.">
+                    <input name="valid_from" type="date" required defaultValue={today.slice(0, 8) + "01"} className="input" />
+                  </Field>
+                </ActionForm>
+              </details>
+            </>
+          );
+        })()}
       </section>
 
       <section className="card">

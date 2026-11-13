@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { at, calculatePay, payrollCsv, timeBalance, type PayEmployee } from "./pay";
+import { ARBEIDSMILJOLOVEN, BILUTLEIE_2024, at, calculatePay as calc, parseRules, payrollCsv, timeBalance, type PayEmployee } from "./pay";
+
+// Testene under er skrevet for Bilutleieoverenskomsten
+const calculatePay = (...a: Parameters<typeof calc>) => calc(a[0], a[1], a[2], a[3], a[4] ?? BILUTLEIE_2024, a[5]);
 
 const kari: PayEmployee = {
   id: "k", name: "Kari", payType: "hourly", hoursPerWeek: 22.5, fullTimeHours: 37.5,
@@ -77,5 +80,49 @@ describe("timesaldo", () => {
     expect(b.workedHours).toBe(7.5);
     expect(b.paidAbsenceHours).toBe(4.5);
     expect(b.diffHours).toBe(-10.5);
+  });
+});
+
+describe("lønnsregler som data", () => {
+  it("bilutleie lagret som JSON gir samme resultat", () => {
+    const json = JSON.parse(JSON.stringify(BILUTLEIE_2024));
+    const r = parseRules(json, "bilutleie", "Bilutleie");
+    const e = [entry("2026-11-16", "16:00", "23:00", 0), entry("2026-11-21", "10:00", "16:00", 0), entry("2026-11-22", "10:00", "14:00", 0)];
+    const a = calc({ ...kari, isShiftWorker: true }, e, [], { from: "2026-11-16", to: "2026-11-22" }, BILUTLEIE_2024);
+    const b = calc({ ...kari, isShiftWorker: true }, e, [], { from: "2026-11-16", to: "2026-11-22" }, r);
+    expect(b.lines).toEqual(a.lines);
+  });
+
+  it("uten tariff: overtid 40 % over 9 timer om dagen, ingen søndagsovertid", () => {
+    const r = calc(kari, [entry("2026-11-16", "07:00", "18:00", 0), entry("2026-11-22", "10:00", "14:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" }, ARBEIDSMILJOLOVEN);
+    expect(line(r, "overtime_40")).toBe(2);
+    expect(line(r, "overtime_100")).toBe(0);
+    expect(line(r, "ordinary") + line(r, "extra")).toBe(13);
+  });
+
+  it("uten tariff: overtid over 40 timer i uka", () => {
+    const full = { ...kari, hoursPerWeek: 37.5 };
+    const days = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map((d) => entry(d, "08:00", "17:00", 0)); // 5 × 9 = 45
+    const r = calc(full, days, [], { from: "2026-11-16", to: "2026-11-22" }, ARBEIDSMILJOLOVEN);
+    expect(line(r, "ordinary")).toBe(37.5);
+    expect(line(r, "extra")).toBe(2.5);
+    expect(line(r, "overtime_40")).toBe(5);
+  });
+
+  it("uten tariff: helligdagslønn bare for 1. og 17. mai", () => {
+    const dec = calc(kari, [], [], { from: "2026-12-01", to: "2026-12-31" }, ARBEIDSMILJOLOVEN);
+    expect(dec.lines.find((l) => l.code === "holiday_pay")).toBeUndefined();
+    const may = calc(kari, [], [], { from: "2026-05-01", to: "2026-05-31" }, ARBEIDSMILJOLOVEN);
+    // 1. mai fredag, 17. mai søndag (ikke hverdag); Kristi himmelfart og 2. pinsedag teller ikke
+    expect(may.lines.find((l) => l.code === "holiday_pay")?.days).toBe(1);
+  });
+
+  it("ny versjon midt i perioden gir egne linjer per sats", () => {
+    const cheap = BILUTLEIE_2024;
+    const dear = { ...BILUTLEIE_2024, supplements: BILUTLEIE_2024.supplements.map((s) => ({ ...s, ratePerHour: s.ratePerHour + 10 })) };
+    const resolver = (d: string) => (d >= "2026-11-19" ? dear : cheap);
+    const r = calc({ ...kari, isShiftWorker: true }, [entry("2026-11-16", "18:00", "20:00", 0), entry("2026-11-19", "18:00", "20:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" }, resolver);
+    const ev = r.lines.filter((l) => l.code === "supp_evening");
+    expect(ev.map((l) => l.rate)).toEqual([21.5, 31.5]);
   });
 });

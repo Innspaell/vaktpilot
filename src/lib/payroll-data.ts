@@ -2,6 +2,7 @@ import "server-only";
 import type { AppContext } from "./context";
 import { addDays, dayBounds } from "./time";
 import { calculatePay, timeBalance, type PayAbsence, type PayEmployee, type PayEntry } from "./pay";
+import { loadPayRules } from "./pay-rules-data";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
 
@@ -25,13 +26,14 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     .eq("org_id", ctx.org.id).eq("status", "approved").lte("from_date", to).gte("to_date", from);
   if (onlyEmployee) absQ = absQ.eq("employee_id", onlyEmployee);
 
-  const [{ data: emps }, { data: terms }, { data: org }, { data: ents }, { data: abs }] = await Promise.all([
+  const [{ data: emps }, { data: terms }, { data: org }, { data: ents }, { data: abs }, rules] = await Promise.all([
     empQ,
     ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, pay_type, paid_holidays")
       .eq("org_id", ctx.org.id).lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`),
     ctx.supabase.from("organizations").select("full_time_hours_week").eq("id", ctx.org.id).single(),
     entQ,
     absQ,
+    loadPayRules(ctx),
   ]);
 
   const fullTime = Number(org?.full_time_hours_week ?? 37.5);
@@ -68,7 +70,8 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const period = { from, to };
   return {
     period,
-    pay: employees.map((e) => calculatePay(e, approved, absences, period, undefined, tz)),
+    pay: employees.map((e) => calculatePay(e, approved, absences, period, rules.resolve, tz)),
+    rulesName: rules.setOn(to)?.name ?? "Uten tariff (arbeidsmiljøloven)",
     balances: new Map(employees.map((e) => [e.id, timeBalance(e, all, absences, period, tz)])),
     pendingByEmployee: pending.reduce((m, r) => m.set(r.employee_id, (m.get(r.employee_id) ?? 0) + 1), new Map<string, number>()),
     lockedCount: rows.filter((r) => r.status === "locked").length,
