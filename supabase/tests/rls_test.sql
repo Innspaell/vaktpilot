@@ -628,6 +628,31 @@ exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 select pg_temp.check(not exists (select 1 from org_pay_rules where org_id = :'org_a'), 'annen bedrift ser regelvalg');
 reset role;
 
+-- Lokal avtale, forespørsel og varsel om nye satser
+insert into platform_admin_emails values ('leder@b.no') on conflict do nothing;
+insert into pay_rule_sets (key, name, kind, org_id) values ('lokal_a', 'Lokal avtale A', 'tariff', :'org_a');
+insert into pay_rule_versions (rule_set_id, valid_from, rules) select id, '2026-01-01', '{}' from pay_rule_sets where key = 'lokal_a';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select set_org_pay_rules(:'org_a', (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01');
+insert into pay_rule_requests (org_id, created_by, message) values (:'org_a', '00000000-0000-0000-0000-0000000000a1', 'Vi har Reiselivsoverenskomsten');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check(not exists (select 1 from pay_rule_requests), 'ansatt ser forespørsler');
+reset role;
+select set_config('request.jwt.claims', '{}', false);
+select pg_temp.check(exists (select 1 from notifications where kind = 'platform_tariff_request'), 'InnSpæll fikk ikke varsel om forespørsel');
+insert into pay_rule_versions (rule_set_id, valid_from, rules) select id, '2026-06-01', '{}' from pay_rule_sets where key = 'lokal_a';
+select pg_temp.check(exists (select 1 from notifications where kind = 'pay_rules_updated' and org_id = :'org_a'), 'leder fikk ikke varsel om nye satser');
+-- Bedrift B kan ikke velge A sin lokale avtale
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+do $$ begin
+  perform set_org_pay_rules((select id from organizations where name = 'Bedrift B'), (select id from pay_rule_sets where key = 'lokal_a'), date '2026-02-01');
+  raise exception 'FEIL: annen bedrift kunne velge lokal avtale';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+reset role;
+delete from platform_admin_emails where email = 'leder@b.no';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();

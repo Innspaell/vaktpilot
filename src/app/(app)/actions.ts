@@ -66,6 +66,36 @@ export async function setPayRules(_: ActionState, fd: FormData): Promise<ActionS
   return { ok: `Lagret. Reglene gjelder fra ${from.split("-").reverse().join(".")}.` };
 }
 
+const AGREEMENT_TYPES: Record<string, string> = {
+  "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+};
+
+/** Kunden ber InnSpæll legge inn en annen tariff eller lokal avtale. */
+export async function requestPayRules(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const message = String(fd.get("message") ?? "").trim().slice(0, 4000);
+  const file = fd.get("file");
+  const hasFile = file instanceof File && file.size > 0;
+  if (!message && !hasFile) return { error: "Skriv hvilken avtale dere har, eller last opp avtalen." };
+  let path: string | null = null;
+  let name: string | null = null;
+  if (hasFile) {
+    const ext = AGREEMENT_TYPES[file.type];
+    if (!ext) return { error: "Bruk PDF, Word eller bilde (PNG/JPG)." };
+    if (file.size > 4 * 1024 * 1024) return { error: "Filen er for stor (maks 4 MB). Skriv navnet på avtalen i stedet, så finner vi den." };
+    path = `${ctx.org.id}/${Date.now()}.${ext}`;
+    name = file.name.slice(0, 200);
+    const { error } = await ctx.supabase.storage.from("tariffavtaler").upload(path, file, { contentType: file.type });
+    if (error) return { error: `Kunne ikke laste opp: ${error.message}` };
+  }
+  const { error } = await ctx.supabase.from("pay_rule_requests")
+    .insert({ org_id: ctx.org.id, created_by: ctx.userId, message, file_path: path, file_name: name });
+  if (error) return { error: error.message };
+  revalidatePath("/innstillinger");
+  return { ok: "Sendt til InnSpæll. Dere får beskjed i appen når avtalen er lagt inn." };
+}
+
 export async function updateOrganization(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
   const { error } = await ctx.supabase

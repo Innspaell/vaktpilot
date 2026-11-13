@@ -12,7 +12,7 @@ export interface RuleSetInfo { id: string; key: string; name: string; descriptio
  */
 export async function loadPayRules(ctx: Ctx) {
   const [{ data: sets }, { data: versions }, { data: chosen }] = await Promise.all([
-    ctx.supabase.from("pay_rule_sets").select("id, key, name, description, kind").order("kind").order("name"),
+    ctx.supabase.from("pay_rule_sets").select("id, key, name, description, kind, org_id").order("kind").order("name"),
     ctx.supabase.from("pay_rule_versions").select("rule_set_id, valid_from, rules").order("valid_from"),
     ctx.supabase.from("org_pay_rules").select("valid_from, rule_set_id").eq("org_id", ctx.org.id).order("valid_from"),
   ]);
@@ -47,6 +47,7 @@ export async function loadPayRules(ctx: Ctx) {
   return {
     resolve,
     sets: setList,
+    hasVersions: (id: string) => vers.some((v) => v.rule_set_id === id),
     choices: choices.map((c) => ({ ...c, set: byId.get(c.rule_set_id) })),
     /** Regelsettet som gjelder i dag (eller på en dato) */
     setOn: (date: string) => byId.get(setFor(date) ?? "") ?? null,

@@ -83,7 +83,10 @@ export default async function PlatformPage() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="h1">Plattform</h1>
-        <Link href="/ny-bedrift" className="btn-primary">Ny bedrift</Link>
+        <div className="flex gap-2">
+          <Link href="/plattform/lonnsregler" className="btn-ghost">Lønnsregler og tariffer</Link>
+          <Link href="/ny-bedrift" className="btn-primary">Ny bedrift</Link>
+        </div>
       </header>
       {error && <p className="card bg-bad-soft text-sm text-bad">{error.message}</p>}
 

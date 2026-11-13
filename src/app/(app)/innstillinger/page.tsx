@@ -2,18 +2,19 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { CompanyLookup } from "@/components/CompanyLookup";
-import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, setPayRules, updateOrganization, uploadLogo } from "../actions";
+import { addWorkRole, deleteWorkRole, moveWorkRole, removeLogo, requestPayRules, setPayRules, updateOrganization, uploadLogo } from "../actions";
 import { loadPayRules } from "@/lib/pay-rules-data";
 import { describeRules } from "@/lib/pay-rules-text";
 import { localDate } from "@/lib/time";
 
 export default async function SettingsPage() {
   const ctx = await requireAdmin();
-  const [{ data: org }, { data: roles }, { data: absenceTypes }, payRules] = await Promise.all([
+  const [{ data: org }, { data: roles }, { data: absenceTypes }, payRules, { data: ruleRequests }] = await Promise.all([
     ctx.supabase.from("organizations").select("*").eq("id", ctx.org.id).single(),
     ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id).order("sort_order").order("name"),
     ctx.supabase.from("absence_types").select("id, name, paid, is_sick, unit").eq("org_id", ctx.org.id).order("name"),
     loadPayRules(ctx),
+    ctx.supabase.from("pay_rule_requests").select("id, message, file_name, status, reply, created_at").eq("org_id", ctx.org.id).order("created_at", { ascending: false }).limit(5),
   ]);
 
   return (
@@ -108,13 +109,41 @@ export default async function SettingsPage() {
                 <ActionForm action={setPayRules} submitLabel="Lagre" className="mt-3 grid gap-3 md:grid-cols-2">
                   <Field label="Regler">
                     <select name="rule_set_id" defaultValue={cur?.id} className="input">
-                      {payRules.sets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {payRules.sets.filter((s) => payRules.hasVersions(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </Field>
                   <Field label="Gjelder fra" hint="Timer fra og med denne datoen beregnes med de nye reglene. Låste lønnsperioder endres ikke.">
                     <input name="valid_from" type="date" required defaultValue={today.slice(0, 8) + "01"} className="input" />
                   </Field>
                 </ActionForm>
+              </details>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-semibold text-brand">Har dere en annen tariff eller lokal avtale?</summary>
+                <p className="mt-2 text-sm text-muted">
+                  Skriv hvilken avtale dere følger, og last gjerne opp avtalen eller en oversikt over satsene. InnSpæll legger den inn, og dere får beskjed i appen.
+                </p>
+                <ActionForm action={requestPayRules} submitLabel="Send til InnSpæll" className="mt-3 space-y-3">
+                  <Field label="Hva slags avtale?">
+                    <textarea name="message" rows={3} placeholder="F.eks. «Reiselivsoverenskomsten, og lokal avtale om 30 kr ekstra per time på søndager»" className="input" />
+                  </Field>
+                  <Field label="Avtalen (valgfritt)" hint="PDF, Word eller bilde. Maks 4 MB.">
+                    <input name="file" type="file" accept=".pdf,.doc,.docx,image/png,image/jpeg" className="input" />
+                  </Field>
+                </ActionForm>
+                {(ruleRequests ?? []).length > 0 && (
+                  <ul className="mt-3 divide-y divide-line text-sm">
+                    {(ruleRequests ?? []).map((r) => (
+                      <li key={r.id} className="py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-muted">{new Date(r.created_at).toLocaleDateString("nb-NO")}{r.file_name ? ` · ${r.file_name}` : ""}</span>
+                          <span className={`badge ${r.status === "done" ? "bg-good-soft text-good" : "bg-warn-soft text-warn"}`}>{r.status === "done" ? "Behandlet" : "Sendt"}</span>
+                        </div>
+                        {r.message && <p className="mt-1 line-clamp-2">{r.message}</p>}
+                        {r.reply && <p className="mt-1 text-good">Svar: {r.reply}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </details>
             </>
           );
