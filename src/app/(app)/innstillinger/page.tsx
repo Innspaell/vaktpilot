@@ -23,6 +23,10 @@ export default async function SettingsPage() {
         <span><b>Varsler</b><span className="block text-sm text-muted">Velg hva ansatte og ledere skal få beskjed om</span></span>
         <span className="text-brand">›</span>
       </Link>
+      <Link href="/innstillinger/abonnement" className="card flex items-center justify-between hover:border-brand">
+        <span><b>Abonnement</b><span className="block text-sm text-muted">Pris, og hvor mange aktive ansatte dere har denne måneden</span></span>
+        <span className="text-brand">›</span>
+      </Link>
 
       <section className="card">
         <h2 className="h2">Bedrift</h2>

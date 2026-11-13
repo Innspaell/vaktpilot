@@ -589,6 +589,31 @@ exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 reset role;
 update organizations set clock_enabled = true where id = :'org_a';
 
+-- Aktive ansatte per måned
+select set_config('request.jwt.claims', '{}', false);
+update platform_settings set per_employee_price = 49 where id = 1;
+update organizations set price_included = 1 where id = :'org_a';
+select run_usage();
+select pg_temp.check((select active_count from usage_months where org_id = :'org_a' and month = date_trunc('month', now() at time zone 'Europe/Oslo')::date) >= 1, 'aktive ansatte ble ikke telt');
+select pg_temp.check((select amount from usage_months where org_id = :'org_a' and month = date_trunc('month', now() at time zone 'Europe/Oslo')::date)
+  = 299 + greatest((select active_count from usage_months where org_id = :'org_a' and month = date_trunc('month', now() at time zone 'Europe/Oslo')::date) - 1, 0) * 49, 'feil beløp');
+select pg_temp.check((select final from usage_months where org_id = :'org_a' and month = (date_trunc('month', now() at time zone 'Europe/Oslo') - interval '1 month')::date), 'forrige måned ble ikke låst');
+select run_usage();
+select pg_temp.check((select count(*) from notifications where org_id = :'org_a' and kind = 'plan_over') = (select count(*) from memberships where org_id = :'org_a' and role in ('owner','admin')), 'varsel om over grensen ikke sendt nøyaktig én gang');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check(not exists (select 1 from usage_months), 'ansatt ser abonnementstall');
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+select pg_temp.check(not exists (select 1 from usage_months where org_id = :'org_a'), 'annen bedrift ser abonnementstall');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin
+  update organizations set price_base = 0 where name = 'Æ e trønder AS';
+  raise exception 'FEIL: leder kunne endre egen pris';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+reset role;
+select set_config('request.jwt.claims', '{}', false);
+update organizations set price_included = null where id = :'org_a';
+
 -- Påminnelser og sletterutiner kjører uten feil; sluttet ansatt mister tilgang
 update employees set start_date = current_date - 400, end_date = current_date - 1 where full_name = 'Kari Nordmann';
 select run_reminders();
