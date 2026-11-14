@@ -108,6 +108,7 @@ export default async function PlatformPage() {
         <h1 className="h1">Plattform</h1>
         <div className="flex gap-2">
           <Link href="/plattform/lonnsregler" className="btn-ghost">Lønnsregler og tariffer</Link>
+          <Link href="/plattform/nettside" className="btn-ghost">Nettsiden</Link>
           <Link href="/ny-bedrift" className="btn-primary">Ny bedrift</Link>
         </div>
       </header>
