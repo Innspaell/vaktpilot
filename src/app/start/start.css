@@ -1,0 +1,44 @@
+/* Landingssiden: egen skrift for overskrifter og håndskrift på kjøleskapslappen. */
+.start {
+  --display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --hand: "Caveat", "Comic Sans MS", cursive;
+  --postit: #fff2a6;
+  --fjord: #12343b;
+  --magnet: #c8372d;
+}
+.start .display {
+  font-family: var(--display);
+  font-variation-settings: "opsz" 96;
+  letter-spacing: -0.02em;
+}
+.start .hand { font-family: var(--hand); }
+
+/* Kjøleskapslappen */
+.start .note {
+  background: var(--postit);
+  transform: rotate(-4deg);
+  box-shadow: 0 1px 0 rgba(22, 32, 43, 0.08), 0 14px 30px -12px rgba(22, 32, 43, 0.35);
+}
+.start .magnet {
+  background: radial-gradient(circle at 35% 30%, #e8665c, var(--magnet) 60%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Overstreking som tegnes én gang når siden lastes, også over flere linjer */
+.start .strike {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 60%;
+  background-size: 100% 0.07em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  animation: start-strike 0.6s ease-out both;
+  animation-delay: var(--d, 0.4s);
+}
+@keyframes start-strike {
+  from { background-size: 0% 0.07em; }
+  to { background-size: 100% 0.07em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .start .strike { animation: none; }
+}
