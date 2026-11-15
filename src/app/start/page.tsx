@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/montserrat";
 import "@fontsource/caveat/500.css";
 import "./start.css";
 import { VENDOR } from "@/lib/legal";
@@ -46,43 +46,51 @@ export default async function StartPage() {
   const img = await loadSiteImages();
   return (
     <div className="start min-h-dvh bg-white text-ink">
-      <p className="bg-[var(--postit)] px-4 py-2 text-center text-sm">
-        Vaktpilot e i testfase. Vi prøver den ut sammen med de første bedriftene, og innlogging og kjøp åpner snart.
+      <p className="bg-[var(--postit)] px-4 py-1.5 text-center text-xs sm:text-sm">
+        Vaktpilot e i testfase. Vi prøver den ut sammen med de første bedriftene.
       </p>
 
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5">
-        <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
-          <span className="display text-xl font-bold">Vaktpilot</span>
+      <header className="sticky top-0 z-30 border-b border-line/70 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
+          <a href="#" className="flex items-center gap-2.5" aria-label="Vaktpilot, til toppen">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
+            <span className="display text-lg font-extrabold">Vaktpilot</span>
+          </a>
+          <nav className="ml-4 hidden items-center gap-6 text-sm font-medium text-muted md:flex" aria-label="På siden">
+            <a href="#slik" className="hover:text-ink">Slik virker det</a>
+            <a href="#pris" className="hover:text-ink">Pris</a>
+            <a href="#sporsmal" className="hover:text-ink">Spørsmål</a>
+          </nav>
+          <div className="ml-auto flex items-center gap-4">
+            <ComingSoon className="whitespace-nowrap rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink/80 hover:text-ink sm:border-0 sm:px-0">Logg inn</ComingSoon>
+            <ComingSoon className="btn-primary hidden whitespace-nowrap px-4 py-2 text-sm sm:inline-flex">Kjøp Vaktpilot</ComingSoon>
+          </div>
         </div>
-        <nav className="flex items-center gap-2">
-          <ComingSoon className="btn-ghost">Logg inn</ComingSoon>
-          <ComingSoon className="btn-primary hidden sm:inline-flex">Kjøp Vaktpilot</ComingSoon>
-        </nav>
       </header>
 
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-8 md:grid-cols-[1fr_1fr] md:pt-14">
         <div>
-          <h1 className="display text-[2.6rem] font-extrabold leading-[1.02] [text-wrap:balance] md:text-[4.2rem]">
+          <h1 className="display text-[2.25rem] font-extrabold leading-[1.05] [text-wrap:balance] sm:text-[2.8rem] lg:text-[3.6rem]">
             Vaktplan for folk som har bedre ting å gjøre på søndagskvelden.
           </h1>
           <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-muted">
             Vaktpilot tar over for regnearket, gruppechatten og lappen på kjøleskapet. Du setter opp uka på et par minutter,
             de ansatte ser vaktene sine på mobilen, og lønnsgrunnlaget ligger klart når måneden er omme.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
             <ComingSoon className="btn-primary px-6 py-3 text-base">Kjøp Vaktpilot</ComingSoon>
-            <ComingSoon className="btn-ghost px-6 py-3 text-base">Logg inn</ComingSoon>
+            <a href="#pris" className="text-sm font-semibold text-brand hover:underline">Se pris</a>
           </div>
+          <p className="mt-3 text-sm text-muted">Kjøp og innlogging åpner når testfasen er over.</p>
         </div>
 
         <HeroPicture image={img.hero} />
       </section>
 
-      <section className="border-t border-line">
+      <section id="slik" className="scroll-mt-16 border-t border-line">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 md:grid-cols-[0.9fr_1.1fr] md:items-start">
-          <figure className="md:sticky md:top-8">
+          <figure className="md:sticky md:top-24">
             <Picture image={img.tavle} className="w-full rounded-2xl shadow-lg" sizes="(min-width: 768px) 45vw, 100vw" />
             <figcaption className="hand mt-2 text-xl text-muted">Kjent syn? Tavla vi alle har hatt.</figcaption>
           </figure>
@@ -129,7 +137,7 @@ export default async function StartPage() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-5xl gap-10 px-4 py-16 md:grid-cols-[1.2fr_0.8fr]">
+      <section id="pris" className="mx-auto grid max-w-5xl scroll-mt-16 gap-10 px-4 py-16 md:grid-cols-[1.2fr_0.8fr]">
         <div>
           <h2 className="display text-2xl font-bold md:text-3xl">Lagd i Stjørdal</h2>
           <div className="mt-4 max-w-[36rem] space-y-4 leading-relaxed">
@@ -157,7 +165,7 @@ export default async function StartPage() {
         </div>
       </section>
 
-      <section className="bg-paper">
+      <section id="sporsmal" className="scroll-mt-16 bg-paper">
         <div className="mx-auto max-w-3xl px-4 py-16">
           <h2 className="display text-2xl font-bold md:text-3xl">Spørsmål og svar</h2>
           <div className="mt-6 divide-y divide-line rounded-xl border border-line bg-white">
@@ -190,9 +198,8 @@ export default async function StartPage() {
 /** Knapp som vises, men ikke virker ennå. */
 function ComingSoon({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <button type="button" aria-disabled="true" title="Kommer snart" className={`${className} relative cursor-not-allowed`}>
+    <button type="button" aria-disabled="true" title="Åpner når testfasen er over" className={`${className} cursor-not-allowed`}>
       {children}
-      <span className="pointer-events-none absolute -right-1 -top-2 rounded-full bg-warn px-1.5 text-[10px] font-bold leading-4 text-white">Snart</span>
     </button>
   );
 }

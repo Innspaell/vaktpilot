@@ -1,6 +1,7 @@
-/* Landingssiden: egen skrift for overskrifter og håndskrift på kjøleskapslappen. */
+/* Landingssiden: Montserrat, og håndskrift der det skal se skrevet for hånd ut. */
 .start {
-  --display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --display: "Montserrat Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--display);
   --hand: "Caveat", "Comic Sans MS", cursive;
   --postit: #fff2a6;
   --fjord: #12343b;
@@ -8,8 +9,7 @@
 }
 .start .display {
   font-family: var(--display);
-  font-variation-settings: "opsz" 96;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 .start .hand { font-family: var(--hand); }
 
