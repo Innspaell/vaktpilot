@@ -10,6 +10,10 @@ export interface UsageMonth {
   final: boolean;
   /** Måneden starter før prøveperioden er over, og faktureres ikke. */
   trial?: boolean;
+  /** Fastprisen er dekket av årlig betaling. */
+  annual_covered?: boolean;
+  /** Årsprisen, på årets første måned. */
+  annual_charge?: number;
   computed_at: string;
 }
 

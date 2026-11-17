@@ -7,9 +7,11 @@ import { completeSignup, createSignupForMe, requestSignupCode } from "./actions"
 
 export type SignupStatus = {
   open: boolean; open_for_me: boolean; email_ready: boolean;
-  base: number; included: number; per: number; trial_days: number; lock_months: number;
+  base: number; included: number; per: number; trial_days: number; lock_months: number; annual_months: number;
   rule_sets: { id: string; name: string; description: string | null }[];
 };
+
+const kr = (n: number) => `${Number(n).toLocaleString("nb-NO")} kr`;
 
 export function SignupForm({ status, loggedInEmail }: { status: SignupStatus; loggedInEmail: string | null }) {
   const form = useRef<HTMLFormElement>(null);
@@ -83,6 +85,29 @@ export function SignupForm({ status, loggedInEmail }: { status: SignupStatus; lo
             </label>
           </div>
         </section>
+
+        {status.annual_months > 0 ? (
+          <fieldset className="card space-y-3">
+            <legend className="sr-only">Betaling</legend>
+            <h2 className="h2">Betaling</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-line has-[:checked]:ring-2 has-[:checked]:ring-brand">
+                <input type="radio" name="billing" value="month" defaultChecked className="mt-1" />
+                <span><b>Månedlig</b><span className="block text-sm text-muted">{kr(status.base)} per måned</span></span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-line has-[:checked]:ring-2 has-[:checked]:ring-brand">
+                <input type="radio" name="billing" value="year" className="mt-1" />
+                <span>
+                  <b>Årlig</b><span className="block text-sm text-muted">{kr(status.base * status.annual_months)} per år. Du betaler for {status.annual_months} måneder og får 12.</span>
+                </span>
+              </label>
+            </div>
+            <p className="text-xs text-muted">
+              Prisene er eks. mva. {status.trial_days > 0 ? "Første faktura kommer etter prøveperioden. " : ""}
+              Ansatte utover de {status.included} inkluderte faktureres månedlig etterskuddsvis, også ved årlig betaling.
+            </p>
+          </fieldset>
+        ) : <input type="hidden" name="billing" value="month" />}
 
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" name="accept" required className="mt-1 h-4 w-4" />

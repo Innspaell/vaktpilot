@@ -12,6 +12,13 @@ async function saveInvoiceEmail(fd: FormData) {
   revalidatePath("/innstillinger/abonnement");
 }
 
+async function setBilling(fd: FormData) {
+  "use server";
+  const ctx = await requireAdmin();
+  await ctx.supabase.rpc("set_billing_interval", { p_org: ctx.org.id, p_interval: fd.get("interval") === "year" ? "year" : "month" });
+  revalidatePath("/innstillinger/abonnement");
+}
+
 async function setCancellation(fd: FormData) {
   "use server";
   const ctx = await requireAdmin();
@@ -25,7 +32,12 @@ export default async function SubscriptionPage() {
   const { data } = await ctx.supabase.from("usage_months").select("*").eq("org_id", ctx.org.id).order("month", { ascending: false }).limit(13);
   const months = (data ?? []) as UsageMonth[];
   const { data: org } = await ctx.supabase.from("organizations")
-    .select("price_locked_until, trial_ends_at, invoice_email, cancel_requested_at").eq("id", ctx.org.id).single();
+    .select("price_locked_until, trial_ends_at, invoice_email, cancel_requested_at, billing_interval, annual_start, annual_end").eq("id", ctx.org.id).single();
+  const { data: settings } = await ctx.supabase.rpc("signup_status");
+  const annualMonths = Number((settings as { annual_months?: number } | null)?.annual_months ?? 0);
+  const interval = (org?.billing_interval as string | null) ?? "month";
+  const annualStart = org?.annual_start as string | null;
+  const annualEnd = org?.annual_end as string | null;
   const lockedUntil = org?.price_locked_until as string | null;
   const trialEnds = org?.trial_ends_at as string | null;
   const cancelAt = org?.cancel_requested_at as string | null;
@@ -89,7 +101,7 @@ export default async function SubscriptionPage() {
           <p className="mt-1 text-sm text-muted">
             Så langt i måneden, med planlagte vakter som er publisert.
             {over > 0 && Number(cur.per_extra) > 0 ? ` ${over} ekstra ansatt${over === 1 ? "" : "e"}: ${kr(over * cur.per_extra)}.` : ""}
-            {" "}Beløp denne måneden: <b className="text-ink">{kr(cur.amount)}</b>{cur.trial ? " (prøveperiode)" : ""}.
+            {" "}Beløp denne måneden: <b className="text-ink">{kr(cur.amount)}</b>{cur.trial ? " (prøveperiode)" : Number(cur.annual_charge) > 0 ? " (årspris)" : cur.annual_covered ? " (fastprisen er betalt for året)" : ""}.
           </p>
           {names.length > 0 && (
             <ul className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">{names.map((n) => <li key={n}>{n}</li>)}</ul>
@@ -109,11 +121,45 @@ export default async function SubscriptionPage() {
                 <tr key={m.month}>
                   <td className="px-4 py-2 capitalize">{monthLabel(m.month)}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{m.active_count}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{kr(m.amount)}{m.trial ? <span className="block text-xs text-muted">prøveperiode</span> : null}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{kr(m.amount)}{m.trial ? <span className="block text-xs text-muted">prøveperiode</span> : Number(m.annual_charge) > 0 ? <span className="block text-xs text-muted">årspris</span> : m.annual_covered ? <span className="block text-xs text-muted">betalt for året</span> : null}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+
+      {cur && (annualMonths > 0 || interval === "year" || annualStart) && (
+        <section className="card">
+          <h2 className="h2">Betaling</h2>
+          {(() => {
+            const yearly = kr(Number(cur.base_price) * (annualMonths || 10));
+            const covered = annualStart && annualStart <= today.slice(0, 8) + "01" && (!annualEnd || annualEnd > today);
+            if (interval === "year") {
+              return (<>
+                <p className="mt-1 text-sm">
+                  <b>Årlig betaling.</b> {annualStart && annualStart > today ? `Året starter ${longDate(annualStart)}, og ${yearly} faktureres da.` : `Inneværende år startet ${annualStart ? longDate(annualStart) : ""} og fornyes automatisk.`}
+                  {" "}Ansatte utover de {cur.included} inkluderte faktureres månedlig.
+                </p>
+                <form action={setBilling} className="mt-3"><input type="hidden" name="interval" value="month" />
+                  <button className="btn-ghost">Gå over til månedlig</button>
+                  <span className="mt-1 block text-xs text-muted">{annualStart && annualStart > today ? "Året har ikke startet, så ingenting er betalt." : "Året som er betalt, gjelder ut. Deretter betaler dere månedlig."}</span>
+                </form>
+              </>);
+            }
+            return (<>
+              <p className="mt-1 text-sm">
+                <b>Månedlig betaling.</b>
+                {covered && annualEnd ? ` Året dere har betalt for gjelder til ${longDate(annualEnd)}, deretter månedlig.` : ""}
+              </p>
+              {annualMonths > 0 && (
+                <form action={setBilling} className="mt-3"><input type="hidden" name="interval" value="year" />
+                  <button className="btn-ghost">Gå over til årlig: {yearly} per år</button>
+                  <span className="mt-1 block text-xs text-muted">Du betaler for {annualMonths} måneder og får 12. {covered ? "Fortsetter etter året som er betalt." : "Året starter neste måned."}</span>
+                </form>
+              )}
+            </>);
+          })()}
         </section>
       )}
 

@@ -7,7 +7,7 @@ import { DPA_VERSION, TERMS_VERSION } from "@/lib/legal";
 
 export type SignupResult = { ok?: boolean; error?: string; hasUser?: boolean };
 
-const FIELDS = ["name", "org_number", "address", "postal_code", "city", "full_name", "phone", "invoice_email", "rule_set"] as const;
+const FIELDS = ["name", "org_number", "address", "postal_code", "city", "full_name", "phone", "invoice_email", "rule_set", "billing"] as const;
 
 function data(fd: FormData) {
   const d: Record<string, string> = {};

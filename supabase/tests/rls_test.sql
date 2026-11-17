@@ -723,7 +723,7 @@ select pg_temp.check(signup_request_code('nina@ny.no', :'skjema') ->> 'error' li
 reset role;
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
-select platform_set_signup(true, 30, 12);
+select platform_set_signup(true, 30, 12, 10);
 reset role;
 set role anon;
 select pg_temp.check((signup_status() ->> 'open')::boolean, 'signup_status viser ikke åpen');
@@ -766,6 +766,28 @@ select pg_temp.check(not exists (select 1 from platform_invoice_basis(current_da
 select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
 select pg_temp.check(exists (select 1 from platform_invoice_basis(current_date) where name = 'Ny Kafé AS'), 'fakturagrunnlag mangler ny bedrift');
 reset role;
+-- Årlig betaling: fastprisen dekkes av årsprisen (10 måneder) i årets første måned, ekstra ansatte faktureres som før
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+update organizations set trial_ends_at = null where name = 'Olas Bil';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select set_billing_interval(:'org_ola', 'year');
+reset role;
+select annual_start as aar_start from organizations where id = :'org_ola' \gset
+select compute_usage(:'org_ola', :'aar_start', false, false);
+select compute_usage(:'org_ola', (:'aar_start'::date + interval '1 month')::date, false, false);
+select pg_temp.check((select annual_covered and annual_charge = 2990 and amount = 2990 from usage_months where org_id = :'org_ola' and month = :'aar_start'), 'årspris i første måned');
+select pg_temp.check((select annual_covered and annual_charge = 0 and amount = 0 from usage_months where org_id = :'org_ola' and month = (:'aar_start'::date + interval '1 month')::date), 'måned i betalt år ble fakturert');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  update organizations set annual_start = null where name = 'Olas Bil';
+  raise exception 'FEIL: leder endret årsperioden direkte';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select set_billing_interval(:'org_ola', 'month');
+reset role;
+select pg_temp.check((select billing_interval = 'month' and annual_start is null from organizations where id = :'org_ola'), 'tilbake til månedlig før året startet');
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
 update organizations set trial_ends_at = current_date + 3 where id = :'org_ny';
 select pg_temp.check(run_trial_reminders() >= 1, 'påminnelse om prøveperiode');
 

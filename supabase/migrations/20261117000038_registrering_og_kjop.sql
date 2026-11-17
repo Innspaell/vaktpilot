@@ -5,6 +5,8 @@
 alter table platform_settings add column if not exists signup_open boolean not null default false;
 alter table platform_settings add column if not exists trial_days int not null default 30 check (trial_days between 0 and 90);
 alter table platform_settings add column if not exists launch_lock_months int not null default 12 check (launch_lock_months between 0 and 36);
+-- Årlig betaling: prisen for så mange måneder (10 = to måneder gratis). 0 = ikke tilbudt.
+alter table platform_settings add column if not exists annual_months int not null default 10 check (annual_months between 0 and 12);
 
 alter table organizations add column if not exists invoice_email text;
 alter table organizations add column if not exists trial_ends_at date;
@@ -17,13 +19,21 @@ alter table organizations add column if not exists terms_accepted_by uuid refere
 alter table organizations add column if not exists cancel_requested_at timestamptz;
 alter table organizations add column if not exists cancel_requested_by uuid references auth.users(id) on delete set null;
 
+-- Årlig betaling: fast pris for 12 måneder fra annual_start (første dag i en måned), forskuddsbetalt.
+-- annual_end settes når kunden går tilbake til månedlig; året som er betalt, gjelder ut.
+alter table organizations add column if not exists billing_interval text not null default 'month' check (billing_interval in ('month', 'year'));
+alter table organizations add column if not exists annual_start date;
+alter table organizations add column if not exists annual_end date;
+
 alter table usage_months add column if not exists trial boolean not null default false;
+alter table usage_months add column if not exists annual_covered boolean not null default false;  -- fastprisen er dekket av årsbetaling
+alter table usage_months add column if not exists annual_charge numeric(10,2) not null default 0;  -- årsprisen faktureres i årets første måned
 
 -- Lederne kan endre fakturaadressen selv, men ikke pris, prøveperiode, vilkår eller oppsigelse direkte
 create or replace function protect_org_billing() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  -- Oppsigelse går gjennom request_cancellation, som setter dette flagget for sin egen transaksjon
+  -- Oppsigelse og betalingsform går gjennom egne funksjoner, som setter dette flagget for sin egen transaksjon
   if auth.uid() is not null and not is_platform_admin() and (
        new.price_base is distinct from old.price_base or new.price_included is distinct from old.price_included
     or new.price_per_extra is distinct from old.price_per_extra or new.price_locked_until is distinct from old.price_locked_until
@@ -33,7 +43,9 @@ begin
     or new.terms_version is distinct from old.terms_version or new.terms_accepted_at is distinct from old.terms_accepted_at
     or new.terms_accepted_by is distinct from old.terms_accepted_by
     or (coalesce(current_setting('vaktpilot.cancel_ok', true), '') <> '1'
-        and (new.cancel_requested_at is distinct from old.cancel_requested_at or new.cancel_requested_by is distinct from old.cancel_requested_by))) then
+        and (new.cancel_requested_at is distinct from old.cancel_requested_at or new.cancel_requested_by is distinct from old.cancel_requested_by
+          or new.billing_interval is distinct from old.billing_interval or new.annual_start is distinct from old.annual_start
+          or new.annual_end is distinct from old.annual_end))) then
     raise exception 'Pris, prøveperiode og status kan bare endres av InnSpæll.';
   end if;
   return new;
@@ -59,7 +71,7 @@ language sql stable security definer set search_path = public as $$
     'open_for_me', s.signup_open or is_platform_admin(),
     'email_ready', exists (select 1 from vault.decrypted_secrets where name = 'resend_api_key' and coalesce(decrypted_secret, '') <> ''),
     'base', s.base_price, 'included', s.included_employees, 'per', s.per_employee_price,
-    'trial_days', s.trial_days, 'lock_months', s.launch_lock_months,
+    'trial_days', s.trial_days, 'lock_months', s.launch_lock_months, 'annual_months', s.annual_months,
     'rule_sets', coalesce((
       select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name, 'description', r.description, 'kind', r.kind, 'area', r.area)
                        order by r.kind, r.name)
@@ -94,11 +106,22 @@ begin
       and exists (select 1 from pay_rule_versions v where v.rule_set_id = r.id and v.status = 'published')) then
     raise exception 'Ukjent tariffavtale.';
   end if;
+  if coalesce(d ->> 'billing', 'month') not in ('month', 'year')
+     or (d ->> 'billing' = 'year' and coalesce((select annual_months from platform_settings where id = 1), 0) = 0) then
+    raise exception 'Velg månedlig eller årlig betaling.';
+  end if;
   if coalesce(d ->> 'terms_version', '') = '' or coalesce(d ->> 'dpa_version', '') = '' or (d ->> 'accept') is distinct from 'true' then
     raise exception 'Du må godta vilkårene og databehandleravtalen.';
   end if;
 end $$;
 revoke execute on function signup_validate(jsonb) from anon, public, authenticated;
+
+-- Første måned som faktureres: måneden som starter på eller etter at prøveperioden er over
+create or replace function first_billable_month(p_trial_ends date) returns date
+language sql immutable as $$
+  select case when p_trial_ends is null then date_trunc('month', (now() at time zone 'Europe/Oslo'))::date
+              else (date_trunc('month', p_trial_ends - 1) + interval '1 month')::date end;
+$$;
 
 -- Oppretter bedriften for en bruker som har bekreftet e-posten sin.
 create or replace function create_signup_org(p_user uuid, p_email text, d jsonb) returns uuid
@@ -115,7 +138,7 @@ begin
 
   insert into organizations (name, org_number, address, postal_code, city, invoice_email,
     price_base, price_included, price_per_extra, price_locked_until, trial_ends_at,
-    signup_by, signup_at, terms_version, terms_accepted_at, terms_accepted_by)
+    signup_by, signup_at, terms_version, terms_accepted_at, terms_accepted_by, billing_interval)
   values (v_name, v_orgnr, nullif(trim(d ->> 'address'), ''), nullif(trim(d ->> 'postal_code'), ''), nullif(trim(d ->> 'city'), ''),
     coalesce(nullif(lower(trim(d ->> 'invoice_email')), ''), lower(p_email)),
     -- Lanseringspris: prisen som gjelder i dag, fast i det antallet måneder InnSpæll har satt
@@ -124,8 +147,10 @@ begin
     case when s.launch_lock_months > 0 then s.per_employee_price end,
     case when s.launch_lock_months > 0 then (current_date + make_interval(months => s.launch_lock_months))::date end,
     case when s.trial_days > 0 then current_date + s.trial_days end,
-    p_user, now(), d ->> 'terms_version', now(), p_user)
+    p_user, now(), d ->> 'terms_version', now(), p_user, coalesce(nullif(d ->> 'billing', ''), 'month'))
   returning id into v_org;
+  -- Årlig: året starter første måned etter prøveperioden
+  update organizations set annual_start = first_billable_month(trial_ends_at) where id = v_org and billing_interval = 'year';
 
   insert into memberships (org_id, user_id, role) values (v_org, p_user, 'owner');
   insert into employees (org_id, user_id, full_name, email, phone)
@@ -265,6 +290,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   o organizations; s platform_settings;
   v_from timestamptz; v_to timestamptz; v_ids uuid[]; v_incl int; v_base numeric; v_per numeric; v_n int; v_trial boolean;
+  v_covered boolean; v_annual numeric := 0;
   v_month date := date_trunc('month', p_month)::date;
   v_names text[] := array['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
 begin
@@ -284,13 +310,21 @@ begin
   v_base := coalesce(o.price_base, s.base_price, 0);
   v_per := coalesce(o.price_per_extra, s.per_employee_price, 0);
   v_trial := o.trial_ends_at is not null and v_month < o.trial_ends_at;
+  -- Årlig betaling: fastprisen er dekket i årsperioden; årsprisen kommer på årets første måned
+  v_covered := not v_trial and o.annual_start is not null and v_month >= o.annual_start and (o.annual_end is null or v_month < o.annual_end);
+  if v_covered and (extract(year from age(v_month, o.annual_start)) * 12 + extract(month from age(v_month, o.annual_start)))::int % 12 = 0 then
+    v_annual := v_base * coalesce(nullif(s.annual_months, 0), 10);
+  end if;
 
-  insert into usage_months as u (org_id, month, active_count, active_employee_ids, included, base_price, per_extra, amount, trial, final, computed_at)
+  insert into usage_months as u (org_id, month, active_count, active_employee_ids, included, base_price, per_extra, amount, trial,
+    annual_covered, annual_charge, final, computed_at)
   values (p_org, v_month, v_n, v_ids, v_incl, v_base, v_per,
-    case when v_trial then 0 else v_base + greatest(v_n - v_incl, 0) * v_per end, v_trial, p_final, now())
+    case when v_trial then 0 else v_annual + case when v_covered then 0 else v_base end + greatest(v_n - v_incl, 0) * v_per end,
+    v_trial, v_covered, v_annual, p_final, now())
   on conflict (org_id, month) do update set active_count = excluded.active_count, active_employee_ids = excluded.active_employee_ids,
     included = excluded.included, base_price = excluded.base_price, per_extra = excluded.per_extra, amount = excluded.amount,
-    trial = excluded.trial, final = excluded.final, computed_at = now();
+    trial = excluded.trial, annual_covered = excluded.annual_covered, annual_charge = excluded.annual_charge,
+    final = excluded.final, computed_at = now();
 
   if p_notify and not p_final and not v_trial and v_n > v_incl
      and not (select notified_over from usage_months where org_id = p_org and month = v_month) then
@@ -355,15 +389,57 @@ end $$;
 revoke execute on function request_cancellation(uuid, boolean) from anon, public;
 grant execute on function request_cancellation(uuid, boolean) to authenticated;
 
+-- Lederen bytter mellom månedlig og årlig betaling.
+-- Til årlig: året starter neste måned (eller første måned etter prøveperioden).
+-- Til månedlig: året som er betalt gjelder ut, deretter månedlig.
+create or replace function set_billing_interval(p_org uuid, p_interval text) returns void
+language plpgsql security definer set search_path = public as $$
+declare o organizations; s platform_settings; v_now date := date_trunc('month', now() at time zone 'Europe/Oslo')::date; v_elapsed int;
+begin
+  if not is_admin(p_org) then raise exception 'Ikke tillatt.'; end if;
+  if p_interval not in ('month', 'year') then raise exception 'Ukjent betalingsform.'; end if;
+  select * into o from organizations where id = p_org;
+  select * into s from platform_settings where id = 1;
+  if p_interval = 'year' and s.annual_months = 0 then raise exception 'Årlig betaling tilbys ikke nå.'; end if;
+  perform set_config('vaktpilot.cancel_ok', '1', true);
+  if p_interval = 'year' then
+    if o.annual_start is not null and (o.annual_end is null or o.annual_end > v_now) then
+      -- Fortsatt i et betalt år: fortsett å fornye
+      update organizations set billing_interval = 'year', annual_end = null where id = p_org;
+    else
+      update organizations set billing_interval = 'year', annual_end = null,
+        annual_start = greatest(first_billable_month(o.trial_ends_at), (v_now + interval '1 month')::date) where id = p_org;
+    end if;
+  elsif o.annual_start is not null and o.annual_start > v_now then
+    -- Året har ikke startet ennå: ingen årsbetaling
+    update organizations set billing_interval = 'month', annual_start = null, annual_end = null where id = p_org;
+  elsif o.annual_start is not null and o.annual_end is null then
+    v_elapsed := (extract(year from age(v_now, o.annual_start)) * 12 + extract(month from age(v_now, o.annual_start)))::int;
+    update organizations set billing_interval = 'month',
+      annual_end = (o.annual_start + make_interval(months => (v_elapsed / 12 + 1) * 12))::date where id = p_org;
+  else
+    update organizations set billing_interval = 'month' where id = p_org;
+  end if;
+  perform set_config('vaktpilot.cancel_ok', '', true);
+  insert into audit_log (org_id, table_name, row_id, action, changed_by, after)
+  values (p_org, 'organizations', p_org, 'BILLING', auth.uid(), jsonb_build_object('interval', p_interval));
+  perform notify_platform_admins('billing', o.name || case when p_interval = 'year' then ' går over til årlig betaling' else ' går over til månedlig betaling' end,
+    'Endringen er registrert under Abonnement hos kunden.', '/plattform');
+end $$;
+revoke execute on function set_billing_interval(uuid, text) from anon, public;
+grant execute on function set_billing_interval(uuid, text) to authenticated;
+
 -- Fakturagrunnlag for én måned (for InnSpæll)
 create or replace function platform_invoice_basis(p_month date)
 returns table (org_id uuid, name text, org_number text, invoice_email text, address text, postal_code text, city text,
                month date, active_count int, included int, base_price numeric, per_extra numeric, extra int, amount numeric,
-               trial boolean, final boolean, price_locked_until date, cancel_requested_at timestamptz, active boolean)
+               trial boolean, final boolean, price_locked_until date, cancel_requested_at timestamptz, active boolean,
+               billing_interval text, annual_covered boolean, annual_charge numeric, annual_end date)
 language sql stable security definer set search_path = public as $$
   select o.id, o.name, o.org_number, o.invoice_email, o.address, o.postal_code, o.city,
          u.month, u.active_count, u.included, u.base_price, u.per_extra, greatest(u.active_count - u.included, 0), u.amount,
-         u.trial, u.final, o.price_locked_until, o.cancel_requested_at, o.active
+         u.trial, u.final, o.price_locked_until, o.cancel_requested_at, o.active,
+         o.billing_interval, u.annual_covered, u.annual_charge, o.annual_end
   from usage_months u join organizations o on o.id = u.org_id
   where is_platform_admin() and u.month = date_trunc('month', p_month)::date
   order by o.name;
@@ -372,12 +448,13 @@ revoke execute on function platform_invoice_basis(date) from anon, public;
 grant execute on function platform_invoice_basis(date) to authenticated;
 
 -- Plattform: åpne eller stenge registreringen, og prøveperiode / lanseringspris for nye kunder
-create or replace function platform_set_signup(p_open boolean, p_trial_days int, p_lock_months int) returns void
+create or replace function platform_set_signup(p_open boolean, p_trial_days int, p_lock_months int, p_annual_months int) returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not is_platform_admin() then raise exception 'Ikke tillatt.'; end if;
   update platform_settings set signup_open = p_open, trial_days = greatest(0, least(90, p_trial_days)),
-    launch_lock_months = greatest(0, least(36, p_lock_months)), updated_at = now() where id = 1;
+    launch_lock_months = greatest(0, least(36, p_lock_months)), annual_months = greatest(0, least(12, p_annual_months)),
+    updated_at = now() where id = 1;
 end $$;
-revoke execute on function platform_set_signup(boolean, int, int) from anon, public;
-grant execute on function platform_set_signup(boolean, int, int) to authenticated;
+revoke execute on function platform_set_signup(boolean, int, int, int) from anon, public;
+grant execute on function platform_set_signup(boolean, int, int, int) to authenticated;

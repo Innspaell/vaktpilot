@@ -36,6 +36,7 @@ const FAQ: [string, string][] = [
   ["Hva koster Vaktpilot?", "Lanseringsprisen er 299 kr i måneden eks. mva. med 5 aktive ansatte inkludert. Hver aktiv ansatt utover det koster 39 kr i måneden. De første kundene beholder lanseringsprisen i 12 måneder."],
   ["Hva er en aktiv ansatt?", "En ansatt som har hatt en vakt eller registrert timer i løpet av måneden. Ekstrahjelp som ikke har jobbet, og ansatte som har sluttet, koster ingenting."],
   ["Er det bindingstid?", "Nei. Abonnementet løper fra måned til måned, og dere kan si opp når dere vil."],
+  ["Kan vi betale for et helt år?", "Ja. Betaler dere årlig, koster det 2 990 kr eks. mva. for 12 måneder. Det er prisen for 10 måneder, altså to måneder gratis."],
   ["Kan vi prøve gratis?", "Ja. De første 30 dagene er gratis, og dere forplikter dere ikke til noe."],
   ["Må de ansatte laste ned en app?", "Nei. Vaktpilot åpnes i nettleseren på mobilen og kan legges på hjemskjermen som en app, både på iPhone og Android. De ansatte får en lenke og lager passordet selv."],
   ["Hvilket regnskaps- eller lønnsprogram kan vi bruke?", "Lønnsgrunnlaget kan lastes ned som Excel-fil og som fil for import i regnskaps- eller lønnsprogrammet. Si fra hvilket program dere bruker, så sørger vi for at fila passer."],
@@ -169,7 +170,8 @@ export default async function StartPage() {
             5 aktive ansatte er med i prisen. Hver ansatt utover det koster 39 kr i måneden. Priser eks. mva.
             De første kundene beholder prisen i 12 måneder.
           </p>
-          <p className="mt-3 text-sm text-white/80">Ingen bindingstid. 30 dager gratis.</p>
+          <p className="mt-3 text-sm text-white/80">Eller 2 990 kr for et helt år, to måneder gratis.</p>
+          <p className="mt-1 text-sm text-white/80">Ingen bindingstid. 30 dager gratis.</p>
           {signupOpen && <Link href="/kom-i-gang" className="mt-5 inline-flex rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-[var(--fjord)] hover:bg-white/90">Kom i gang</Link>}
         </div>
       </section>

@@ -26,6 +26,7 @@ async function saveSignup(fd: FormData) {
     p_open: fd.get("open") === "on",
     p_trial_days: Math.round(Number(fd.get("trial") ?? 30) || 0),
     p_lock_months: Math.round(Number(fd.get("lock") ?? 12) || 0),
+    p_annual_months: Math.round(Number(fd.get("annual") ?? 10) || 0),
   });
   revalidatePath("/plattform");
   revalidatePath("/start");
@@ -91,7 +92,7 @@ export default async function PlatformPage() {
   const prevMonth = (() => { const [y, m] = cm.split("-").map(Number); return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`; })();
   const [{ data: orgs, error }, { data: settings }, { data: usageRows }, { data: priceRows }] = await Promise.all([
     ctx.supabase.rpc("platform_overview"),
-    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months").eq("id", 1).maybeSingle(),
+    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months, annual_months").eq("id", 1).maybeSingle(),
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
     ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until, trial_ends_at, cancel_requested_at, signup_at"),
   ]);
@@ -100,7 +101,8 @@ export default async function PlatformPage() {
     ctx.supabase.rpc("platform_invoice_basis", { p_month: prevMonth }),
   ]);
   type InvoiceRow = { org_id: string; name: string; org_number: string | null; invoice_email: string | null; active_count: number; included: number;
-    extra: number; amount: number; trial: boolean; final: boolean; cancel_requested_at: string | null };
+    extra: number; amount: number; trial: boolean; final: boolean; cancel_requested_at: string | null;
+    billing_interval: string; annual_covered: boolean; annual_charge: number };
   const invoice = (invoiceRows ?? []) as InvoiceRow[];
   const invoiceTotal = invoice.reduce((sum, r) => sum + Number(r.amount), 0);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
@@ -169,12 +171,13 @@ export default async function PlatformPage() {
           </label>
           <label className="block"><span className="label">Gratis prøveperiode (dager)</span><input name="trial" type="number" min={0} max={90} defaultValue={settings?.trial_days ?? 30} className="input w-32" /></label>
           <label className="block"><span className="label">Fast lanseringspris (måneder)</span><input name="lock" type="number" min={0} max={36} defaultValue={settings?.launch_lock_months ?? 12} className="input w-32" /></label>
+          <label className="block"><span className="label">Årlig betaling: pris for antall måneder</span><input name="annual" type="number" min={0} max={12} defaultValue={settings?.annual_months ?? 10} className="input w-32" /></label>
           <button className="btn-ghost">Lagre</button>
         </form>
         {!emailReady && <p className="mt-2 text-sm text-warn">E-post er ikke satt opp (Resend-nøkkelen mangler), så nye brukere får ikke koden. Innloggede brukere kan registrere seg likevel.</p>}
         <p className="mt-2 text-xs text-muted">
           Du kan teste skjemaet selv på <a href="/kom-i-gang" className="text-brand">/kom-i-gang</a> mens det er stengt. Nye bedrifter får prisen som gjelder nå, fast i antall måneder over (0 = ingen fast pris).
-          Måneder som starter før prøveperioden er over, faktureres ikke. Du får varsel når noen registrerer seg eller sier opp.
+          Måneder som starter før prøveperioden er over, faktureres ikke. Årlig betaling: 0 = ikke tilbudt; 10 = to måneder gratis, og årsprisen kommer på fakturagrunnlaget for årets første måned. Du får varsel når noen registrerer seg eller sier opp.
         </p>
       </section>
 
@@ -200,7 +203,12 @@ export default async function PlatformPage() {
                   <td className="px-2 py-2 text-xs">{r.invoice_email ?? <span className="text-warn">mangler</span>}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.active_count} / {r.included}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.extra}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{r.trial ? <span className="text-muted">Prøveperiode</span> : kr(Number(r.amount))}{!r.final && <span className="block text-xs text-warn">ikke låst ennå</span>}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {r.trial ? <span className="text-muted">Prøveperiode</span> : kr(Number(r.amount))}
+                    {Number(r.annual_charge) > 0 ? <span className="block text-xs text-brand">årspris {kr(Number(r.annual_charge))}</span>
+                      : r.annual_covered ? <span className="block text-xs text-muted">årlig, betalt</span> : null}
+                    {!r.final && <span className="block text-xs text-warn">ikke låst ennå</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
