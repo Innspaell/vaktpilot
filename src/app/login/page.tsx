@@ -148,6 +148,9 @@ export default function LoginPage() {
           <p className="text-xs text-muted">Fikk du en lenke i stedet? Den virker også. Åpne den på denne enheten.</p>
         </form>
       )}
+      <p className="mt-6 text-center text-sm text-muted">
+        Ny bedrift? <a href="/kom-i-gang" className="font-semibold text-brand">Kom i gang med Vaktpilot</a>
+      </p>
     </main>
   );
 }

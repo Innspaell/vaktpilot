@@ -3,10 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { searchCompanies } from "@/lib/brreg";
 
 export async function GET(request: Request) {
-  // Bare innloggede brukere kan søke
+  // Innloggede brukere, og besøkende når registreringen er åpen (søket i Enhetsregisteret er offentlig)
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Ikke innlogget" }, { status: 401 });
+  if (!user) {
+    const { data: s } = await supabase.rpc("signup_status");
+    if (!(s as { open?: boolean } | null)?.open) return NextResponse.json({ error: "Ikke innlogget" }, { status: 401 });
+  }
 
   const q = new URL(request.url).searchParams.get("q") ?? "";
   try {

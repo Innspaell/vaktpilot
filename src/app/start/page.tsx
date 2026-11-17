@@ -5,6 +5,7 @@ import "@fontsource/caveat/500.css";
 import "./start.css";
 import { VENDOR } from "@/lib/legal";
 import { loadSiteImages, type SITE_IMAGES } from "@/lib/site-images";
+import { createClient } from "@/lib/supabase/server";
 
 export const revalidate = 300;
 
@@ -44,6 +45,13 @@ const FAQ: [string, string][] = [
 
 export default async function StartPage() {
   const img = await loadSiteImages();
+  let signupOpen = false;
+  try {
+    const { data } = await (await createClient()).rpc("signup_status");
+    signupOpen = Boolean((data as { open?: boolean } | null)?.open);
+  } catch {
+    // Registreringen regnes som stengt
+  }
   return (
     <div className="start min-h-dvh bg-white text-ink">
       <p className="bg-[var(--postit)] px-4 py-1.5 text-center text-xs sm:text-sm">
@@ -63,8 +71,8 @@ export default async function StartPage() {
             <a href="#sporsmal" className="hover:text-ink">Spørsmål</a>
           </nav>
           <div className="ml-auto flex items-center gap-4">
-            <ComingSoon className="whitespace-nowrap rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink/80 hover:text-ink sm:border-0 sm:px-0">Logg inn</ComingSoon>
-            <ComingSoon className="btn-primary hidden whitespace-nowrap px-4 py-2 text-sm sm:inline-flex">Kjøp Vaktpilot</ComingSoon>
+            <Link href="/login" className="whitespace-nowrap rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink/80 hover:text-ink sm:border-0 sm:px-0">Logg inn</Link>
+            <Link href="/kom-i-gang" className="btn-primary hidden whitespace-nowrap px-4 py-2 text-sm sm:inline-flex">Kjøp Vaktpilot</Link>
           </div>
         </div>
       </header>
@@ -79,10 +87,10 @@ export default async function StartPage() {
             de ansatte ser vaktene sine på mobilen, og lønnsgrunnlaget ligger klart når måneden er omme.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-            <ComingSoon className="btn-primary px-6 py-3 text-base">Kjøp Vaktpilot</ComingSoon>
+            <Link href="/kom-i-gang" className="btn-primary px-6 py-3 text-base">{signupOpen ? "Prøv gratis i 30 dager" : "Kjøp Vaktpilot"}</Link>
             <a href="#pris" className="text-sm font-semibold text-brand hover:underline">Se pris</a>
           </div>
-          <p className="mt-3 text-sm text-muted">Kjøp og innlogging åpner når testfasen er over.</p>
+          <p className="mt-3 text-sm text-muted">{signupOpen ? "Ingen bindingstid. Du er i gang på fem minutter." : "Kjøp åpner når testfasen er over."}</p>
         </div>
 
         <HeroPicture image={img.hero} />
@@ -162,6 +170,7 @@ export default async function StartPage() {
             De første kundene beholder prisen i 12 måneder.
           </p>
           <p className="mt-3 text-sm text-white/80">Ingen bindingstid. 30 dager gratis.</p>
+          {signupOpen && <Link href="/kom-i-gang" className="mt-5 inline-flex rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-[var(--fjord)] hover:bg-white/90">Kom i gang</Link>}
         </div>
       </section>
 
@@ -196,14 +205,6 @@ export default async function StartPage() {
 }
 
 /** Knapp som vises, men ikke virker ennå. */
-function ComingSoon({ children, className }: { children: React.ReactNode; className: string }) {
-  return (
-    <button type="button" aria-disabled="true" title="Åpner når testfasen er over" className={`${className} cursor-not-allowed`}>
-      {children}
-    </button>
-  );
-}
-
 type Img = (typeof SITE_IMAGES)[keyof typeof SITE_IMAGES];
 
 function Picture({ image, className, sizes }: { image: Img; className?: string; sizes: string }) {

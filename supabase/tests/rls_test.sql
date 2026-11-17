@@ -715,5 +715,59 @@ select run_reminders();
 select run_retention();
 select pg_temp.check(not exists (select 1 from memberships m join employees e on e.user_id = m.user_id where e.full_name = 'Kari Nordmann'), 'sluttet ansatt har fortsatt tilgang');
 
+-- Registrering: stengt til InnSpæll åpner, kode på e-post, ny bruker og bedrift med prøveperiode
+insert into vault.decrypted_secrets values ('resend_api_key', 're_test') on conflict (name) do update set decrypted_secret = 're_test';
+\set skjema '{"name":"Ny Kafé AS","org_number":"987 654 321","full_name":"Nina Ny","phone":"91234567","accept":"true","terms_version":"2026-11","dpa_version":"2026-11"}'
+set role anon;
+select pg_temp.check(signup_request_code('nina@ny.no', :'skjema') ->> 'error' like '%ikke åpen%', 'registrering var åpen før InnSpæll åpnet');
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select platform_set_signup(true, 30, 12);
+reset role;
+set role anon;
+select pg_temp.check((signup_status() ->> 'open')::boolean, 'signup_status viser ikke åpen');
+select pg_temp.check((signup_request_code('leder@a.no', :'skjema') ->> 'has_user')::boolean, 'eksisterende bruker fikk kode');
+select pg_temp.check((signup_request_code('Nina@Ny.no', :'skjema') ->> 'ok')::boolean, 'kode ble ikke sendt');
+reset role;
+select substring(body ->> 'subject' from '(\d{6})') as kode from net.test_requests where body ->> 'to' like '%nina@ny.no%' order by id desc limit 1 \gset
+set role anon;
+select pg_temp.check(signup_complete('nina@ny.no', '000000', 'langtpassord1', :'skjema') ->> 'error' like 'Feil kode%' or :'kode' = '000000', 'feil kode ble godtatt');
+select pg_temp.check(signup_complete('nina@ny.no', :'kode', 'kort', :'skjema') ->> 'error' like '%10 tegn%', 'kort passord ble godtatt');
+select signup_complete('nina@ny.no', :'kode', 'langtpassord1', :'skjema') as res \gset
+reset role;
+select pg_temp.check((:'res'::jsonb ->> 'ok')::boolean, 'registrering feilet: ' || :'res');
+select id as org_ny from organizations where org_number = '987654321' \gset
+select pg_temp.check((select trial_ends_at = current_date + 30 and price_base = 299 and price_locked_until > current_date + 360
+  and invoice_email = 'nina@ny.no' and terms_version = '2026-11' from organizations where id = :'org_ny'), 'prøveperiode/pris ble ikke satt');
+select pg_temp.check(exists (select 1 from memberships m join auth.users u on u.id = m.user_id where m.org_id = :'org_ny' and u.email = 'nina@ny.no' and m.role = 'owner'), 'ny bruker ble ikke eier');
+select pg_temp.check(exists (select 1 from employees where org_id = :'org_ny' and full_name = 'Nina Ny' and user_id is not null), 'ansattkort mangler');
+select pg_temp.check(exists (select 1 from dpa_acceptances where org_id = :'org_ny'), 'databehandleravtale ikke godtatt');
+select pg_temp.check(exists (select 1 from notifications where kind = 'signup'), 'InnSpæll fikk ikke varsel om ny bedrift');
+select pg_temp.check(not exists (select 1 from signup_codes where email = 'nina@ny.no'), 'koden ble ikke slettet');
+set role anon;
+select pg_temp.check(signup_request_code('per@ny.no', :'skjema') ->> 'error' like '%allerede registrert%', 'samme orgnr to ganger');
+reset role;
+select compute_usage(:'org_ny', current_date, false, false);
+select pg_temp.check((select trial and amount = 0 from usage_months where org_id = :'org_ny' and month = date_trunc('month', current_date)::date), 'prøvemåned ble fakturert');
+
+-- Innlogget bruker kan registrere egen bedrift; leder kan ikke endre prøveperioden selv, men kan si opp
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select signup_create('{"name":"Olas Bil","org_number":"912345678","full_name":"Ola Nordmann","accept":"true","terms_version":"2026-11","dpa_version":"2026-11"}') as org_ola \gset
+select pg_temp.check(is_admin(:'org_ola'), 'innlogget bruker ble ikke eier');
+do $$ begin
+  update organizations set trial_ends_at = current_date + 365 where name = 'Olas Bil';
+  raise exception 'FEIL: leder forlenget prøveperioden selv';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select request_cancellation(:'org_ola', true);
+select pg_temp.check((select cancel_requested_at is not null from organizations where id = :'org_ola'), 'oppsigelse ble ikke lagret');
+select pg_temp.check(not exists (select 1 from platform_invoice_basis(current_date)), 'kunde ser fakturagrunnlag');
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select pg_temp.check(exists (select 1 from platform_invoice_basis(current_date) where name = 'Ny Kafé AS'), 'fakturagrunnlag mangler ny bedrift');
+reset role;
+update organizations set trial_ends_at = current_date + 3 where id = :'org_ny';
+select pg_temp.check(run_trial_reminders() >= 1, 'påminnelse om prøveperiode');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

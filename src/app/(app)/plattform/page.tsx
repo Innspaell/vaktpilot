@@ -18,6 +18,19 @@ async function savePrices(fd: FormData) {
   revalidatePath("/plattform");
 }
 
+async function saveSignup(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  await ctx.supabase.rpc("platform_set_signup", {
+    p_open: fd.get("open") === "on",
+    p_trial_days: Math.round(Number(fd.get("trial") ?? 30) || 0),
+    p_lock_months: Math.round(Number(fd.get("lock") ?? 12) || 0),
+  });
+  revalidatePath("/plattform");
+  revalidatePath("/start");
+}
+
 async function resolveError(fd: FormData) {
   "use server";
   const ctx = await getContext();
@@ -78,10 +91,19 @@ export default async function PlatformPage() {
   const prevMonth = (() => { const [y, m] = cm.split("-").map(Number); return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`; })();
   const [{ data: orgs, error }, { data: settings }, { data: usageRows }, { data: priceRows }] = await Promise.all([
     ctx.supabase.rpc("platform_overview"),
-    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees").eq("id", 1).maybeSingle(),
+    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months").eq("id", 1).maybeSingle(),
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
-    ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until"),
+    ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until, trial_ends_at, cancel_requested_at, signup_at"),
   ]);
+  const [{ data: emailReady }, { data: invoiceRows }] = await Promise.all([
+    ctx.supabase.rpc("email_sending_ready"),
+    ctx.supabase.rpc("platform_invoice_basis", { p_month: prevMonth }),
+  ]);
+  type InvoiceRow = { org_id: string; name: string; org_number: string | null; invoice_email: string | null; active_count: number; included: number;
+    extra: number; amount: number; trial: boolean; final: boolean; cancel_requested_at: string | null };
+  const invoice = (invoiceRows ?? []) as InvoiceRow[];
+  const invoiceTotal = invoice.reduce((sum, r) => sum + Number(r.amount), 0);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
   const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
     .gte("last_seen", new Date(Date.now() - 7 * 86400000).toISOString()).order("last_seen", { ascending: false }).limit(50);
   const { data: capacity } = await ctx.supabase.from("capacity_snapshots")
@@ -135,6 +157,58 @@ export default async function PlatformPage() {
         </p>
       </section>
 
+      <section className="card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="h2">Registrering av nye bedrifter</h2>
+          <span className={`badge ${settings?.signup_open ? "bg-good-soft text-good" : "bg-paper text-muted"}`}>{settings?.signup_open ? "Åpen" : "Stengt"}</span>
+        </div>
+        <form action={saveSignup} className="mt-3 flex flex-wrap items-end gap-4">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="open" defaultChecked={Boolean(settings?.signup_open)} className="h-4 w-4" />
+            Åpen for alle på vaktpilot.no/kom-i-gang
+          </label>
+          <label className="block"><span className="label">Gratis prøveperiode (dager)</span><input name="trial" type="number" min={0} max={90} defaultValue={settings?.trial_days ?? 30} className="input w-32" /></label>
+          <label className="block"><span className="label">Fast lanseringspris (måneder)</span><input name="lock" type="number" min={0} max={36} defaultValue={settings?.launch_lock_months ?? 12} className="input w-32" /></label>
+          <button className="btn-ghost">Lagre</button>
+        </form>
+        {!emailReady && <p className="mt-2 text-sm text-warn">E-post er ikke satt opp (Resend-nøkkelen mangler), så nye brukere får ikke koden. Innloggede brukere kan registrere seg likevel.</p>}
+        <p className="mt-2 text-xs text-muted">
+          Du kan teste skjemaet selv på <a href="/kom-i-gang" className="text-brand">/kom-i-gang</a> mens det er stengt. Nye bedrifter får prisen som gjelder nå, fast i antall måneder over (0 = ingen fast pris).
+          Måneder som starter før prøveperioden er over, faktureres ikke. Du får varsel når noen registrerer seg eller sier opp.
+        </p>
+      </section>
+
+      <section className="card overflow-x-auto p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
+          <h2 className="h2">Fakturagrunnlag for {monthLabel(prevMonth)}</h2>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-muted">Sum {kr(invoiceTotal)} eks. mva.</span>
+            <a href={`/api/plattform/faktura?maned=${prevMonth.slice(0, 7)}`} className="btn-ghost py-1.5">Last ned Excel</a>
+          </div>
+        </div>
+        {invoice.length === 0 ? <p className="px-4 py-4 text-sm text-muted">Ingen bedrifter i denne måneden.</p> : (
+          <table className="mt-2 w-full min-w-[640px] text-sm">
+            <thead><tr className="border-b border-line text-left text-xs text-muted">
+              <th className="px-4 py-2 font-medium">Bedrift</th><th className="px-2 py-2 font-medium">Faktura til</th>
+              <th className="px-2 py-2 text-right font-medium">Aktive</th><th className="px-2 py-2 text-right font-medium">Ekstra</th>
+              <th className="px-4 py-2 text-right font-medium">Beløp</th>
+            </tr></thead>
+            <tbody className="divide-y divide-line">
+              {invoice.map((r) => (
+                <tr key={r.org_id}>
+                  <td className="px-4 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-muted">{r.org_number ?? "uten orgnr"}</div></td>
+                  <td className="px-2 py-2 text-xs">{r.invoice_email ?? <span className="text-warn">mangler</span>}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{r.active_count} / {r.included}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{r.extra}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{r.trial ? <span className="text-muted">Prøveperiode</span> : kr(Number(r.amount))}{!r.final && <span className="block text-xs text-warn">ikke låst ennå</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="px-4 py-3 text-xs text-muted">Grunnlaget låses når måneden er over. Fakturer fra regnskapsprogrammet deres.</p>
+      </section>
+
       <section className="card overflow-x-auto p-0">
         <table className="w-full min-w-[900px] text-sm">
           <thead>
@@ -157,7 +231,14 @@ export default async function PlatformPage() {
               <tr key={r.org_id} className={r.active ? "" : "text-muted"}>
                 <td className="px-4 py-2">
                   <div className="font-medium">{r.name}</div>
-                  <div className="text-xs text-muted">{r.org_number ?? "uten orgnr"} · opprettet {fmt.format(new Date(r.created_at))}</div>
+                  <div className="text-xs text-muted">{r.org_number ?? "uten orgnr"} · {custom.get(r.org_id)?.signup_at ? "registrerte seg" : "opprettet"} {fmt.format(new Date(r.created_at))}</div>
+                  {(() => {
+                    const c = custom.get(r.org_id);
+                    return (<div className="mt-1 flex flex-wrap gap-1">
+                      {c?.trial_ends_at && c.trial_ends_at > today && <span className="badge bg-good-soft text-good">Prøve til {fmt.format(new Date(c.trial_ends_at))}</span>}
+                      {c?.cancel_requested_at && <span className="badge bg-bad-soft text-bad">Sagt opp {fmt.format(new Date(c.cancel_requested_at))}</span>}
+                    </div>);
+                  })()}
                 </td>
                 {(() => {
                   const u = usage.get(`${r.org_id}|${cm}`);

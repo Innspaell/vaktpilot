@@ -8,6 +8,8 @@ export interface UsageMonth {
   per_extra: number;
   amount: number;
   final: boolean;
+  /** Måneden starter før prøveperioden er over, og faktureres ikke. */
+  trial?: boolean;
   computed_at: string;
 }
 
