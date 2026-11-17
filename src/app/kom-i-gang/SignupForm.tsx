@@ -103,7 +103,7 @@ export function SignupForm({ status, loggedInEmail }: { status: SignupStatus; lo
               </label>
             </div>
             <p className="text-xs text-muted">
-              Prisene er eks. mva. {status.trial_days > 0 ? "Første faktura kommer etter prøveperioden. " : ""}
+              Prisene er eks. mva. {status.trial_days > 0 ? `Prøveperioden er ${status.trial_days} dager. Etterpå betaler dere for resten av måneden, så hele måneder. ` : ""}
               Ansatte utover de {status.included} inkluderte faktureres månedlig etterskuddsvis, også ved årlig betaling.
             </p>
           </fieldset>

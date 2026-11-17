@@ -26,6 +26,8 @@ alter table organizations add column if not exists annual_start date;
 alter table organizations add column if not exists annual_end date;
 
 alter table usage_months add column if not exists trial boolean not null default false;
+-- Måneden prøveperioden slutter i: betales fra denne datoen, forholdsmessig (f.eks. 17.–31. desember)
+alter table usage_months add column if not exists billed_from date;
 alter table usage_months add column if not exists annual_covered boolean not null default false;  -- fastprisen er dekket av årsbetaling
 alter table usage_months add column if not exists annual_charge numeric(10,2) not null default 0;  -- årsprisen faktureres i årets første måned
 
@@ -284,13 +286,13 @@ end $$;
 revoke execute on function signup_complete(text, text, text, jsonb) from public;
 grant execute on function signup_complete(text, text, text, jsonb) to anon, authenticated;
 
--- Aktive ansatte per måned: gratis i måneder som starter før prøveperioden er over
+-- Aktive ansatte per måned: gratis i prøveperioden, forholdsmessig i måneden den slutter
 create or replace function compute_usage(p_org uuid, p_month date, p_final boolean, p_notify boolean default true) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   o organizations; s platform_settings;
   v_from timestamptz; v_to timestamptz; v_ids uuid[]; v_incl int; v_base numeric; v_per numeric; v_n int; v_trial boolean;
-  v_covered boolean; v_annual numeric := 0;
+  v_covered boolean; v_annual numeric := 0; v_from_day date; v_fraction numeric := 1;
   v_month date := date_trunc('month', p_month)::date;
   v_names text[] := array['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
 begin
@@ -309,7 +311,12 @@ begin
   v_incl := coalesce(o.price_included, s.included_employees, 5);
   v_base := coalesce(o.price_base, s.base_price, 0);
   v_per := coalesce(o.price_per_extra, s.per_employee_price, 0);
-  v_trial := o.trial_ends_at is not null and v_month < o.trial_ends_at;
+  -- Prøveperioden er nøyaktig 30 dager. Hele måneder innenfor er gratis; måneden den slutter i betales fra sluttdatoen.
+  v_trial := o.trial_ends_at is not null and (v_month + interval '1 month')::date <= o.trial_ends_at;
+  if not v_trial and o.trial_ends_at is not null and o.trial_ends_at > v_month then
+    v_from_day := o.trial_ends_at;
+    v_fraction := ((v_month + interval '1 month')::date - o.trial_ends_at)::numeric / ((v_month + interval '1 month')::date - v_month);
+  end if;
   -- Årlig betaling: fastprisen er dekket i årsperioden; årsprisen kommer på årets første måned
   v_covered := not v_trial and o.annual_start is not null and v_month >= o.annual_start and (o.annual_end is null or v_month < o.annual_end);
   if v_covered and (extract(year from age(v_month, o.annual_start)) * 12 + extract(month from age(v_month, o.annual_start)))::int % 12 = 0 then
@@ -317,13 +324,13 @@ begin
   end if;
 
   insert into usage_months as u (org_id, month, active_count, active_employee_ids, included, base_price, per_extra, amount, trial,
-    annual_covered, annual_charge, final, computed_at)
+    annual_covered, annual_charge, final, computed_at, billed_from)
   values (p_org, v_month, v_n, v_ids, v_incl, v_base, v_per,
-    case when v_trial then 0 else v_annual + case when v_covered then 0 else v_base end + greatest(v_n - v_incl, 0) * v_per end,
-    v_trial, v_covered, v_annual, p_final, now())
+    case when v_trial then 0 else v_annual + round((case when v_covered then 0 else v_base end + greatest(v_n - v_incl, 0) * v_per) * v_fraction, 2) end,
+    v_trial, v_covered, v_annual, p_final, now(), v_from_day)
   on conflict (org_id, month) do update set active_count = excluded.active_count, active_employee_ids = excluded.active_employee_ids,
     included = excluded.included, base_price = excluded.base_price, per_extra = excluded.per_extra, amount = excluded.amount,
-    trial = excluded.trial, annual_covered = excluded.annual_covered, annual_charge = excluded.annual_charge,
+    trial = excluded.trial, annual_covered = excluded.annual_covered, annual_charge = excluded.annual_charge, billed_from = excluded.billed_from,
     final = excluded.final, computed_at = now();
 
   if p_notify and not p_final and not v_trial and v_n > v_incl
@@ -434,12 +441,12 @@ create or replace function platform_invoice_basis(p_month date)
 returns table (org_id uuid, name text, org_number text, invoice_email text, address text, postal_code text, city text,
                month date, active_count int, included int, base_price numeric, per_extra numeric, extra int, amount numeric,
                trial boolean, final boolean, price_locked_until date, cancel_requested_at timestamptz, active boolean,
-               billing_interval text, annual_covered boolean, annual_charge numeric, annual_end date)
+               billing_interval text, annual_covered boolean, annual_charge numeric, annual_end date, billed_from date)
 language sql stable security definer set search_path = public as $$
   select o.id, o.name, o.org_number, o.invoice_email, o.address, o.postal_code, o.city,
          u.month, u.active_count, u.included, u.base_price, u.per_extra, greatest(u.active_count - u.included, 0), u.amount,
          u.trial, u.final, o.price_locked_until, o.cancel_requested_at, o.active,
-         o.billing_interval, u.annual_covered, u.annual_charge, o.annual_end
+         o.billing_interval, u.annual_covered, u.annual_charge, o.annual_end, u.billed_from
   from usage_months u join organizations o on o.id = u.org_id
   where is_platform_admin() and u.month = date_trunc('month', p_month)::date
   order by o.name;

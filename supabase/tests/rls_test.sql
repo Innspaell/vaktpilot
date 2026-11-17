@@ -750,6 +750,15 @@ select pg_temp.check(signup_request_code('per@ny.no', :'skjema') ->> 'error' lik
 reset role;
 select compute_usage(:'org_ny', current_date, false, false);
 select pg_temp.check((select trial and amount = 0 from usage_months where org_id = :'org_ny' and month = date_trunc('month', current_date)::date), 'prøvemåned ble fakturert');
+-- Prøveperioden slutter 17. desember: desember betales forholdsmessig (17.–31. = 15 av 31 dager), januar fullt
+update organizations set trial_ends_at = date '2027-12-17' where id = :'org_ny';
+select compute_usage(:'org_ny', date '2027-11-01', false, false);
+select compute_usage(:'org_ny', date '2027-12-01', false, false);
+select compute_usage(:'org_ny', date '2028-01-01', false, false);
+select pg_temp.check((select trial and amount = 0 from usage_months where org_id = :'org_ny' and month = date '2027-11-01'), 'november i prøveperioden');
+select pg_temp.check((select not trial and billed_from = date '2027-12-17' and amount = round(299 * 15 / 31.0, 2) from usage_months where org_id = :'org_ny' and month = date '2027-12-01'), 'desember forholdsmessig');
+select pg_temp.check((select amount = 299 and billed_from is null from usage_months where org_id = :'org_ny' and month = date '2028-01-01'), 'januar fullt');
+update organizations set trial_ends_at = current_date + 30 where id = :'org_ny';
 
 -- Innlogget bruker kan registrere egen bedrift; leder kan ikke endre prøveperioden selv, men kan si opp
 set role authenticated;

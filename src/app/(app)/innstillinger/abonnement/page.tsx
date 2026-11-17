@@ -64,7 +64,7 @@ export default async function SubscriptionPage() {
       {trialEnds && trialEnds > today && !cancelAt && (
         <section className="card bg-good-soft">
           <p className="font-semibold text-good">Prøveperiode til {longDate(trialEnds)}</p>
-          <p className="mt-1 text-sm">Måneder som starter før prøveperioden er over, er gratis. Du trenger ikke gjøre noe for å fortsette etterpå.</p>
+          <p className="mt-1 text-sm">Fra {longDate(trialEnds)} betaler dere for resten av måneden, deretter for hele måneder. Du trenger ikke gjøre noe for å fortsette.</p>
         </section>
       )}
 
@@ -101,7 +101,7 @@ export default async function SubscriptionPage() {
           <p className="mt-1 text-sm text-muted">
             Så langt i måneden, med planlagte vakter som er publisert.
             {over > 0 && Number(cur.per_extra) > 0 ? ` ${over} ekstra ansatt${over === 1 ? "" : "e"}: ${kr(over * cur.per_extra)}.` : ""}
-            {" "}Beløp denne måneden: <b className="text-ink">{kr(cur.amount)}</b>{cur.trial ? " (prøveperiode)" : Number(cur.annual_charge) > 0 ? " (årspris)" : cur.annual_covered ? " (fastprisen er betalt for året)" : ""}.
+            {" "}Beløp denne måneden: <b className="text-ink">{kr(cur.amount)}</b>{cur.trial ? " (prøveperiode)" : cur.billed_from ? ` (fra ${longDate(cur.billed_from)})` : Number(cur.annual_charge) > 0 ? " (årspris)" : cur.annual_covered ? " (fastprisen er betalt for året)" : ""}.
           </p>
           {names.length > 0 && (
             <ul className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">{names.map((n) => <li key={n}>{n}</li>)}</ul>
@@ -121,7 +121,7 @@ export default async function SubscriptionPage() {
                 <tr key={m.month}>
                   <td className="px-4 py-2 capitalize">{monthLabel(m.month)}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{m.active_count}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{kr(m.amount)}{m.trial ? <span className="block text-xs text-muted">prøveperiode</span> : Number(m.annual_charge) > 0 ? <span className="block text-xs text-muted">årspris</span> : m.annual_covered ? <span className="block text-xs text-muted">betalt for året</span> : null}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{kr(m.amount)}{m.trial ? <span className="block text-xs text-muted">prøveperiode</span> : m.billed_from ? <span className="block text-xs text-muted">fra {longDate(m.billed_from)}</span> : Number(m.annual_charge) > 0 ? <span className="block text-xs text-muted">årspris</span> : m.annual_covered ? <span className="block text-xs text-muted">betalt for året</span> : null}</td>
                 </tr>
               ))}
             </tbody>
