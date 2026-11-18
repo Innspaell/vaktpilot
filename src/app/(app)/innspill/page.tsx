@@ -2,6 +2,7 @@ import { getContext } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { sendFeedback } from "./actions";
 import { KIND_LABEL, STATUS } from "@/lib/feedback";
+import { SupportContact } from "@/components/SupportContact";
 
 export const metadata = { title: "Ønsker og innspill – Vaktpilot" };
 
@@ -18,6 +19,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
       <header>
         <h1 className="h1">Ønsker og innspill</h1>
         <p className="mt-1 text-muted">Savner du noe, er noe tungvint, eller virker noe ikke? Si fra. Vaktpilot blir laget sammen med dem som bruker den.</p>
+        <SupportContact intro="Haster det, eller gjelder det lønn eller faktura? Kontakt oss på" className="mt-2 text-sm" />
       </header>
 
       <section className="card">

@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
+import { SupportContact } from "@/components/SupportContact";
 import { ChangePassword } from "@/components/ChangePassword";
 import { getContext, requireOrg } from "@/lib/context";
 import { signOut, switchOrganization } from "../actions";
@@ -76,6 +77,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         <span><b className="block">Ønsker og innspill</b><span className="text-sm text-muted">Savner du noe i Vaktpilot, eller virker noe ikke? Si fra til oss som lager den.</span></span>
         <span className="text-muted">›</span>
       </Link>
+      {ctx.isLeader && <SupportContact intro="Trenger dere hjelp med Vaktpilot? Kontakt InnSpæll på" className="px-1 text-sm text-muted" />}
       {calendarUrl && (
         <section className="card">
           <h2 className="h2">Vaktene i mobilkalenderen</h2>

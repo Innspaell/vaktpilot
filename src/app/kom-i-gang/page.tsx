@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignupForm, type SignupStatus } from "./SignupForm";
+import { SupportContact } from "@/components/SupportContact";
 
 export const metadata = { title: "Kom i gang – Vaktpilot" };
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function SignupPage() {
           <SignupForm status={s} loggedInEmail={user?.email ?? null} />
         </>
       )}
+      <SupportContact intro="Spørsmål før du bestemmer deg? Kontakt oss på" className="mt-8 text-sm text-muted" />
     </main>
   );
 }

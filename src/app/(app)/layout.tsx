@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getContext } from "@/lib/context";
 import { AreaTabs, BottomNav, SideNav } from "@/components/Nav";
 import { navCounts } from "@/lib/nav-counts";
+import { ServiceNotices } from "@/components/ServiceNotices";
+import { SupportContact } from "@/components/SupportContact";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getContext();
@@ -34,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           : "Har dere betalt, kan dere se bort fra dette."}{" "}
         <Link href="/innstillinger/abonnement" className="font-semibold text-brand">Se fakturaer</Link>
       </p>
+      <SupportContact intro="Spørsmål om fakturaen?" className="mt-1 text-sm" />
     </div>
   );
   const bell = ctx.org && (
@@ -80,6 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {bell}
           </div>
         </div>
+        <ServiceNotices />
         {billingNotice}
         {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} />}
         {children}

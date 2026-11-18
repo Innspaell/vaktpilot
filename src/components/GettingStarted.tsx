@@ -23,7 +23,7 @@ export async function GettingStarted({ ctx }: { ctx: AppContext & { org: NonNull
     ctx.supabase.from("org_pay_rules").select("confirmed_at").eq("org_id", id),
   ]);
   const steps: { title: string; text: string; href: string; done: boolean }[] = [
-    { title: "Legg inn de ansatte", text: "Navn, e-post og stillingsprosent. Du kan legge inn flere om gangen.", href: "/ansatte", done: (employees ?? 0) >= 2 },
+    { title: "Legg inn de ansatte", text: "Én og én, eller alle på en gang fra Excel.", href: "/ansatte", done: (employees ?? 0) >= 2 },
     { title: "Sjekk tariff og innstillinger", text: "Velg tariffavtale (eller ingen), og bekreft satsene.", href: "/innstillinger", done: (rules ?? []).length === 0 ? false : (rules ?? []).every((r) => r.confirmed_at) },
     { title: "Lag den første vaktplanen", text: "Lag vakter for en uke, eller bruk turnus som gjentar seg.", href: "/vaktplan", done: (shifts ?? 0) > 0 },
     { title: "Publiser vaktplanen", text: "Først når den er publisert, ser de ansatte vaktene sine.", href: "/vaktplan", done: (published ?? 0) > 0 },

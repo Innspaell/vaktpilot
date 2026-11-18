@@ -24,12 +24,15 @@ export default async function EmployeesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="h1">Ansatte</h1>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="h1">Ansatte</h1>
+        <Link href="/ansatte/import" className="btn-ghost">Importer fra Excel</Link>
+      </header>
       {!ctx.employeeId && <SelfEmployeeCard email={ctx.email} />}
 
       <section className="card p-0">
         {rows.length === 0 ? (
-          <p className="p-4 text-sm text-muted">Ingen ansatte ennå. Legg til den første under.</p>
+          <p className="p-4 text-sm text-muted">Ingen ansatte ennå. Legg til den første under, eller <Link href="/ansatte/import" className="text-brand">importer alle fra Excel</Link>.</p>
         ) : (
           <ul className="divide-y divide-line">
             {rows.map((e) => {

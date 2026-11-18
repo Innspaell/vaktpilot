@@ -892,5 +892,23 @@ select platform_answer_feedback(:'innspill', 'planned', 'Godt forslag, vi lager 
 reset role;
 select pg_temp.check(exists (select 1 from notifications where kind = 'feedback_reply' and user_id = '00000000-0000-0000-0000-0000000000a3'), 'ingen varsel om svar');
 
+-- Support: svar-adresse i e-postene fra InnSpæll; driftsmeldinger
+reset role;
+select pg_temp.check(pg_get_functiondef('signup_request_code(text,jsonb)'::regprocedure) like '%support_reply_to()%'
+  and pg_get_functiondef('run_billing_dunning(date)'::regprocedure) like '%support_reply_to()%'
+  and pg_get_functiondef('send_signup_confirmation(uuid)'::regprocedure) like '%support_reply_to()%', 'svar-adresse mangler i e-postene');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select platform_set_support('Hei@Vaktpilot.no', '73 00 00 00');
+select pg_temp.check(platform_create_notice('Vedlikehold i kveld kl. 22–23.', 'warning', now(), now() + interval '2 hours', true) >= 1, 'driftsmelding ble ikke varslet');
+set role anon;
+select pg_temp.check(support_contact() ->> 'email' = 'hei@vaktpilot.no', 'support-e-post vises ikke');
+select pg_temp.check(exists (select 1 from service_notices where ends_at > now()), 'driftsmelding ikke synlig');
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+do $$ begin perform platform_create_notice('Hei hei', 'info', null, null, false); raise exception 'FEIL: kunde lagde driftsmelding';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

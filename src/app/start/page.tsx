@@ -47,7 +47,10 @@ const FAQ: [string, string][] = [
 export default async function StartPage() {
   const img = await loadSiteImages();
   let signupOpen = false;
+  type Support = { email: string | null; phone: string | null };
+  let support = null as Support | null;
   try {
+    support = (await (await createClient()).rpc("support_contact")).data as Support | null;
     const { data } = await (await createClient()).rpc("signup_status");
     signupOpen = Boolean((data as { open?: boolean } | null)?.open);
   } catch {
@@ -198,7 +201,8 @@ export default async function StartPage() {
           <span>Lagd i {VENDOR.place} av {VENDOR.name}, org.nr. {VENDOR.orgNumber}</span>
           <span className="flex gap-4">
             <Link href="/personvern" className="hover:text-brand">Personvern</Link>
-            {VENDOR.contactEmail && <a href={`mailto:${VENDOR.contactEmail}`} className="hover:text-brand">{VENDOR.contactEmail}</a>}
+            {support?.phone && <a href={`tel:${support.phone.replace(/\s/g, "")}`} className="hover:text-brand">{support.phone}</a>}
+            {(support?.email ?? VENDOR.contactEmail) && <a href={`mailto:${support?.email ?? VENDOR.contactEmail}`} className="hover:text-brand">{support?.email ?? VENDOR.contactEmail}</a>}
           </span>
         </div>
       </footer>

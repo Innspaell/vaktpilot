@@ -43,6 +43,42 @@ async function announcePrice(fd: FormData) {
   revalidatePath("/plattform");
 }
 
+async function saveSupport(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  await ctx.supabase.rpc("platform_set_support", { p_email: String(fd.get("email") ?? ""), p_phone: String(fd.get("phone") ?? "") });
+  revalidatePath("/plattform");
+}
+
+/** Dato og klokkeslett fra skjemaet (norsk tid) til tidspunkt. */
+function osloTime(v: FormDataEntryValue | null) {
+  const s = String(v ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return null;
+  const guess = new Date(`${s}:00Z`);
+  const offset = new Date(guess.toLocaleString("en-US", { timeZone: "Europe/Oslo" })).getTime() - new Date(guess.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
+  return new Date(guess.getTime() - offset).toISOString();
+}
+
+async function createNotice(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  await ctx.supabase.rpc("platform_create_notice", {
+    p_message: String(fd.get("message") ?? ""), p_level: String(fd.get("level") ?? "info"),
+    p_starts_at: osloTime(fd.get("starts")), p_ends_at: osloTime(fd.get("ends")), p_notify: fd.get("notify") === "on",
+  });
+  revalidatePath("/", "layout");
+}
+
+async function endNotice(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  await ctx.supabase.rpc("platform_end_notice", { p_id: String(fd.get("id")) });
+  revalidatePath("/", "layout");
+}
+
 async function resolveError(fd: FormData) {
   "use server";
   const ctx = await getContext();
@@ -103,7 +139,7 @@ export default async function PlatformPage() {
   const prevMonth = (() => { const [y, m] = cm.split("-").map(Number); return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`; })();
   const [{ data: orgs, error }, { data: settings }, { data: usageRows }, { data: priceRows }] = await Promise.all([
     ctx.supabase.rpc("platform_overview"),
-    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months, annual_months, next_price").eq("id", 1).maybeSingle(),
+    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months, annual_months, next_price, support_email, support_phone").eq("id", 1).maybeSingle(),
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
     ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until, trial_ends_at, cancel_requested_at, signup_at"),
   ]);
@@ -114,6 +150,8 @@ export default async function PlatformPage() {
     ctx.supabase.from("feedback").select("id", { count: "exact", head: true }).eq("status", "new"),
   ]);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
+  const { data: notices } = await ctx.supabase.from("service_notices").select("id, message, level, starts_at, ends_at")
+    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`).order("starts_at");
   const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
     .gte("last_seen", new Date(Date.now() - 7 * 86400000).toISOString()).order("last_seen", { ascending: false }).limit(50);
   const { data: capacity } = await ctx.supabase.from("capacity_snapshots")
@@ -214,6 +252,45 @@ export default async function PlatformPage() {
           Du kan teste skjemaet selv på <a href="/kom-i-gang" className="text-brand">/kom-i-gang</a> mens det er stengt. Nye bedrifter får prisen som gjelder nå, fast i antall måneder over (0 = ingen fast pris).
           Prøveperioden er nøyaktig så mange dager; måneden den slutter i faktureres forholdsmessig. Årlig betaling: 0 = ikke tilbudt; 10 = to måneder gratis, og årsprisen kommer på fakturagrunnlaget for årets første måned. Du får varsel når noen registrerer seg eller sier opp.
         </p>
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="h2">Support og driftsmeldinger</h2>
+        <form action={saveSupport} className="flex flex-wrap items-end gap-3">
+          <label className="block"><span className="label">Support-e-post</span><input name="email" type="email" defaultValue={settings?.support_email ?? ""} placeholder="hei@vaktpilot.no" className="input w-64" /></label>
+          <label className="block"><span className="label">Support-telefon (valgfritt)</span><input name="phone" type="tel" defaultValue={settings?.support_phone ?? ""} className="input w-44" /></label>
+          <button className="btn-ghost">Lagre</button>
+        </form>
+        <p className="text-xs text-muted">
+          Vises for lederne i appen, på nettsiden og ved fakturaer. Svar på e-poster fra Vaktpilot (kode, ordrebekreftelse, påminnelser) går hit.
+          {!settings?.support_email && <b className="text-warn"> Mangler: svar går i dag til en adresse ingen leser.</b>}
+        </p>
+
+        <div className="border-t border-line pt-3">
+          {(notices ?? []).map((n) => (
+            <div key={n.id} className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-paper px-3 py-2 text-sm">
+              <span>
+                <b>{n.level === "down" ? "Avbrudd" : n.level === "warning" ? "Viktig" : "Info"}:</b> {n.message}
+                <span className="text-muted"> ({fmt.format(new Date(n.starts_at))}{n.ends_at ? ` – ${new Date(n.ends_at).toLocaleString("nb-NO", { timeZone: "Europe/Oslo", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ", til du avslutter"})</span>
+              </span>
+              <form action={endNotice}><input type="hidden" name="id" value={n.id} /><button className="text-xs font-semibold text-brand">Avslutt nå</button></form>
+            </div>
+          ))}
+          <details className="text-sm">
+            <summary className="cursor-pointer font-semibold text-brand">Ny driftsmelding</summary>
+            <form action={createNotice} className="mt-2 grid gap-3 md:grid-cols-4">
+              <label className="block md:col-span-4"><span className="label">Melding</span>
+                <input name="message" required maxLength={500} placeholder="Vaktpilot oppdateres i kveld kl. 22–22.30. Appen kan være treg en kort stund." className="input" /></label>
+              <label className="block"><span className="label">Type</span>
+                <select name="level" className="input" defaultValue="info"><option value="info">Info</option><option value="warning">Viktig</option><option value="down">Driftsavbrudd</option></select></label>
+              <label className="block"><span className="label">Fra (tomt = nå)</span><input name="starts" type="datetime-local" className="input" /></label>
+              <label className="block"><span className="label">Til (tomt = til du avslutter)</span><input name="ends" type="datetime-local" className="input" /></label>
+              <label className="flex items-center gap-2 self-end pb-3"><input type="checkbox" name="notify" className="h-4 w-4" /> Send også til alle ledere på e-post</label>
+              <div className="md:col-span-4"><button className="btn-ghost">Publiser</button>
+                <span className="ml-2 text-xs text-muted">Vises øverst for alle i appen og på innloggingssiden, fra et døgn før start.</span></div>
+            </form>
+          </details>
+        </div>
       </section>
 
       <section className="card overflow-x-auto p-0">

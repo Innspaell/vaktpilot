@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DPA_SECTIONS, DPA_VERSION, TERMS_SECTIONS, TERMS_VERSION, VENDOR } from "@/lib/legal";
+import { SupportContact } from "@/components/SupportContact";
 
 export const metadata = { title: "Vilkår – Vaktpilot" };
 
@@ -34,6 +35,7 @@ export default function TermsPage() {
         ))}
       </div>
 
+      <SupportContact intro="Spørsmål om vilkårene? Kontakt oss på" />
       <p className="flex gap-4"><Link href="/personvern" className="text-brand">Personvernerklæring</Link><Link href="/" className="text-brand">Til Vaktpilot</Link></p>
     </main>
   );
