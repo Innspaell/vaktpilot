@@ -72,6 +72,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         )}
         <p className="mt-2 text-xs text-muted">Er noe feil? Si fra til lederen din.</p>
       </section>
+      <Link href="/innspill?fra=/profil" className="card flex items-center justify-between gap-3 hover:bg-paper">
+        <span><b className="block">Ønsker og innspill</b><span className="text-sm text-muted">Savner du noe i Vaktpilot, eller virker noe ikke? Si fra til oss som lager den.</span></span>
+        <span className="text-muted">›</span>
+      </Link>
       {calendarUrl && (
         <section className="card">
           <h2 className="h2">Vaktene i mobilkalenderen</h2>

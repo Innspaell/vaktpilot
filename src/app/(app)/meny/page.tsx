@@ -35,6 +35,7 @@ export default async function MenuPage() {
           {row("/tavle", "Oppslagstavle")}
           {ctx.canSetAvailability && row("/tilgjengelighet", "Når kan jeg jobbe")}
           {row("/varsler", "Varsler")}
+          {row("/innspill", "Ønsker og innspill", "Savner du noe? Si fra")}
         </ul>
       </section>
       {ctx.isAdmin && (

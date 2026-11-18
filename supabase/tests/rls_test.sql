@@ -876,5 +876,21 @@ do $$ begin perform platform_announce_price(349, 5, 45, current_date + 30); rais
 exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 select pg_temp.check(platform_announce_price(349, 5, 45, current_date + 61) >= 1, 'prisvarsel sendt til ingen');
 
+-- Innspill: ansatt sender, ser bare egne; InnSpæll svarer og den ansatte får varsel
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select submit_feedback(:'org_a', 'idea', 'Kan vi få vaktbytte med to klikk?', '/vaktplan') as innspill \gset
+select pg_temp.check(exists (select 1 from feedback where id = :'innspill' and role = 'employee'), 'ansatt ser ikke eget innspill');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(not exists (select 1 from feedback where id = :'innspill'), 'andre ser innspillet');
+do $$ begin perform platform_answer_feedback((select id from feedback limit 1), 'done', 'x'); raise exception 'FEIL: kunde svarte på innspill';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select pg_temp.check(exists (select 1 from feedback where id = :'innspill'), 'InnSpæll ser ikke innspillet');
+select platform_answer_feedback(:'innspill', 'planned', 'Godt forslag, vi lager det.');
+reset role;
+select pg_temp.check(exists (select 1 from notifications where kind = 'feedback_reply' and user_id = '00000000-0000-0000-0000-0000000000a3'), 'ingen varsel om svar');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

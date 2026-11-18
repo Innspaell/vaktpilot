@@ -91,6 +91,10 @@ export function SideNav({ isAdmin, isPlatformAdmin, counts }: { isAdmin: boolean
       {isAdmin && LEAD.map((i) => link(i.href, i.label, isActive(path, i.href, i.match), i.count ? counts[i.count] : 0))}
       {isPlatformAdmin && heading("InnSpæll")}
       {isPlatformAdmin && link("/plattform", "Plattform", path.startsWith("/plattform"))}
+      <Link href={`/innspill?fra=${encodeURIComponent(path)}`}
+        className={`mt-4 block rounded-lg px-3 py-2 text-sm ${path === "/innspill" ? "bg-brand-soft font-medium text-brand" : "text-muted hover:bg-paper hover:text-ink"}`}>
+        Ønsker og innspill
+      </Link>
     </nav>
   );
 }

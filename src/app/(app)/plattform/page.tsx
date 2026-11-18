@@ -107,10 +107,11 @@ export default async function PlatformPage() {
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
     ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until, trial_ends_at, cancel_requested_at, signup_at"),
   ]);
-  const [{ data: emailReady }, { count: invoicesWaiting }, { count: invoicesOverdue }] = await Promise.all([
+  const [{ data: emailReady }, { count: invoicesWaiting }, { count: invoicesOverdue }, { count: newFeedback }] = await Promise.all([
     ctx.supabase.rpc("email_sending_ready"),
     ctx.supabase.from("invoices").select("id", { count: "exact", head: true }).in("status", ["ready", "failed"]),
     ctx.supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "sent").lt("due_date", new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date())),
+    ctx.supabase.from("feedback").select("id", { count: "exact", head: true }).eq("status", "new"),
   ]);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
   const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
@@ -141,6 +142,9 @@ export default async function PlatformPage() {
           <Link href="/plattform/lonnsregler" className="btn-ghost">Lønnsregler og tariffer</Link>
           <Link href="/plattform/fakturaer" className="btn-ghost">
             Fakturaer{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-warn px-1.5 text-xs font-bold text-white">{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0)}</span>}
+          </Link>
+          <Link href="/plattform/innspill" className="btn-ghost">
+            Innspill{(newFeedback ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-brand px-1.5 text-xs font-bold text-white">{newFeedback}</span>}
           </Link>
           <Link href="/plattform/nettside" className="btn-ghost">Nettsiden</Link>
           <Link href="/ny-bedrift" className="btn-primary">Ny bedrift</Link>
