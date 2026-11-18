@@ -112,11 +112,11 @@ export const TERMS_SECTIONS: { title: string; body: string[] }[] = [
     body: [
       "4.1 Prisen følger prislisten på vaktpilot.no. Lanseringspris: 299 kr per måned eks. mva. med 5 aktive ansatte inkludert, og 39 kr per måned for hver aktiv ansatt utover det. En ansatt er aktiv når hen har hatt en publisert vakt eller registrerte timer i måneden.",
       "4.2 Kunder som får lanseringspris, beholder den i 12 måneder fra avtalen inngås. Deretter gjelder ordinær prisliste.",
-      "4.3 Antall aktive ansatte telles automatisk og vises for Kunden under Innstillinger › Abonnement. Fakturering skjer månedlig etterskuddsvis, med betalingsfrist 14 dager.",
+      "4.3 Antall aktive ansatte telles automatisk og vises for Kunden under Innstillinger › Abonnement. Fastprisen faktureres forskuddsvis ved starten av hver periode, og aktive ansatte utover det inkluderte etterskuddsvis på neste faktura. Fakturaen sendes som EHF eller e-post, med betalingsfrist 14 dager.",
       "4.4 Nye kunder får en gratis prøveperiode på 30 dager. Fra dagen etter prøveperioden betales det forholdsmessig ut måneden, og deretter for hele måneder. Avtalen fortsetter etter prøveperioden hvis Kunden ikke sier opp.",
       "4.5 Kunden kan velge årlig betaling. Da betales fastprisen for 12 måneder forskuddsvis, til prisen for det antallet måneder som står i prislisten (for eksempel 10). Ansatte utover det inkluderte antallet faktureres fortsatt månedlig etterskuddsvis. Betalt årspris refunderes ikke ved oppsigelse; avtalen gjelder da ut det betalte året.",
       "4.6 InnSpæll kan endre prisene med 60 dagers varsel. Kunden kan da si opp med virkning fra når endringen trer i kraft.",
-      "4.7 Ved forsinket betaling kan InnSpæll kreve forsinkelsesrente. Er betaling mer enn 30 dager forsinket etter skriftlig purring, kan InnSpæll stenge tilgangen for ledere. De ansatte beholder alltid tilgang til egne timer og egne data.",
+      "4.7 Ved forsinket betaling kan InnSpæll kreve forsinkelsesrente. Er fakturaen ikke betalt 14 dager etter forfall, sendes en skriftlig påminnelse. Er betaling mer enn 30 dager forsinket etter påminnelsen, kan InnSpæll stenge tilgangen for ledere. De ansatte beholder alltid tilgang til egne timer og egne data.",
       "4.8 Det er ingen bindingstid. Begge parter kan si opp avtalen skriftlig (også i appen eller på e-post) med virkning fra utgangen av måneden, eller ved årlig betaling fra utgangen av det betalte året.",
     ],
   },

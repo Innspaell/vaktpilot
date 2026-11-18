@@ -10,6 +10,7 @@ import { requestOpenShift } from "./vaktplan/actions";
 import { VacationLine } from "@/components/VacationOverview";
 import { Intro } from "@/components/Intro";
 import { ChangePassword } from "@/components/ChangePassword";
+import { GettingStarted } from "@/components/GettingStarted";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -64,6 +65,8 @@ export default async function Home() {
           <h1 className="h1 capitalize">{formatDateLong(date)}</h1>
           {todayCov.holiday && <p className="mt-1 text-warn">{todayCov.holiday}</p>}
         </header>
+
+        <GettingStarted ctx={ctx as Parameters<typeof GettingStarted>[0]["ctx"]} />
 
         <Board ctx={org} compact />
 

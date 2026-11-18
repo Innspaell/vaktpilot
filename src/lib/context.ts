@@ -12,7 +12,11 @@ export interface AppContext {
   userId: string;
   email: string;
   orgs: { id: string; name: string; role: Role }[];
-  org: { id: string; name: string; role: Role; timezone: string; logoUrl: string | null; availabilityEnabled: boolean; clockEnabled: boolean } | null;
+  org: { id: string; name: string; role: Role; timezone: string; logoUrl: string | null; availabilityEnabled: boolean; clockEnabled: boolean;
+    /** Sperret for ubetalt faktura: lederne har bare ansatt-tilgang. */
+    blocked: boolean } | null;
+  /** Eier eller administrator i bedriften, også når bedriften er sperret (abonnement og fakturaer). */
+  isLeader: boolean;
   isAdmin: boolean;
   isPlatformAdmin: boolean;
   employeeId: string | null;
@@ -29,7 +33,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
   if (!user) redirect("/login");
 
   const [{ data: memberships }, { data: platform }, { data: aal }, { data: mfaRequired }] = await Promise.all([
-    supabase.from("memberships").select("role, organizations(id, name, timezone, logo_url, availability_enabled, clock_enabled)").eq("user_id", user.id),
+    supabase.from("memberships").select("role, organizations(id, name, timezone, logo_url, availability_enabled, clock_enabled, blocked_at)").eq("user_id", user.id),
     supabase.rpc("is_platform_admin"),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     supabase.rpc("mfa_required"),
@@ -37,7 +41,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
   // Tofaktor: ledere og InnSpæll må ha det; andre som har skrudd det på, må bekrefte koden ved innlogging
   if (aal?.currentLevel !== "aal2" && (aal?.nextLevel === "aal2" || mfaRequired)) redirect("/tofaktor");
 
-  type Row = { role: Role; organizations: { id: string; name: string; timezone: string; logo_url: string | null; availability_enabled: boolean | null; clock_enabled: boolean | null } | null };
+  type Row = { role: Role; organizations: { id: string; name: string; timezone: string; logo_url: string | null; availability_enabled: boolean | null; clock_enabled: boolean | null; blocked_at: string | null } | null };
   const rows = ((memberships ?? []) as unknown as Row[]).filter((m) => m.organizations);
   const orgs = rows.map((m) => ({ id: m.organizations!.id, name: m.organizations!.name, role: m.role }));
 
@@ -52,6 +56,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
         logoUrl: chosen.organizations!.logo_url,
         availabilityEnabled: Boolean(chosen.organizations!.availability_enabled),
         clockEnabled: chosen.organizations!.clock_enabled !== false,
+        blocked: Boolean(chosen.organizations!.blocked_at),
       }
     : null;
 
@@ -72,7 +77,8 @@ export const getContext = cache(async (): Promise<AppContext> => {
     email: user.email ?? "",
     orgs,
     org,
-    isAdmin: org ? org.role !== "employee" : false,
+    isAdmin: org ? org.role !== "employee" && !org.blocked : false,
+    isLeader: org ? org.role !== "employee" : false,
     isPlatformAdmin: Boolean(platform),
     employeeId,
     canSetAvailability,
@@ -84,6 +90,13 @@ export async function requireOrg() {
   const ctx = await getContext();
   if (!ctx.org) redirect(ctx.isPlatformAdmin ? "/ny-bedrift" : "/");
   return ctx as AppContext & { org: NonNullable<AppContext["org"]> };
+}
+
+/** Abonnement og fakturaer: ledere, også når bedriften er sperret. */
+export async function requireLeader() {
+  const ctx = await requireOrg();
+  if (!ctx.isLeader) redirect("/");
+  return ctx;
 }
 
 export async function requireAdmin() {

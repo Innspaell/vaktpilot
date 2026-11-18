@@ -9,6 +9,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await ctx.supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", ctx.userId).eq("org_id", ctx.org.id).is("read_at", null)
     : { count: 0 };
   const counts = ctx.org ? await navCounts(ctx) : { approvals: 0, mine: 0 };
+  // Forfalte fakturaer vises for lederne øverst på alle sider
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
+  const { data: overdue } = ctx.org && ctx.isLeader
+    ? await ctx.supabase.from("invoices").select("invoice_number, gross, due_date, kid, bank_account").eq("org_id", ctx.org.id).eq("status", "sent").lt("due_date", today).order("due_date")
+    : { data: null };
+  const kr = (n: number) => `${Number(n).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
+  const billingNotice = ctx.org && ctx.isLeader && (ctx.org.blocked || (overdue?.length ?? 0) > 0) && (
+    <div className={`card ${ctx.org.blocked ? "bg-bad-soft" : "bg-warn-soft"}`} role="status">
+      <p className={`font-semibold ${ctx.org.blocked ? "text-bad" : "text-warn"}`}>
+        {ctx.org.blocked ? "Tilgangen for ledere er sperret fordi en faktura ikke er betalt" : overdue!.length === 1 ? "En faktura har forfalt" : `${overdue!.length} fakturaer har forfalt`}
+      </p>
+      <ul className="mt-1 space-y-0.5 text-sm">
+        {(overdue ?? []).map((i) => (
+          <li key={i.invoice_number ?? i.due_date}>
+            Faktura {i.invoice_number}: {kr(i.gross)}, forfalt {i.due_date.split("-").reverse().join(".")}
+            {i.bank_account ? `, konto ${i.bank_account}` : ""}{i.kid ? `, KID ${i.kid}` : ""}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-sm">
+        {ctx.org.blocked
+          ? "Du ser Vaktpilot som en vanlig ansatt til betalingen er registrert. Da åpnes alt igjen av seg selv, vanligvis innen et døgn. De ansatte merker ingenting."
+          : "Har dere betalt, kan dere se bort fra dette."}{" "}
+        <Link href="/innstillinger/abonnement" className="font-semibold text-brand">Se fakturaer</Link>
+      </p>
+    </div>
+  );
   const bell = ctx.org && (
     <Link href="/varsler" className="relative rounded-lg p-1.5 text-muted hover:bg-white hover:text-ink" aria-label={`Varsler${unread ? `, ${unread} uleste` : ""}`}>
       <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -53,6 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {bell}
           </div>
         </div>
+        {billingNotice}
         {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} />}
         {children}
       </main>

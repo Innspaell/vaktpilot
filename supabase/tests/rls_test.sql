@@ -800,5 +800,81 @@ select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no'
 update organizations set trial_ends_at = current_date + 3 where id = :'org_ny';
 select pg_temp.check(run_trial_reminders() >= 1, 'påminnelse om prøveperiode');
 
+-- Fakturering: forskudd, forholdsmessig første faktura, ekstra ansatte etterskudd, purring og sperring
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select pg_temp.check((select billing_enabled and billing_from = current_date from organizations where id = :'org_ny'), 'selvregistrert bedrift faktureres ikke');
+select pg_temp.check(not (select billing_enabled from organizations where id = :'org_a'), 'eksisterende kunde ble fakturert uten videre');
+-- Ny Kafé: registrert 17.11.2027, prøve til 17.12.2027
+update organizations set billing_from = date '2027-11-17', trial_ends_at = date '2027-12-17', billed_through = null, cancel_requested_at = null where id = :'org_ny';
+select pg_temp.check(generate_invoices(date '2027-12-16') = 0 or not exists (select 1 from invoices where org_id = :'org_ny'), 'faktura før prøveperioden var over');
+select generate_invoices(date '2027-12-17');
+select pg_temp.check((select count(*) = 1 and min(net) = round(299 * 15 / 31.0, 2) + 299 and min(period_to) = date '2028-01-31' and min(status) = 'ready'
+  from invoices where org_id = :'org_ny'), 'første faktura skal dekke 17.–31. desember og januar');
+select generate_invoices(date '2027-12-17');
+select pg_temp.check((select count(*) = 1 from invoices where org_id = :'org_ny'), 'dobbel faktura samme dag');
+-- 1. februar: februar på forskudd + ekstra ansatte i januar
+insert into usage_months (org_id, month, active_count, included, base_price, per_extra, amount, final)
+values (:'org_ny', date '2028-01-01', 7, 5, 299, 39, 377, true) on conflict (org_id, month) do update set active_count = 7, final = true, trial = false, billed_from = null;
+select generate_invoices(date '2028-02-01');
+select pg_temp.check((select net = 299 + 2 * (select per_extra from usage_months where org_id = :'org_ny' and month = date '2028-01-01') and period_to = date '2028-02-29' from invoices where org_id = :'org_ny' and issue_date = date '2028-02-01'), 'februar + ekstra i januar');
+select pg_temp.check((select invoice_id is not null from usage_months where org_id = :'org_ny' and month = date '2028-01-01'), 'ekstra ansatte ble ikke knyttet til fakturaen');
+-- Kunde ser egne fakturaer, ikke andres
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check(not exists (select 1 from invoices where org_id = :'org_ny'), 'annen bedrift ser fakturaene');
+reset role;
+-- Jobben uten riktig hemmelighet
+set role anon;
+do $$ begin perform billing_run('feil'); raise exception 'FEIL: fakturajobb uten hemmelighet'; exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+reset role;
+select decrypted_secret as hemmelighet from vault.decrypted_secrets where name = 'billing_job_secret' \gset
+set role anon;
+select pg_temp.check(jsonb_typeof(billing_run(:'hemmelighet') -> 'send') = 'array', 'fakturajobb med hemmelighet');
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select id as faktura from invoices where org_id = :'org_ny' and issue_date = date '2027-12-17' \gset
+select platform_invoice_action(:'faktura', 'approve');
+select pg_temp.check(billing_step(:'hemmelighet', :'faktura', 'start'), 'kunne ikke starte sending');
+select pg_temp.check(not billing_step(:'hemmelighet', :'faktura', 'start'), 'samme faktura startet to ganger');
+select billing_step(:'hemmelighet', :'faktura', 'created', '{"fiken_invoice_id": 991, "invoice_number": "10001", "kid": "123455", "bank_account": "1234.56.78901"}');
+select billing_step(:'hemmelighet', :'faktura', 'sent');
+-- Forfalt 31.12, påminnelse 14.01, sperring 13.02
+select run_billing_dunning(date '2028-01-01');
+select pg_temp.check((select overdue_notified from invoices where id = :'faktura'), 'forfalt-varsel');
+select run_billing_dunning(date '2028-01-14');
+select pg_temp.check((select reminder_sent_at is not null from invoices where id = :'faktura'), 'påminnelse ikke sendt');
+update invoices set reminder_sent_at = timestamptz '2028-01-14 08:00+01' where id = :'faktura';
+select run_billing_dunning(date '2028-02-10');
+select pg_temp.check((select block_warned from invoices where id = :'faktura') and exists (select 1 from notifications where kind = 'billing_block'), 'varsel før sperring');
+select run_billing_dunning(date '2028-02-13');
+select pg_temp.check((select blocked_at is not null from organizations where id = :'org_ny'), 'ikke sperret');
+-- Sperret leder er ikke admin, men ser fakturaen
+select user_id as nina from memberships where org_id = :'org_ny' and role = 'owner' \gset
+set role authenticated;
+select pg_temp.login(:'nina', 'nina@ny.no');
+select pg_temp.check(not is_admin(:'org_ny') and is_org_leader(:'org_ny'), 'sperret leder er fortsatt admin');
+select pg_temp.check(exists (select 1 from invoices where org_id = :'org_ny'), 'sperret leder ser ikke fakturaene');
+reset role;
+select billing_step(:'hemmelighet', :'faktura', 'paid');
+select pg_temp.check((select blocked_at is null from organizations where id = :'org_ny'), 'ikke åpnet etter betaling');
+
+-- Avslutning: oppsagt i februar → avsluttet etter februar, sletting 90 dager etter
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+update organizations set cancel_requested_at = timestamptz '2028-02-10 12:00+01', billed_through = date '2028-02-29' where id = :'org_ny';
+select run_subscription_housekeeping(date '2028-02-29');
+select pg_temp.check((select ended_at is null from organizations where id = :'org_ny'), 'avsluttet før perioden var over');
+select run_subscription_housekeeping(date '2028-03-01');
+select pg_temp.check((select ended_at = date '2028-02-29' and delete_after = date '2028-05-29' and not active from organizations where id = :'org_ny'), 'ikke avsluttet riktig');
+do $$ begin perform platform_delete_org_data((select id from organizations where name = 'Ny Kafé AS'), 'feil navn'); raise exception 'FEIL: slettet uten riktig navn';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select platform_delete_org_data(:'org_ny', 'Ny Kafé AS');
+select pg_temp.check(not exists (select 1 from organizations where id = :'org_ny') and not exists (select 1 from employees where org_id = :'org_ny'), 'data ble ikke slettet');
+-- Prisendring må varsles minst 60 dager før
+do $$ begin perform platform_announce_price(349, 5, 45, current_date + 30); raise exception 'FEIL: prisendring med for kort varsel';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.check(platform_announce_price(349, 5, 45, current_date + 61) >= 1, 'prisvarsel sendt til ingen');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

@@ -32,6 +32,17 @@ async function saveSignup(fd: FormData) {
   revalidatePath("/start");
 }
 
+async function announcePrice(fd: FormData) {
+  "use server";
+  const ctx = await getContext();
+  if (!ctx.isPlatformAdmin) return;
+  const n = (k: string) => Math.max(0, Number(String(fd.get(k) ?? "0").replace(",", ".")) || 0);
+  await ctx.supabase.rpc("platform_announce_price", {
+    p_base: n("base"), p_included: Math.round(n("incl")), p_per: n("per"), p_from: String(fd.get("from") ?? ""),
+  });
+  revalidatePath("/plattform");
+}
+
 async function resolveError(fd: FormData) {
   "use server";
   const ctx = await getContext();
@@ -92,19 +103,15 @@ export default async function PlatformPage() {
   const prevMonth = (() => { const [y, m] = cm.split("-").map(Number); return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`; })();
   const [{ data: orgs, error }, { data: settings }, { data: usageRows }, { data: priceRows }] = await Promise.all([
     ctx.supabase.rpc("platform_overview"),
-    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months, annual_months").eq("id", 1).maybeSingle(),
+    ctx.supabase.from("platform_settings").select("base_price, per_employee_price, included_employees, signup_open, trial_days, launch_lock_months, annual_months, next_price").eq("id", 1).maybeSingle(),
     ctx.supabase.from("usage_months").select("*").in("month", [cm, prevMonth]),
     ctx.supabase.from("organizations").select("id, price_base, price_included, price_per_extra, price_locked_until, trial_ends_at, cancel_requested_at, signup_at"),
   ]);
-  const [{ data: emailReady }, { data: invoiceRows }] = await Promise.all([
+  const [{ data: emailReady }, { count: invoicesWaiting }, { count: invoicesOverdue }] = await Promise.all([
     ctx.supabase.rpc("email_sending_ready"),
-    ctx.supabase.rpc("platform_invoice_basis", { p_month: prevMonth }),
+    ctx.supabase.from("invoices").select("id", { count: "exact", head: true }).in("status", ["ready", "failed"]),
+    ctx.supabase.from("invoices").select("id", { count: "exact", head: true }).eq("status", "sent").lt("due_date", new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date())),
   ]);
-  type InvoiceRow = { org_id: string; name: string; org_number: string | null; invoice_email: string | null; active_count: number; included: number;
-    extra: number; amount: number; trial: boolean; final: boolean; cancel_requested_at: string | null;
-    billing_interval: string; annual_covered: boolean; annual_charge: number; billed_from: string | null };
-  const invoice = (invoiceRows ?? []) as InvoiceRow[];
-  const invoiceTotal = invoice.reduce((sum, r) => sum + Number(r.amount), 0);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
   const { data: errors } = await ctx.supabase.from("app_errors").select("id, source, message, path, count, last_seen, resolved_at")
     .gte("last_seen", new Date(Date.now() - 7 * 86400000).toISOString()).order("last_seen", { ascending: false }).limit(50);
@@ -132,6 +139,9 @@ export default async function PlatformPage() {
         <h1 className="h1">Plattform</h1>
         <div className="flex gap-2">
           <Link href="/plattform/lonnsregler" className="btn-ghost">Lønnsregler og tariffer</Link>
+          <Link href="/plattform/fakturaer" className="btn-ghost">
+            Fakturaer{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-warn px-1.5 text-xs font-bold text-white">{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0)}</span>}
+          </Link>
           <Link href="/plattform/nettside" className="btn-ghost">Nettsiden</Link>
           <Link href="/ny-bedrift" className="btn-primary">Ny bedrift</Link>
         </div>
@@ -157,6 +167,27 @@ export default async function PlatformPage() {
           Aktiv ansatt = har hatt publisert vakt eller registrert timer i måneden. Tallet oppdateres hver time og låses når måneden er over.
           Standardprisen gjelder alle bedrifter uten egen avtale.
         </p>
+        {(() => {
+          const np = settings?.next_price as { base: number; included: number; per: number; from: string } | null;
+          const earliest = new Date(Date.now() + 61 * 86400000).toISOString().slice(0, 10);
+          return np ? (
+            <p className="mt-3 rounded-lg bg-paper px-3 py-2 text-sm">
+              Varslet ny pris fra {fmt.format(new Date(np.from))}: {kr(Number(np.base))} med {np.included} inkludert, {kr(Number(np.per))} per ekstra. Den trer i kraft av seg selv.
+            </p>
+          ) : (
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer font-semibold text-brand">Varsle kundene om ny pris</summary>
+              <form action={announcePrice} className="mt-2 flex flex-wrap items-end gap-3">
+                <label className="block"><span className="label">Fast per måned</span><input name="base" inputMode="decimal" required className="input w-28" /></label>
+                <label className="block"><span className="label">Inkludert</span><input name="incl" inputMode="numeric" defaultValue={incl} required className="input w-24" /></label>
+                <label className="block"><span className="label">Per ekstra</span><input name="per" inputMode="decimal" required className="input w-28" /></label>
+                <label className="block"><span className="label">Fra dato</span><input name="from" type="date" min={earliest} defaultValue={earliest} required className="input" /></label>
+                <button className="btn-ghost">Varsle alle kunder</button>
+              </form>
+              <p className="mt-1 text-xs text-muted">Vilkårene krever minst 60 dagers varsel. Lederne får beskjed i appen og på e-post. Kunder med fast pris får den nye prisen når den faste løper ut.</p>
+            </details>
+          );
+        })()}
       </section>
 
       <section className="card">
@@ -179,43 +210,6 @@ export default async function PlatformPage() {
           Du kan teste skjemaet selv på <a href="/kom-i-gang" className="text-brand">/kom-i-gang</a> mens det er stengt. Nye bedrifter får prisen som gjelder nå, fast i antall måneder over (0 = ingen fast pris).
           Prøveperioden er nøyaktig så mange dager; måneden den slutter i faktureres forholdsmessig. Årlig betaling: 0 = ikke tilbudt; 10 = to måneder gratis, og årsprisen kommer på fakturagrunnlaget for årets første måned. Du får varsel når noen registrerer seg eller sier opp.
         </p>
-      </section>
-
-      <section className="card overflow-x-auto p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
-          <h2 className="h2">Fakturagrunnlag for {monthLabel(prevMonth)}</h2>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-muted">Sum {kr(invoiceTotal)} eks. mva.</span>
-            <a href={`/api/plattform/faktura?maned=${prevMonth.slice(0, 7)}`} className="btn-ghost py-1.5">Last ned Excel</a>
-          </div>
-        </div>
-        {invoice.length === 0 ? <p className="px-4 py-4 text-sm text-muted">Ingen bedrifter i denne måneden.</p> : (
-          <table className="mt-2 w-full min-w-[640px] text-sm">
-            <thead><tr className="border-b border-line text-left text-xs text-muted">
-              <th className="px-4 py-2 font-medium">Bedrift</th><th className="px-2 py-2 font-medium">Faktura til</th>
-              <th className="px-2 py-2 text-right font-medium">Aktive</th><th className="px-2 py-2 text-right font-medium">Ekstra</th>
-              <th className="px-4 py-2 text-right font-medium">Beløp</th>
-            </tr></thead>
-            <tbody className="divide-y divide-line">
-              {invoice.map((r) => (
-                <tr key={r.org_id}>
-                  <td className="px-4 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-muted">{r.org_number ?? "uten orgnr"}</div></td>
-                  <td className="px-2 py-2 text-xs">{r.invoice_email ?? <span className="text-warn">mangler</span>}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.active_count} / {r.included}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.extra}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">
-                    {r.trial ? <span className="text-muted">Prøveperiode</span> : kr(Number(r.amount))}
-                    {Number(r.annual_charge) > 0 ? <span className="block text-xs text-brand">årspris {kr(Number(r.annual_charge))}</span>
-                      : r.annual_covered ? <span className="block text-xs text-muted">årlig, betalt</span> : null}
-                    {r.billed_from && <span className="block text-xs text-muted">fra {fmt.format(new Date(r.billed_from))}</span>}
-                    {!r.final && <span className="block text-xs text-warn">ikke låst ennå</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p className="px-4 py-3 text-xs text-muted">Grunnlaget låses når måneden er over. Fakturer fra regnskapsprogrammet deres.</p>
       </section>
 
       <section className="card overflow-x-auto p-0">

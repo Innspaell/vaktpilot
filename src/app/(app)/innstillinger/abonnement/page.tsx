@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/context";
+import { requireLeader } from "@/lib/context";
 import { currentMonth, kr, monthLabel, type UsageMonth } from "@/lib/usage";
 
 async function saveInvoiceEmail(fd: FormData) {
   "use server";
-  const ctx = await requireAdmin();
+  const ctx = await requireLeader();
   const v = String(fd.get("invoice_email") ?? "").trim().toLowerCase();
   if (v && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(v)) return;
   await ctx.supabase.from("organizations").update({ invoice_email: v || null }).eq("id", ctx.org.id);
@@ -14,26 +14,34 @@ async function saveInvoiceEmail(fd: FormData) {
 
 async function setBilling(fd: FormData) {
   "use server";
-  const ctx = await requireAdmin();
+  const ctx = await requireLeader();
   await ctx.supabase.rpc("set_billing_interval", { p_org: ctx.org.id, p_interval: fd.get("interval") === "year" ? "year" : "month" });
   revalidatePath("/innstillinger/abonnement");
 }
 
 async function setCancellation(fd: FormData) {
   "use server";
-  const ctx = await requireAdmin();
+  const ctx = await requireLeader();
   await ctx.supabase.rpc("request_cancellation", { p_org: ctx.org.id, p_cancel: fd.get("cancel") === "1" });
   revalidatePath("/innstillinger/abonnement");
 }
 
 export default async function SubscriptionPage() {
-  const ctx = await requireAdmin();
+  const ctx = await requireLeader();
   await ctx.supabase.rpc("refresh_my_usage", { p_org: ctx.org.id });
   const { data } = await ctx.supabase.from("usage_months").select("*").eq("org_id", ctx.org.id).order("month", { ascending: false }).limit(13);
   const months = (data ?? []) as UsageMonth[];
   const { data: org } = await ctx.supabase.from("organizations")
     .select("price_locked_until, trial_ends_at, invoice_email, cancel_requested_at, billing_interval, annual_start, annual_end").eq("id", ctx.org.id).single();
   const { data: settings } = await ctx.supabase.rpc("signup_status");
+  const { data: invoiceRows } = await ctx.supabase.from("invoices")
+    .select("id, issue_date, due_date, period_to, gross, net, status, invoice_number, kid, bank_account, lines")
+    .eq("org_id", ctx.org.id).in("status", ["sent", "paid", "failed", "sending"]).order("issue_date", { ascending: false }).limit(24);
+  type Inv = { id: string; issue_date: string; due_date: string; period_to: string | null; gross: number; net: number; status: string;
+    invoice_number: string | null; kid: string | null; bank_account: string | null; lines: { description: string; quantity: number; unit_price: number }[] };
+  const invoices = (invoiceRows ?? []) as Inv[];
+  const kr2 = (n: number) => `${Number(n).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
+  const short = (d: string) => d.split("-").reverse().join(".");
   const annualMonths = Number((settings as { annual_months?: number } | null)?.annual_months ?? 0);
   const interval = (org?.billing_interval as string | null) ?? "month";
   const annualStart = org?.annual_start as string | null;
@@ -163,9 +171,47 @@ export default async function SubscriptionPage() {
         </section>
       )}
 
+      <section className="card p-0">
+        <h2 className="h2 px-4 pt-4">Fakturaer</h2>
+        {invoices.length === 0 ? (
+          <p className="px-4 pb-4 pt-1 text-sm text-muted">Ingen fakturaer ennå. {trialEnds && trialEnds > today ? `Første faktura kommer ${longDate(trialEnds)}.` : ""}</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-line">
+            {invoices.map((i) => {
+              const overdue = i.status === "sent" && i.due_date < today;
+              return (
+                <li key={i.id} className="px-4 py-3">
+                  <details>
+                    <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
+                      <span>
+                        <b>Faktura {i.invoice_number ?? ""}</b> <span className="text-sm text-muted">{short(i.issue_date)}{i.period_to ? `, til og med ${short(i.period_to)}` : ""}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums">{kr2(i.gross)}</span>
+                        <span className={`badge ${i.status === "paid" ? "bg-good-soft text-good" : overdue ? "bg-bad-soft text-bad" : "bg-paper text-muted"}`}>
+                          {i.status === "paid" ? "Betalt" : overdue ? "Forfalt" : `Forfaller ${short(i.due_date)}`}
+                        </span>
+                      </span>
+                    </summary>
+                    <div className="mt-2 space-y-1 text-sm">
+                      {i.lines.map((l, n) => (
+                        <div key={n} className="flex justify-between gap-3"><span>{l.description}{Number(l.quantity) !== 1 ? ` × ${l.quantity}` : ""}</span><span className="tabular-nums">{kr2(Number(l.quantity) * Number(l.unit_price))}</span></div>
+                      ))}
+                      <div className="flex justify-between gap-3 text-muted"><span>Mva. 25 %</span><span className="tabular-nums">{kr2(Number(i.gross) - Number(i.net))}</span></div>
+                      {i.status !== "paid" && (i.bank_account || i.kid) && <p className="text-muted">Betal til konto {i.bank_account ?? "–"}{i.kid ? ` med KID ${i.kid}` : ""}.</p>}
+                    </div>
+                  </details>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="px-4 pb-4 pt-2 text-xs text-muted">Fakturaene sendes fra Fiken som EHF eller e-post. Fastprisen betales på forskudd, ekstra ansatte etterskuddsvis.</p>
+      </section>
+
       <section className="card">
         <h2 className="h2">Faktura</h2>
-        <p className="mt-1 text-sm text-muted">Faktura sendes etterskuddsvis hver måned, med 14 dagers betalingsfrist.</p>
+        <p className="mt-1 text-sm text-muted">Faktura sendes ved starten av hver periode, med 14 dagers betalingsfrist.</p>
         <form action={saveInvoiceEmail} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block min-w-64 flex-1">
             <span className="label">E-post for faktura</span>
