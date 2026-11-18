@@ -164,7 +164,7 @@ export default async function PersonnelListPage({ searchParams }: { searchParams
 
         <p className="mt-4 text-xs text-muted">
           Kode = ansattnummer. Kodeoversikten med fødselsnummer eller D-nummer ligger i lønnssystemet og vises ved kontroll.
-          Listen bygger på stemplingene. Rettelser og slettinger står med hvem som gjorde dem og når. Ingen registreringer kan fjernes fra listen.
+          Listen bygger på stemplingene. Rettelser og slettinger står med hvem som gjorde dem og når. Ingen registreringer kan fjernes fra listen. Listen oppbevares i 3,5 år etter regnskapsårets slutt.
         </p>
       </article>
     </div>

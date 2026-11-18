@@ -1002,6 +1002,45 @@ exception when raise_exception then
 end $$;
 reset role;
 select pg_temp.check(exists (select 1 from employees where full_name = 'Per Kokk'), 'ansatt med arbeidstid ble slettet');
+-- Kobling til Cateringflyt: stempling med hemmelig nøkkel, uten innlogging i Vaktpilot
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select platform_set_integration(:'org_c', 'hemmelig-nokkel-som-er-lang-nok-1234567890', 'https://cateringflyt.example', '2kokker');
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+do $$ begin
+  perform platform_set_integration((select id from organizations where name = 'Kokkene AS'), repeat('x', 40), null, null);
+  raise exception 'FEIL: kunde koblet selv';
+exception when insufficient_privilege then null;
+end $$;
+select pg_temp.check((select enabled from org_integration(:'org_c')), 'lederen ser ikke koblingen');
+reset role;
+set role anon;
+select set_config('request.jwt.claims', '{}', false);
+select set_config('test.org_c', :'org_c', false);
+do $$ begin
+  perform integration_clock_state(current_setting('test.org_c')::uuid, 'feil-nokkel', 'per@c.no');
+  raise exception 'FEIL: feil nøkkel ble godtatt';
+exception when insufficient_privilege then null;
+end $$;
+select pg_temp.check((integration_clock_state(:'org_c', 'hemmelig-nokkel-som-er-lang-nok-1234567890', 'ukjent@c.no') ->> 'employee')::boolean = false, 'ukjent e-post ble funnet');
+select pg_temp.check(integration_clock_state(:'org_c', 'hemmelig-nokkel-som-er-lang-nok-1234567890', 'PER@c.no') ->> 'state' = 'out', 'Per står ikke utstemplet');
+select pg_temp.check(integration_clock(:'org_c', 'hemmelig-nokkel-som-er-lang-nok-1234567890', 'per@c.no', 'in') ->> 'state' = 'working', 'stempling inn fra Cateringflyt virket ikke');
+select pg_temp.check(integration_clock(:'org_c', 'hemmelig-nokkel-som-er-lang-nok-1234567890', 'per@c.no', 'out') ->> 'state' = 'out', 'stempling ut fra Cateringflyt virket ikke');
+do $$ begin
+  perform clock_as(current_setting('test.org_c')::uuid, gen_random_uuid(), 'in', 'x');
+  raise exception 'FEIL: anon kunne kalle clock_as';
+exception when insufficient_privilege then null;
+end $$;
+reset role;
+select pg_temp.check((select count(*) from clock_events where org_id = :'org_c' and source = 'cateringflyt') = 2, 'stemplingene er ikke merket Cateringflyt');
+select pg_temp.check((select changed_by from audit_log a join time_entries t on t.id = a.row_id
+                       where a.org_id = :'org_c' and a.action = 'INSERT' and t.starts_at = (select max(starts_at) from time_entries where org_id = :'org_c')
+                       order by a.at desc limit 1) = '00000000-0000-0000-0000-0000000000c2', 'endringsloggen viser ikke den ansatte');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+select pg_temp.check((select bool_and(jsonb_array_length(changes) = 0) from personnel_list(:'org_c', :'d') where not deleted), 'utstempling fra Cateringflyt vises som rettelse');
+reset role;
+
 -- Når hele bedriften slettes (etter oppbevaringstiden), stopper ikke vernet slettingen
 delete from organizations where id = :'org_c';
 select pg_temp.check(not exists (select 1 from employees where full_name = 'Per Kokk'), 'bedriften med personalliste kunne ikke slettes');
