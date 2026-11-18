@@ -910,5 +910,101 @@ select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
 do $$ begin perform platform_create_notice('Hei hei', 'info', null, null, false); raise exception 'FEIL: kunde lagde driftsmelding';
 exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 
+-- Personalliste: stempling, føring i etterkant, rettelser og sletting med hvem og når
+reset role;
+insert into auth.users values
+  ('00000000-0000-0000-0000-0000000000c1', 'leder@c.no'),
+  ('00000000-0000-0000-0000-0000000000c2', 'per@c.no'),
+  ('00000000-0000-0000-0000-0000000000c3', 'siv@c.no');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
+select create_organization('Kokkene AS', '987654321') as org_c \gset
+insert into memberships values (:'org_c', '00000000-0000-0000-0000-0000000000c1', 'owner', now());
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+insert into employees (org_id, full_name, email, employee_number) values
+  (:'org_c', 'Per Kokk', 'per@c.no', '101'),
+  (:'org_c', 'Siv Servitør', 'siv@c.no', null);
+select pg_temp.login('00000000-0000-0000-0000-0000000000c2', 'per@c.no');
+select claim_invites();
+select pg_temp.login('00000000-0000-0000-0000-0000000000c3', 'siv@c.no');
+select claim_invites();
+
+-- Uten personalliste kan ansatte ikke se den
+select pg_temp.login('00000000-0000-0000-0000-0000000000c2', 'per@c.no');
+do $$ begin
+  perform personnel_list((select id from organizations where name = 'Kokkene AS'), current_date);
+  raise exception 'FEIL: ansatt så personallisten uten at den er slått på';
+exception when insufficient_privilege then null;
+end $$;
+
+reset role;
+update organizations set personnel_list = true where id = :'org_c';
+set role authenticated;
+
+-- Per stempler inn og ut
+select pg_temp.login('00000000-0000-0000-0000-0000000000c2', 'per@c.no');
+select clock(:'org_c', 'in') as per_entry \gset
+select clock(:'org_c', 'out');
+
+-- Leder fører timer for Siv i etterkant, retter starttiden, og fører og sletter en feilregistrering
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+select (now() at time zone 'Europe/Oslo')::date as d, (now() at time zone 'Europe/Oslo')::date - 1 as y \gset
+insert into time_entries (org_id, employee_id, starts_at, ends_at, source)
+  select :'org_c', id, (:'y' || ' 10:00')::timestamp at time zone 'Europe/Oslo', (:'y' || ' 14:00')::timestamp at time zone 'Europe/Oslo', 'admin'
+    from employees where full_name = 'Siv Servitør'
+  returning id as siv_entry \gset
+update time_entries set starts_at = starts_at - interval '30 minutes' where id = :'siv_entry';
+insert into time_entries (org_id, employee_id, starts_at, ends_at, source)
+  select :'org_c', id, (:'y' || ' 07:00')::timestamp at time zone 'Europe/Oslo', (:'y' || ' 08:00')::timestamp at time zone 'Europe/Oslo', 'admin'
+    from employees where full_name = 'Per Kokk'
+  returning id as wrong_entry \gset
+delete from time_entries where id = :'wrong_entry';
+
+select pg_temp.check((select count(*) from personnel_list(:'org_c', :'d')) = 1, 'personallisten i dag har ikke Pers stempling');
+select pg_temp.check((select count(*) from personnel_list(:'org_c', :'y')) = 2, 'personallisten i går har ikke to registreringer');
+select pg_temp.check((select source = 'clock' and not deleted and jsonb_array_length(changes) = 0 and employee_number = '101' and ends_at is not null
+                        from personnel_list(:'org_c', :'d') where entry_id = :'per_entry'), 'stemplingen vises ikke riktig');
+select pg_temp.check((select source = 'admin' and registered_by = 'leder@c.no' and changes -> 0 ->> 'action' = 'UPDATE'
+                        from personnel_list(:'org_c', :'y') where entry_id = :'siv_entry'), 'rettelsen vises ikke med hvem');
+select pg_temp.check((select deleted and changes -> -1 ->> 'action' = 'DELETE' and full_name = 'Per Kokk'
+                        from personnel_list(:'org_c', :'y') where entry_id = :'wrong_entry'), 'slettet registrering vises ikke');
+select pg_temp.check((select name = 'Kokkene AS' and org_number = '987654321' from personnel_list_header(:'org_c')), 'bedriftsopplysninger mangler');
+
+-- Alle ansatte kan vise listen (kontroll når leder ikke er der) – men ikke når det er slått av
+select pg_temp.login('00000000-0000-0000-0000-0000000000c3', 'siv@c.no');
+select pg_temp.check((select count(*) from personnel_list(:'org_c', :'y')) = 2, 'ansatt kan ikke vise personallisten');
+reset role;
+update organizations set personnel_list_staff_view = false where id = :'org_c';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000c3', 'siv@c.no');
+do $$ begin
+  perform personnel_list((select id from organizations o where o.name = 'Kokkene AS'), current_date);
+  raise exception 'FEIL: ansatt så personallisten selv om bare ledere skal se den';
+exception when insufficient_privilege then null;
+end $$;
+
+-- En annen bedrift ser ikke listen
+select pg_temp.login('00000000-0000-0000-0000-0000000000b1', 'leder@b.no');
+select set_config('test.org_c', :'org_c', false);
+do $$ begin
+  perform personnel_list(current_setting('test.org_c')::uuid, current_date);
+  raise exception 'FEIL: annen bedrift så personallisten';
+exception when insufficient_privilege then null;
+end $$;
+
+-- Ansatte med registrert arbeidstid kan ikke slettes
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+do $$ begin
+  delete from employees where full_name = 'Per Kokk';
+  raise exception 'FEIL: ansatt med arbeidstid ble slettet';
+exception when raise_exception then
+  if sqlerrm like 'FEIL:%' then raise; end if;
+end $$;
+reset role;
+select pg_temp.check(exists (select 1 from employees where full_name = 'Per Kokk'), 'ansatt med arbeidstid ble slettet');
+-- Når hele bedriften slettes (etter oppbevaringstiden), stopper ikke vernet slettingen
+delete from organizations where id = :'org_c';
+select pg_temp.check(not exists (select 1 from employees where full_name = 'Per Kokk'), 'bedriften med personalliste kunne ikke slettes');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

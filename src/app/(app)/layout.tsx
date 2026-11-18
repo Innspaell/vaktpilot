@@ -49,7 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
   return (
     <div className="mx-auto flex max-w-6xl gap-8 px-4 pb-24 pt-4 md:pb-10 md:pt-8">
-      <aside className="hidden w-52 shrink-0 md:block">
+      <aside className="hidden w-52 shrink-0 md:block print:hidden">
         {/* Kundens logo og bjella øverst. Uten logo står Vaktpilot der. */}
         <div className="mb-2 flex items-start justify-between gap-2 pl-3">
           {ctx.org?.logoUrl ? (
@@ -71,7 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         )}
       </aside>
       <main className="min-w-0 flex-1 space-y-4">
-        <div className="flex items-center justify-between gap-3 md:hidden">
+        <div className="flex items-center justify-between gap-3 md:hidden print:hidden">
           {ctx.org?.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ctx.org.logoUrl} alt={ctx.org.name} className="h-10 w-auto max-w-[60%] object-contain" />
@@ -85,7 +85,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <ServiceNotices />
         {billingNotice}
-        {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} />}
+        {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} personnelList={ctx.org.personnelList} />}
         {children}
       </main>
       {ctx.org && <BottomNav isAdmin={ctx.isAdmin} counts={counts} />}

@@ -50,7 +50,7 @@ export function BottomNav({ isAdmin, counts }: { isAdmin: boolean; counts: NavCo
     : ME;
   const menuActive = isAdmin && (path === "/meny" || path === "/profil" || LEAD.some((l) => isActive(path, l.href, l.match)) || path.startsWith("/tavle"));
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] md:hidden print:hidden">
       <ul className="grid grid-cols-5">
         {items.map((i) => {
           const on = i.href === "/meny" ? menuActive : isActive(path, i.href) && !(i.href === "/vaktplan" && menuActive);
@@ -118,7 +118,7 @@ export function SubNav({ tabs }: { tabs: { href: string; label: string }[] }) {
 }
 
 /** Viser riktige faner for lederområdet man står i. */
-export function AreaTabs({ availability }: { availability: boolean }) {
+export function AreaTabs({ availability, personnelList = false }: { availability: boolean; personnelList?: boolean }) {
   const path = usePathname();
   const plan = [
     { href: "/vaktplan/rediger", label: "Plan" },
@@ -129,6 +129,7 @@ export function AreaTabs({ availability }: { availability: boolean }) {
   const pay = [
     { href: "/lonn", label: "Lønn" },
     { href: "/rapporter", label: "Rapporter" },
+    ...(personnelList ? [{ href: "/personalliste", label: "Personalliste" }] : []),
   ];
   const inGroup = (tabs: { href: string }[]) => tabs.some((t) => path === t.href || path.startsWith(t.href + "/"));
   if (inGroup(plan)) return <SubNav tabs={plan} />;

@@ -78,6 +78,21 @@ export default async function SettingsPage() {
               <span>Send inn stemplede timer automatisk<span className="block text-xs text-muted">Gjelder bare når stempling er på.</span></span>
             </label>
           </fieldset>
+          <fieldset className="space-y-2 rounded-lg border border-line p-3 md:col-span-2">
+            <legend className="px-1 text-sm font-semibold">Personalliste</legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="personnel_list" defaultChecked={org?.personnel_list ?? false} className="mt-0.5 h-4 w-4" />
+              <span>Vi har plikt til å føre personalliste
+                <span className="block text-xs text-muted">Gjelder blant annet servering og catering, frisør og skjønnhetspleie, og bilverksted og bilpleie. Stemplingene blir da personallisten, med alle rettelser. Alle som jobber må stemple, også eier og daglig leder. Ansatte med registrert arbeidstid kan ikke slettes, bare få sluttdato. <Link href="https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/personalliste/" target="_blank" className="text-brand">Les mer hos Skatteetaten</Link></span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="personnel_list_staff_view" defaultChecked={org?.personnel_list_staff_view ?? true} className="mt-0.5 h-4 w-4" />
+              <span>Alle ansatte kan vise personallisten
+                <span className="block text-xs text-muted">Kontrollen kan komme når ingen leder er til stede. Da må den som er på jobb kunne vise listen. Ansatte kan bare se den, ikke endre.</span>
+              </span>
+            </label>
+          </fieldset>
         </ActionForm>
       </section>
 

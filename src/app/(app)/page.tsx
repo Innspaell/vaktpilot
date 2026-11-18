@@ -141,6 +141,12 @@ export default async function Home() {
         </div>
 
         {ctx.employeeId ? (clock && <ClockButton state={clock.state} since={clock.since} />) : <SelfEmployeeCard email={ctx.email} />}
+        {ctx.org.personnelList && (ctx.isAdmin || ctx.org.personnelListStaffView) && (
+          <Link href="/personalliste" className="card flex items-center justify-between hover:border-brand">
+            <span><b>Personalliste</b><span className="block text-sm text-muted">Hvem som jobber i dag. Vis eller skriv ut ved kontroll.</span></span>
+            <span className="text-brand">›</span>
+          </Link>
+        )}
       </div>
     );
   }
@@ -189,6 +195,12 @@ export default async function Home() {
         </section>
       )}
       {clock && <ClockButton state={clock.state} since={clock.since} />}
+      {ctx.org.personnelList && (ctx.isAdmin || ctx.org.personnelListStaffView) && (
+        <Link href="/personalliste" className="card flex items-center justify-between hover:border-brand">
+          <span><b>Personalliste</b><span className="block text-sm text-muted">Hvem som jobber i dag. Vis eller skriv ut ved kontroll.</span></span>
+          <span className="text-brand">›</span>
+        </Link>
+      )}
 
       <Board ctx={org} compact />
 

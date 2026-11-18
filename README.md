@@ -39,6 +39,6 @@ psql -d vp -f supabase/tests/rls_test.sql
 
 ## Status
 
-Ferdig: database for alle faser, innlogging med e-postlenke, bedriftsvalg, ansattregister med avtaler og arbeidsroller, innstillinger, dashbord for administrator og ansatt, stempling.
+Ferdig: database for alle faser, innlogging med e-postlenke, bedriftsvalg, ansattregister med avtaler og arbeidsroller, innstillinger, dashbord for administrator og ansatt, stempling, personalliste (for servering, catering, frisør og bilverksted: stemplingene med alle rettelser, kan vises og skrives ut ved kontroll).
 
 Neste: vaktplan med kalender og bemanningsbehov, påmelding til ledige vakter, manuell timeregistrering og godkjenning, CSV-eksport.
