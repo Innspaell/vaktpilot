@@ -27,6 +27,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
     loadCompTime(ctx),
   ]);
   const pendingTotal = Array.from(data.pendingByEmployee.values()).reduce((a, b) => a + b, 0);
+  const unconfirmedTotal = Array.from(data.unconfirmedByEmployee.values()).reduce((a, b) => a + b, 0);
   const thisPeriod = (periods ?? []).find((p) => p.starts_on === from && p.ends_on === to);
   const locked = thisPeriod?.status === "exported";
   // Låst periode: vis det lagrede grunnlaget. Viser ny beregning noe annet (f.eks. nye satser), vises differansen.
@@ -96,10 +97,12 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         </section>
       )}
 
-      {pendingTotal > 0 && (
+      {(pendingTotal > 0 || unconfirmedTotal > 0) && (
         <p className="card border-warn/40 bg-warn-soft text-sm text-warn">
-          {pendingTotal} {pendingTotal === 1 ? "registrering venter" : "registreringer venter"} på godkjenning. De er ikke med i lønnsgrunnlaget eller filene,
-          men du ser en foreløpig beregning med dem hos hver ansatt.{" "}
+          {[
+            pendingTotal > 0 && `${pendingTotal} ${pendingTotal === 1 ? "registrering venter" : "registreringer venter"} på godkjenning`,
+            unconfirmedTotal > 0 && `${unconfirmedTotal} ${unconfirmedTotal === 1 ? "gjennomført vakt er" : "gjennomførte vakter er"} ikke bekreftet av den ansatte`,
+          ].filter(Boolean).join(", og ")}. Dette er ikke med i lønnsgrunnlaget eller filene, men du ser en foreløpig beregning med det hos hver ansatt.{" "}
           <Link href={`/timer?vis=alle&fra=${from}&til=${to}`} className="font-semibold underline">Gå til godkjenning</Link>
         </p>
       )}
@@ -135,6 +138,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
             const w = warnings.get(p.employee.id) ?? [];
             const b = data.balances.get(p.employee.id)!;
             const pending = data.pendingByEmployee.get(p.employee.id) ?? 0;
+            const notConfirmed = data.unconfirmedByEmployee.get(p.employee.id) ?? 0;
             return (
               <section key={p.employee.id} className="card">
                 <div className="flex items-baseline justify-between gap-2">
@@ -157,17 +161,21 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                     </div>
                   </div>
                 </div>
-                {pending > 0 && (() => {
+                {(pending > 0 || notConfirmed > 0) && (() => {
                   const pr = data.projected.get(p.employee.id);
-                  if (!pr || locked) return <p className="mt-2 text-xs text-warn">{pending} ikke godkjent</p>;
+                  const what = [
+                    pending > 0 && `${pending} ${pending === 1 ? "registrering" : "registreringer"} som ikke er godkjent`,
+                    notConfirmed > 0 && `${notConfirmed} ${notConfirmed === 1 ? "vakt" : "vakter"} uten bekreftede timer (regnet som planlagt)`,
+                  ].filter(Boolean).join(" og ");
+                  if (!pr || locked) return <p className="mt-2 text-xs text-warn">{what}</p>;
                   const val = (l: (typeof p.lines)[number]) => l.quantity ?? l.hours;
                   const before = new Map(p.lines.map((l) => [`${l.code}|${l.rate ?? ""}|${l.percent ?? ""}`, val(l)]));
                   return (
                     <details open className="mt-3 rounded-lg border border-warn/40 p-2">
                       <summary className="cursor-pointer text-sm font-semibold text-warn">
-                        Foreløpig, med {pending} {pending === 1 ? "registrering" : "registreringer"} som ikke er godkjent
+                        Foreløpig, med {what}
                       </summary>
-                      <p className="mt-1 text-xs text-muted">Slik blir grunnlaget hvis timene godkjennes som de er. Tallet i parentes er økningen fra det godkjente.</p>
+                      <p className="mt-1 text-xs text-muted">Slik blir grunnlaget hvis timene godkjennes som de er, og vaktene som planlagt. Tallet i parentes er økningen fra det godkjente.</p>
                       <table className="mt-1 w-full text-sm">
                         <tbody className="divide-y divide-line">
                           {pr.lines.map((l, i) => {
