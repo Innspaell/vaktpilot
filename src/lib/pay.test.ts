@@ -39,6 +39,20 @@ describe("lønnsgrunnlag", () => {
     expect(b.diffHours).toBe(4);
   });
 
+  it("timebasis (0 t avtalt): ordinære timer, ikke mertid", () => {
+    const tb: PayEmployee = { ...kari, hoursPerWeek: 0 };
+    const days = ["2026-11-16", "2026-11-17", "2026-11-18"].map((d) => entry(d, "08:00", "16:00"));
+    const r = calculatePay(tb, days, [], { from: "2026-11-16", to: "2026-11-22" });
+    expect(line(r, "ordinary")).toBe(22.5);
+    expect(line(r, "extra")).toBe(0);
+  });
+
+  it("saldo regnes bare til og med i dag, og fra avtalen startet", () => {
+    const e: PayEmployee = { ...kari, hoursPerWeek: 37.5, agreedFrom: "2026-11-09" };
+    const b = timeBalance(e, [], [], { from: "2026-11-01", to: "2026-11-30" }, undefined, "2026-11-13");
+    expect(b.expectedHours).toBe(37.5); // 9.–13. november
+  });
+
   it("arbeid etter kl. 21 og på søndag er overtid 100 %", () => {
     const r = calculatePay(kari, [entry("2026-11-16", "17:00", "23:00", 0), entry("2026-11-22", "10:00", "14:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" });
     expect(line(r, "ordinary")).toBe(4); // 17–21

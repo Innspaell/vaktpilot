@@ -143,7 +143,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <section key={p.employee.id} className="card">
                 <div className="flex items-baseline justify-between gap-2">
                   <h2 className="h2">{p.employee.name}</h2>
-                  <span className="text-xs text-muted">{p.employee.payType === "fixed" ? "Fastlønn" : "Timelønn"} · {num(p.employee.hoursPerWeek)} t/uke</span>
+                  <span className="text-xs text-muted">{p.employee.payType === "fixed" ? "Fastlønn" : "Timelønn"} · {p.employee.onCall ? "tilkalling" : p.employee.hoursPerWeek > 0 ? `${num(p.employee.hoursPerWeek)} t/uke` : "timebasis"}</span>
                 </div>
                 {p.lines.length === 0 ? <p className="mt-2 text-sm text-muted">Ingen godkjente timer eller fravær.</p> : (
                   <table className="mt-2 w-full text-sm">
@@ -152,15 +152,21 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                     </tbody>
                   </table>
                 )}
-                <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-paper p-2 text-center text-xs">
-                  <div><div className="text-muted">Forventet</div><div className="text-base font-semibold tabular-nums">{num(b.expectedHours)} t</div></div>
-                  <div><div className="text-muted">Jobbet + betalt fravær</div><div className="text-base font-semibold tabular-nums">{num(b.workedHours + b.paidAbsenceHours)} t</div></div>
-                  <div><div className="text-muted">Saldo</div>
-                    <div className={`text-base font-semibold tabular-nums ${b.diffHours < -0.01 ? "text-warn" : b.diffHours > 0.01 ? "text-brand" : "text-good"}`}>
-                      {b.diffHours > 0 ? "+" : ""}{num(b.diffHours)} t
+                {b.expectedHours > 0 ? (
+                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-paper p-2 text-center text-xs">
+                    <div><div className="text-muted">Avtalt hittil</div><div className="text-base font-semibold tabular-nums">{num(b.expectedHours)} t</div></div>
+                    <div><div className="text-muted">Jobbet + betalt fravær</div><div className="text-base font-semibold tabular-nums">{num(b.workedHours + b.paidAbsenceHours)} t</div></div>
+                    <div><div className="text-muted">Saldo</div>
+                      <div className={`text-base font-semibold tabular-nums ${b.diffHours < -0.01 ? "text-warn" : b.diffHours > 0.01 ? "text-brand" : "text-good"}`}>
+                        {b.diffHours > 0 ? "+" : ""}{num(b.diffHours)} t
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <p className="mt-3 rounded-lg bg-paper p-2 text-center text-xs text-muted">
+                    Jobbet + betalt fravær: <b className="text-ink">{num(b.workedHours + b.paidAbsenceHours)} t</b> · ingen fast avtalt tid i perioden
+                  </p>
+                )}
                 {(pending > 0 || notConfirmed > 0) && (() => {
                   const pr = data.projected.get(p.employee.id);
                   const what = [

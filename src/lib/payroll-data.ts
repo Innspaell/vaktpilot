@@ -74,6 +74,8 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
       id: e.id, name: e.full_name, employeeNumber: e.employee_number,
       payType: (t?.pay_type ?? "hourly") as "fixed" | "hourly",
       hoursPerWeek: Number(t?.hours_per_week ?? 0), fullTimeHours: fullTime, onCall: Boolean(t?.on_call),
+      // Første dag med avtalt tid i perioden (f.eks. timebasis før fast avtale)
+      agreedFrom: (terms ?? []).filter((x) => x.employee_id === e.id && Number(x.hours_per_week) > 0).map((x) => x.valid_from).sort()[0],
       isShiftWorker: e.is_shift_worker, paidHolidays: t?.paid_holidays ?? true, startDate: e.start_date,
       averaging: t?.averaging_weeks && t.averaging_from ? { from: t.averaging_from, weeks: t.averaging_weeks } : null,
     };
@@ -129,7 +131,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     /** Lagret grunnlag fra siste låsing/etterbetaling, hvis perioden er låst */
     snapshot: (lastExport?.result ?? null) as PaySnapshot | null,
     snapshotKind: (lastExport?.kind ?? null) as "full" | "diff" | null,
-    balances: new Map(employees.map((e) => [e.id, timeBalance(e, all, absences, period, tz)])),
+    balances: new Map(employees.map((e) => [e.id, timeBalance(e, all, absences, period, tz, localDate(new Date(), tz))])),
     /** Gjennomførte vakter i perioden uten timer, per ansatt */
     unconfirmedByEmployee: unconfirmedInPeriod.reduce((m, s) => m.set(s.employee_id!, (m.get(s.employee_id!) ?? 0) + 1), new Map<string, number>()),
     pendingByEmployee: pending.reduce((m, r) => m.set(r.employee_id, (m.get(r.employee_id) ?? 0) + 1), new Map<string, number>()),

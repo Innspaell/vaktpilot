@@ -131,6 +131,8 @@ export interface PayEmployee {
   fullTimeHours: number;
   /** Tilkalling/ekstrahjelp: ingen avtalt tid. Timer opp til heltid er ordinære, og ingen tid må fylles. */
   onCall?: boolean;
+  /** Første dag med avtalt tid (forventet tid regnes ikke før dette) */
+  agreedFrom?: string;
   isShiftWorker: boolean;
   paidHolidays: boolean;
   startDate: string;
@@ -306,8 +308,10 @@ export function calculatePay(
   for (const [bk, { weeks, list }] of blocks) {
     const blockRules = rulesAt(bk);
     const fullTimeMin = (blockRules.weeklyOvertimeAfterHours ?? employee.fullTimeHours) * 60 * weeks;
-    const contractBlock = employee.onCall ? fullTimeMin : contractMin * weeks;
-    const partTime = !employee.onCall && contractMin * weeks < fullTimeMin - 1;
+    // Uten avtalt tid (tilkalling eller timebasis): ordinært opp til heltid, ikke mertid
+    const noAgreed = employee.onCall || contractMin <= 0;
+    const contractBlock = noAgreed ? fullTimeMin : contractMin * weeks;
+    const partTime = !noAgreed && contractMin * weeks < fullTimeMin - 1;
     let blockOrdinary = 0;
     const dayUsed = new Map<string, number>();
     for (const e of list) {
@@ -377,8 +381,8 @@ export function calculatePay(
       if (rest > 0) lowReasons.push(weeks > 1 ? `over ${round2(fullTimeMin / 60 / weeks)} t/uke i snitt over ${weeks} uker` : `over ${round2(fullTimeMin / 60)} t i uka`);
       if (!count) continue;
       const per = weeks > 1 ? ` i snitt over ${weeks} uker` : " per uke";
-      add("ordinary", "Ordinære timer", date, toContract, { why: employee.onCall
-        ? `Tilkalling uten avtalt tid: ordinære timer opp til heltid (${round2(fullTimeMin / 60 / weeks).toLocaleString("nb-NO")} t${per}).`
+      add("ordinary", "Ordinære timer", date, toContract, { why: employee.onCall || contractMin <= 0
+        ? `Uten fast avtalt tid: ordinære timer opp til heltid (${round2(fullTimeMin / 60 / weeks).toLocaleString("nb-NO")} t${per}).`
         : `Arbeid innenfor ordinær arbeidstid, opp til avtalt tid (${employee.hoursPerWeek.toLocaleString("nb-NO")} t${per}).` });
       add("extra", "Mertid (deltid over avtalt tid)", date, toFull, { why: `Over avtalt tid, men ikke over heltid (${round2(fullTimeMin / 60 / weeks).toLocaleString("nb-NO")} t${per}).` });
       add(`overtime_${rules.overtimePercent}`, `Overtid ${rules.overtimePercent} %`, date, rest + outLow, { reason: lowReasons.join(", "), why: "Arbeid utover grensene for ordinær tid og heltid." });
@@ -490,11 +494,15 @@ export function timeBalance(
   absences: PayAbsence[],
   period: { from: string; to: string },
   tz = DEFAULT_TZ,
+  /** Forventet tid regnes bare til og med denne dagen (i dag), så saldoen ikke går i minus for dager som ikke har vært */
+  asOf?: string,
 ): Balance {
   const dayMin = employee.onCall ? 0 : (employee.hoursPerWeek * 60) / 5;
   let expected = 0;
-  const from = period.from > employee.startDate ? period.from : employee.startDate;
-  for (let d = from; d <= period.to; d = addDays(d, 1)) {
+  let from = period.from > employee.startDate ? period.from : employee.startDate;
+  if (employee.agreedFrom && employee.agreedFrom > from) from = employee.agreedFrom;
+  const until = asOf && asOf < period.to ? asOf : period.to;
+  for (let d = from; d <= until; d = addDays(d, 1)) {
     if (isoWeekday(d) <= 5 && !holidayOn(d)) expected += dayMin;
   }
   const worked = entries
@@ -502,7 +510,7 @@ export function timeBalance(
     .reduce((s, e) => s + Math.max(0, (e.end.getTime() - e.start.getTime()) / 60000 - e.breakMinutes), 0);
   let absence = 0;
   for (const a of absences.filter((x) => x.employeeId === employee.id && x.countsAsWork)) {
-    for (let d = a.from > from ? a.from : from; d <= (a.to < period.to ? a.to : period.to); d = addDays(d, 1)) {
+    for (let d = a.from > from ? a.from : from; d <= (a.to < until ? a.to : until); d = addDays(d, 1)) {
       if (isoWeekday(d) > 5 || holidayOn(d)) continue;
       absence += a.partialHours ? a.partialHours * 60 : dayMin;
     }
