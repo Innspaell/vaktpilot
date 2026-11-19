@@ -9,6 +9,7 @@ import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { NOTIFICATION_GROUPS } from "@/lib/notification-kinds";
 import { MfaSettings } from "@/components/MfaSettings";
 import { EmergencyContacts, type EmergencyContact } from "@/components/EmergencyContacts";
+import { setTodoDigest } from "../gjore/actions";
 
 async function resetCalendar() {
   "use server";
@@ -30,16 +31,18 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   // E-postvarsler: hvilke typer bedriften sender på e-post, og om jeg har reservert meg
   let emailGroups: string[] = [];
   let emailOn = true;
+  let digestOn = false;
   if (ctx.org && ctx.userId) {
     const [{ data: o }, { data: m }] = await Promise.all([
       ctx.supabase.from("organizations").select("email_prefs").eq("id", ctx.org.id).single(),
-      ctx.supabase.from("memberships").select("email_notifications").eq("org_id", ctx.org.id).eq("user_id", ctx.userId).maybeSingle(),
+      ctx.supabase.from("memberships").select("email_notifications, todo_digest").eq("org_id", ctx.org.id).eq("user_id", ctx.userId).maybeSingle(),
     ]);
     const prefs = (o?.email_prefs ?? {}) as Record<string, unknown>;
     emailGroups = NOTIFICATION_GROUPS
       .filter((g) => (g.to === "ansatte" || ctx.isAdmin) && g.kinds.some((k) => prefs[k] === true))
       .map((g) => g.label);
     emailOn = m?.email_notifications !== false;
+    digestOn = m?.todo_digest === true;
   }
   let calendarUrl: string | null = null;
   let me: { name: string; roles: string; terms: string } | null = null;
@@ -129,6 +132,19 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             <Link href="/plattform" className="font-medium text-brand">Plattform (InnSpæll)</Link>
             <Link href="/ny-bedrift" className="font-medium text-brand">Opprett ny bedrift</Link>
           </div>
+        </section>
+      )}
+      {ctx.org && (
+        <section className="card">
+          <h2 className="h2">Morgenliste på e-post</h2>
+          <p className="mt-1 text-sm text-muted">
+            Få en e-post kl. 06 med det som venter på deg i «Å gjøre»{ctx.email ? `, til ${ctx.email}` : ""}. Den kommer bare når det er noe å gjøre.
+          </p>
+          <form action={setTodoDigest} className="mt-3 flex flex-wrap items-center gap-3">
+            <input type="hidden" name="on" value={digestOn ? "0" : "1"} />
+            <span className={`badge ${digestOn ? "bg-good-soft text-good" : "bg-paper text-muted"}`}>{digestOn ? "Slått på" : "Slått av"}</span>
+            <button className="btn-ghost">{digestOn ? "Slå av" : "Slå på"}</button>
+          </form>
         </section>
       )}
       {ctx.org && (

@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { count: unread } = ctx.org
     ? await ctx.supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", ctx.userId).eq("org_id", ctx.org.id).is("read_at", null)
     : { count: 0 };
-  const counts = ctx.org ? await navCounts(ctx) : { approvals: 0, mine: 0 };
+  const counts = await navCounts(ctx);
   // Ansatte uten pårørende får et varsel øverst til minst én er lagt inn
   const { count: kin } = ctx.org && ctx.employeeId
     ? await ctx.supabase.from("emergency_contacts").select("id", { count: "exact", head: true }).eq("employee_id", ctx.employeeId)

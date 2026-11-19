@@ -39,6 +39,15 @@ export default async function SettingsPage() {
           <CompanyLookup defaultName={org?.name ?? ""} defaultOrgNumber={org?.org_number ?? ""} defaultAddress={org?.address ?? ""}
             defaultPostalCode={org?.postal_code ?? ""} defaultCity={org?.city ?? ""} />
           <Field label="Heltid, timer per uke"><input name="full_time_hours_week" type="number" step="0.25" defaultValue={Number(org?.full_time_hours_week)} className="input" /></Field>
+          <fieldset className="grid gap-4 md:col-span-2 md:grid-cols-2">
+            <legend className="label">Lønn</legend>
+            <Field label="Timene godkjent innen" hint="Dag i måneden etter. Brukes som frist i «Å gjøre».">
+              <input name="payroll_approve_day" type="number" min={1} max={28} defaultValue={org?.payroll_approve_day ?? 1} className="input" />
+            </Field>
+            <Field label="Lønn utbetales" hint="Dag i måneden. Lønnen gjelder forrige måned.">
+              <input name="payroll_pay_day" type="number" min={1} max={28} defaultValue={org?.payroll_pay_day ?? 10} className="input" />
+            </Field>
+          </fieldset>
           <fieldset className="space-y-2 md:col-span-2">
             <legend className="label">Når kan jeg jobbe</legend>
             <label className="flex items-start gap-2 text-sm">

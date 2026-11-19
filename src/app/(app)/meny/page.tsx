@@ -6,7 +6,7 @@ import { navCounts } from "@/lib/nav-counts";
 /** Meny på mobil for ledere: det personlige og lederområdene samlet. */
 export default async function MenuPage() {
   const ctx = await getContext();
-  const counts = ctx.org ? await navCounts(ctx) : { approvals: 0, mine: 0 };
+  const counts = await navCounts(ctx);
   const row = (href: string, label: string, hint?: string, n = 0) => (
     <li key={href}>
       <Link href={href} className="flex min-h-12 items-center justify-between gap-3 px-4 py-3 hover:bg-paper">
@@ -20,8 +20,7 @@ export default async function MenuPage() {
   );
   const hints: Record<string, string> = {
     "/vaktplan/rediger": "Plan, bemanningsbehov og turnus",
-    "/ansatte": "Avtaler, roller, innlogging og ferie",
-    "/fravaer": "Søknader, vaktbytter og sykefravær",
+    "/ansatte": "Avtaler, avdelinger, fravær og ferie",
     "/lonn": "Lønnsgrunnlag, avspasering og rapporter",
     "/innstillinger": "Bedrift, varsler og personvern",
   };
@@ -31,6 +30,7 @@ export default async function MenuPage() {
       <section>
         <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Meg</h2>
         <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white">
+          {row("/foresporsler", "Fri og bytte", "Søk om fri, bytt vakter")}
           {row("/profil", "Profil", "Kalenderlenke, passord og personvern")}
           {row("/tavle", "Oppslagstavle")}
           {ctx.canSetAvailability && row("/tilgjengelighet", "Når kan jeg jobbe")}
@@ -42,7 +42,8 @@ export default async function MenuPage() {
         <section>
           <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Ledelse</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white">
-            {leadItems(ctx.isAdmin).map((l) => row(l.href, l.label, hints[l.href], l.count ? counts[l.count] : 0))}
+            {row("/", "Å gjøre", "Det som venter på deg", counts.todo)}
+            {leadItems(ctx.isAdmin).map((l) => row(l.href, l.label, hints[l.href]))}
           </ul>
         </section>
       )}

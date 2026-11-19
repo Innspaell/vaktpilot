@@ -1163,5 +1163,16 @@ select pg_temp.check(manages_employee(:'org_a', :'ola_emp'), 'uten avdelinger st
 reset role;
 update memberships set role = 'employee' where org_id = :'org_a' and user_id = '00000000-0000-0000-0000-0000000000a2';
 
+-- Morgenliste: sammendrag for leder og ansatt, og bare egen bruker kan slå den på
+reset role;
+select pg_temp.check((select count(*) from todo_summary(:'org_a', '00000000-0000-0000-0000-0000000000a1')) >= 0, 'sammendrag for leder');
+select pg_temp.check((select count(*) from todo_summary(:'org_a', '00000000-0000-0000-0000-0000000000a3') where label like 'nærmeste%') = 0, 'ansatt med pårørende får ikke påminnelse');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select set_my_todo_digest(:'org_a', true);
+reset role;
+select pg_temp.check((select todo_digest from memberships where org_id = :'org_a' and user_id = '00000000-0000-0000-0000-0000000000a3'), 'morgenliste slått på');
+select pg_temp.check((select count(*) from memberships where todo_digest) = 1, 'bare egen morgenliste endres');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

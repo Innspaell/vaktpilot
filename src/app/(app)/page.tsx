@@ -13,6 +13,8 @@ import { Intro } from "@/components/Intro";
 import { ChangePassword } from "@/components/ChangePassword";
 import { GettingStarted } from "@/components/GettingStarted";
 import { MonthHours } from "@/components/MonthHours";
+import { TodoList } from "@/components/TodoList";
+import { loadTodo } from "@/lib/todo";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -56,16 +58,21 @@ export default async function Home() {
   const openShifts = shifts.filter((s) => !s.employee_id && s.status === "published");
 
   if (ctx.canPlan) {
-    const [{ count: pendingShifts }, { count: pendingAbsence }, { count: pendingTime }, { data: onClock }, { data: absences }] = await Promise.all([
-      ctx.supabase.from("shift_requests").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).eq("status", "pending"),
-      ctx.supabase.from("absence_requests").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).eq("status", "pending"),
-      ctx.supabase.from("time_entries").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).eq("status", "submitted"),
+    const [{ data: onClock }, { data: absences }, todo, { data: payRow }] = await Promise.all([
       ctx.supabase.from("time_entries").select("employee_id").eq("org_id", ctx.org.id).is("ends_at", null),
       ctx.supabase.rpc("org_absences", { p_org: ctx.org.id, p_from: date, p_to: date }),
+      loadTodo(org as Parameters<typeof loadTodo>[0]),
+      ctx.supabase.from("organizations").select("payroll_pay_day").eq("id", ctx.org.id).single(),
     ]);
     const working = new Set((onClock ?? []).map((r) => r.employee_id));
-    const short = coverage.filter((c) => c.gaps.length > 0);
     const todayCov = coverage[0];
+    const payDay = payRow?.payroll_pay_day ?? 10;
+    const thisPay = `${date.slice(0, 8)}${String(payDay).padStart(2, "0")}`;
+    const nextPay = thisPay >= date ? thisPay : `${addDays(date.slice(0, 8) + "01", 32).slice(0, 8)}${String(payDay).padStart(2, "0")}`;
+    const payIn = Math.round((Date.parse(nextPay) - Date.parse(date)) / 86400000);
+    const nowMs = Date.now();
+    const onNow = todays.filter((s) => new Date(s.starts_at).getTime() <= nowMs && new Date(s.ends_at).getTime() > nowMs);
+    const later = todays.filter((s) => new Date(s.starts_at).getTime() > nowMs);
 
     return (
       <div className="space-y-4">
@@ -76,33 +83,27 @@ export default async function Home() {
 
         {ctx.isAdmin && <GettingStarted ctx={ctx as Parameters<typeof GettingStarted>[0]["ctx"]} />}
 
-        <Board ctx={org} compact />
+        <TodoList items={todo.items} waiting={todo.waiting} />
 
-        {short.length > 0 ? (
-          <section className="card border-bad/30 bg-bad-soft">
-            <h2 className="h2 text-bad">Underbemanning de neste 7 dagene</h2>
-            <ul className="mt-2 space-y-1 text-sm">
-              {short.flatMap((c) =>
-                c.gaps.map((g, i) => (
-                  <li key={`${c.date}-${i}`} className="flex justify-between gap-2">
-                    <span className="capitalize">{formatDateLong(c.date)} {localTime(g.start, tz)}–{localTime(g.end, tz)}</span>
-                    <span className="font-semibold text-bad">mangler {g.missing}</span>
-                  </li>
-                )),
-              )}
-            </ul>
-          </section>
-        ) : (
-          <section className="card bg-good-soft">
-            <p className="text-sm font-medium text-good">Fullt bemannet de neste 7 dagene, ut fra bemanningsbehovet.</p>
-          </section>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <Stat label="Vaktpåmeldinger" value={pendingShifts ?? 0} />
-          <Stat label="Fraværssøknader" value={pendingAbsence ?? 0} />
-          <Stat label="Timer til godkjenning" value={pendingTime ?? 0} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="card">
+            <div className="text-sm text-muted">På jobb nå</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{onNow.length} av {todays.length}</div>
+            <div className="text-sm text-muted">{later[0] ? `${names.get(later[0].employee_id!)?.split(" ")[0] ?? "Neste"} kommer kl. ${localTime(new Date(later[0].starts_at), tz)}` : todays.length ? "Ingen flere i dag" : "Ingen vakter i dag"}</div>
+          </div>
+          <Link href="/rapporter" className="card hover:border-brand">
+            <div className="text-sm text-muted">Bemanning neste 7 dager</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{coverage.filter((c) => c.gaps.length).length ? `${coverage.filter((c) => c.gaps.length).length} dager mangler` : "Fullt"}</div>
+            <div className="text-sm text-muted">ut fra bemanningsbehovet</div>
+          </Link>
+          <Link href="/lonn" className="card hover:border-brand">
+            <div className="text-sm text-muted">Neste lønnskjøring</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{payIn === 0 ? "i dag" : `om ${payIn} ${payIn === 1 ? "dag" : "dager"}`}</div>
+            <div className="text-sm text-muted capitalize">{formatDateLong(nextPay)}</div>
+          </Link>
         </div>
+
+        <Board ctx={org} compact />
 
         <section className="card">
           <div className="flex items-baseline justify-between">
@@ -165,12 +166,13 @@ export default async function Home() {
   const mine = shifts.filter((s) => s.employee_id === ctx.employeeId);
   const next = mine.find((s) => new Date(s.ends_at) > new Date());
   const monthStart = date.slice(0, 8) + "01";
-  const [{ data: entries }, { data: requests }, { data: notes }, { data: meRow }] = await Promise.all([
+  const [{ data: entries }, { data: requests }, { data: notes }, { data: meRow }, myTodo] = await Promise.all([
     ctx.supabase.from("time_entries").select("starts_at, ends_at, break_minutes").eq("employee_id", ctx.employeeId ?? "")
       .gte("starts_at", dayBounds(monthStart, tz).start.toISOString()).not("ends_at", "is", null),
     ctx.supabase.from("shift_requests").select("id, status, created_at, shift_id").eq("employee_id", ctx.employeeId ?? "").order("created_at", { ascending: false }).limit(3),
     ctx.supabase.from("notifications").select("id, title, created_at").is("read_at", null).order("created_at", { ascending: false }).limit(3),
     ctx.supabase.from("employees").select("full_name, intro_seen_at, must_change_password").eq("id", ctx.employeeId ?? "").maybeSingle(),
+    loadTodo(org as Parameters<typeof loadTodo>[0]),
   ]);
   const claimed = new Set((requests ?? []).filter((r) => r.status === "pending").map((r) => r.shift_id));
   const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
@@ -178,12 +180,6 @@ export default async function Home() {
     ? shifts.filter((s) => s.id !== next.id && s.employee_id && new Date(s.starts_at) < new Date(next.ends_at) && new Date(s.ends_at) > new Date(next.starts_at)).map((s) => names.get(s.employee_id!))
     : [];
 
-  const todaysOwn = mine.find((s) => localDate(new Date(s.starts_at), tz) === date && s.status === "published");
-  let unconfirmed = false;
-  if (todaysOwn) {
-    const { data: te } = await ctx.supabase.from("time_entries").select("id").eq("shift_id", todaysOwn.id).maybeSingle();
-    unconfirmed = !te;
-  }
 
   return (
     <div className="space-y-4">
@@ -195,15 +191,7 @@ export default async function Home() {
         </section>
       )}
       {meRow && !meRow.intro_seen_at && !meRow.must_change_password && <Intro name={meRow.full_name} />}
-      {todaysOwn && unconfirmed && (
-        <section className="card flex flex-wrap items-center justify-between gap-3 border-brand/30 bg-brand-soft">
-          <div>
-            <div className="h2">Dagens vakt: <span className="tabular-nums">{time(todaysOwn)}</span></div>
-            <div className="text-sm text-muted">Bekreft når du er ferdig, så registreres timene.</div>
-          </div>
-          <Link href="/timer#bekreft" className="btn-primary">Bekreft arbeidsdag</Link>
-        </section>
-      )}
+      <TodoList items={myTodo.items} waiting={myTodo.waiting} />
       {clock && <ClockButton state={clock.state} since={clock.since} />}
       {ctx.org.personnelList && (ctx.isAdmin || ctx.org.personnelListStaffView) && (
         <Link href="/personalliste" className="card flex items-center justify-between hover:border-brand">

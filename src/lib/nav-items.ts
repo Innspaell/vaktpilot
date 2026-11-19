@@ -1,12 +1,12 @@
 // Menypunkter som brukes både i klientmenyen og på serversider (f.eks. /meny).
 
-export interface NavCounts { approvals: number; mine: number }
+/** Tallet i menyen: saker i «Å gjøre» som krever handling. */
+export interface NavCounts { todo: number }
 
 /** Lederområdene. Hver samler flere sider (faner inne på siden). */
 export const LEAD = [
   { href: "/vaktplan/rediger", label: "Planlegge", match: ["/vaktplan/rediger", "/bemanning", "/turnus", "/tilgjengelighet"] },
-  { href: "/ansatte", label: "Ansatte", match: ["/ansatte"] },
-  { href: "/fravaer", label: "Fravær og godkjenning", match: ["/fravaer", "/ferie"], count: "approvals" as const },
+  { href: "/ansatte", label: "Ansatte", match: ["/ansatte", "/fravaer", "/ferie"] },
   { href: "/lonn", label: "Lønn og rapporter", match: ["/lonn", "/rapporter", "/personalliste"] },
   { href: "/innstillinger", label: "Innstillinger", match: ["/innstillinger"], adminOnly: true },
 ];

@@ -16,15 +16,15 @@ const ICONS = {
   menu: "M4 7h16M4 12h16M4 17h16",
 };
 
-/** Det alle bruker. */
+/** Det alle bruker. «Å gjøre» er forsiden. */
 const ME = [
-  { href: "/", label: "Hjem", icon: ICONS.home },
+  { href: "/", label: "Å gjøre", icon: ICONS.home, count: true },
   { href: "/vaktplan", label: "Vaktplan", icon: ICONS.plan },
   { href: "/timer", label: "Timer", icon: ICONS.time },
-  { href: "/foresporsler", label: "Fri og bytte", icon: ICONS.leave, count: "mine" as const },
+  { href: "/foresporsler", label: "Fri og bytte", icon: ICONS.leave },
   { href: "/profil", label: "Profil", icon: ICONS.me },
 ];
-
+const PLAN_ICON = "M4 5h16v15H4zM4 9h16M9 9v11";
 
 function isActive(path: string, href: string, match?: string[]) {
   if (match) return match.some((m) => path === m || path.startsWith(m + "/"));
@@ -42,19 +42,23 @@ function Badge({ n, inverted }: { n: number; inverted?: boolean }) {
   );
 }
 
-/** Bunnmeny på mobil. Ledere får «Meny» i stedet for Profil, der alt annet ligger. */
+/** Bunnmeny på mobil. Ledere: Å gjøre, Vaktplan, Planlegge, Timer og Meny (resten). */
 export function BottomNav({ isAdmin, counts }: { isAdmin: boolean; counts: NavCounts }) {
   const path = usePathname();
   const items = isAdmin
-    ? [...ME.slice(0, 4), { href: "/meny", label: "Meny", icon: ICONS.menu, count: undefined }]
+    ? [ME[0], ME[1], { href: "/vaktplan/rediger", label: "Planlegge", icon: PLAN_ICON, count: false }, ME[2], { href: "/meny", label: "Meny", icon: ICONS.menu, count: false }]
     : ME;
-  const menuActive = isAdmin && (path === "/meny" || path === "/profil" || LEAD.some((l) => isActive(path, l.href, l.match)) || path.startsWith("/tavle"));
+  const planMatch = LEAD[0].match;
+  const menuActive = isAdmin && (path === "/meny" || path === "/profil" || path.startsWith("/foresporsler")
+    || LEAD.slice(1).some((l) => isActive(path, l.href, l.match)) || path.startsWith("/tavle"));
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] md:hidden print:hidden">
       <ul className="grid grid-cols-5">
         {items.map((i) => {
-          const on = i.href === "/meny" ? menuActive : isActive(path, i.href) && !(i.href === "/vaktplan" && menuActive);
-          const n = i.href === "/meny" ? counts.approvals : i.count ? counts[i.count] : 0;
+          const on = i.href === "/meny" ? menuActive
+            : i.href === "/vaktplan/rediger" ? isActive(path, i.href, planMatch)
+            : isActive(path, i.href) && !(i.href === "/vaktplan" && isActive(path, "/vaktplan/rediger", planMatch));
+          const n = i.count ? counts.todo : 0;
           return (
             <li key={i.href}>
               <Link href={i.href} className={`relative flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${on ? "text-brand" : "text-muted"}`}>
@@ -72,7 +76,7 @@ export function BottomNav({ isAdmin, counts }: { isAdmin: boolean; counts: NavCo
   );
 }
 
-/** Sidemeny på PC: «Meg» og «Ledelse». */
+/** Sidemeny på PC. Ledere: arbeidsliste og lederområder øverst, det personlige under «Meg». */
 export function SideNav({ isAdmin, canPlan, isPlatformAdmin, counts }: { isAdmin: boolean; canPlan: boolean; isPlatformAdmin?: boolean; counts: NavCounts }) {
   const path = usePathname();
   const link = (href: string, label: string, on: boolean, n = 0) => (
@@ -83,12 +87,22 @@ export function SideNav({ isAdmin, canPlan, isPlatformAdmin, counts }: { isAdmin
     </Link>
   );
   const heading = (t: string) => <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-muted">{t}</div>;
+  const planOn = isActive(path, "/vaktplan/rediger", LEAD[0].match);
   return (
     <nav className="space-y-1">
-      {canPlan && heading("Meg")}
-      {ME.map((i) => link(i.href, i.label, isActive(path, i.href), i.count ? counts[i.count] : 0))}
-      {canPlan && heading("Ledelse")}
-      {canPlan && leadItems(isAdmin).map((i) => link(i.href, i.label, isActive(path, i.href, i.match), i.count ? counts[i.count] : 0))}
+      {canPlan ? (
+        <>
+          {link("/", "Å gjøre", path === "/", counts.todo)}
+          {link("/vaktplan", "Vaktplan", isActive(path, "/vaktplan") && !planOn)}
+          {leadItems(isAdmin).map((i) => link(i.href, i.label, isActive(path, i.href, i.match)))}
+          {heading("Meg")}
+          {link("/timer", "Mine timer", isActive(path, "/timer"))}
+          {link("/foresporsler", "Fri og bytte", isActive(path, "/foresporsler"))}
+          {link("/profil", "Profil", isActive(path, "/profil"))}
+        </>
+      ) : (
+        ME.map((i) => link(i.href, i.label, isActive(path, i.href), i.count ? counts.todo : 0))
+      )}
       {isPlatformAdmin && heading("InnSpæll")}
       {isPlatformAdmin && link("/plattform", "Plattform", path.startsWith("/plattform"))}
       <Link href={`/innspill?fra=${encodeURIComponent(path)}`}
@@ -136,6 +150,7 @@ export function AreaTabs({ availability, personnelList = false, isAdmin = true }
   const people = [
     { href: "/ansatte", label: "Ansatte" },
     { href: "/ansatte/avdelinger", label: "Avdelinger" },
+    { href: "/fravaer", label: "Fravær" },
   ];
   const inGroup = (tabs: { href: string }[]) => tabs.some((t) => path === t.href || path.startsWith(t.href + "/"));
   if (inGroup(plan)) return <SubNav tabs={plan} />;

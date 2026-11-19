@@ -124,6 +124,8 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
       postal_code: text(fd, "postal_code"),
       city: text(fd, "city"),
       full_time_hours_week: num(fd, "full_time_hours_week", 37.5),
+      payroll_approve_day: Math.min(28, Math.max(1, Math.round(num(fd, "payroll_approve_day", 1)))),
+      payroll_pay_day: Math.min(28, Math.max(1, Math.round(num(fd, "payroll_pay_day", 10)))),
       vacation_fifth_week: fd.get("vacation_fifth_week") === "on",
       availability_enabled: fd.get("availability_enabled") === "on",
       vacation_fifth_week_transferable: fd.get("vacation_fifth_week_transferable") === "on",
