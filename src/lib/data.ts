@@ -38,12 +38,13 @@ export async function shiftsBetween(ctx: Ctx, from: string, toExclusive: string)
 export async function needsForDays(ctx: Ctx, from: string, days: number) {
   const to = addDays(from, days);
   const [{ data: templates }, { data: overrides }, { data: holidayRules }] = await Promise.all([
-    ctx.supabase.from("staffing_templates").select("weekday, start_time, end_time, required, work_role_id").eq("org_id", ctx.org.id),
+    ctx.supabase.from("staffing_templates").select("weekday, start_time, end_time, required, work_role_id, valid_from, valid_to").eq("org_id", ctx.org.id),
     ctx.supabase.from("staffing_overrides").select("date, closed, start_time, end_time, required, work_role_id").eq("org_id", ctx.org.id).gte("date", from).lt("date", to),
     ctx.supabase.from("holiday_rules").select("holiday_key, is_open").eq("org_id", ctx.org.id),
   ]);
   const t: StaffingTemplateRow[] = (templates ?? []).map((r) => ({
     weekday: r.weekday, start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5), required: r.required, workRoleId: r.work_role_id,
+    validFrom: r.valid_from, validTo: r.valid_to,
   }));
   const o: StaffingOverrideRow[] = (overrides ?? []).map((r) => ({
     date: r.date, closed: r.closed, start: r.start_time?.slice(0, 5), end: r.end_time?.slice(0, 5), required: r.required, workRoleId: r.work_role_id,

@@ -11,6 +11,9 @@ export interface Requirement {
 
 export interface StaffingTemplateRow extends Requirement {
   weekday: number; // 1 = mandag
+  /** Gjelder fra og med / til og med (YYYY-MM-DD). Tom = uten grense. */
+  validFrom?: string | null;
+  validTo?: string | null;
 }
 
 export interface StaffingOverrideRow {
@@ -66,7 +69,10 @@ export function requirementsFor(
     };
   }
   const wd = isoWeekday(date);
-  return { closed: false, requirements: templates.filter((t) => t.weekday === wd) };
+  return {
+    closed: false,
+    requirements: templates.filter((t) => t.weekday === wd && (!t.validFrom || date >= t.validFrom) && (!t.validTo || date <= t.validTo)),
+  };
 }
 
 function reqInterval(date: string, r: Requirement, tz: string) {

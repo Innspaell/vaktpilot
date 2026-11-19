@@ -27,14 +27,32 @@ export async function addTemplate(_: ActionState, fd: FormData): Promise<ActionS
   const weekdays = fd.getAll("weekday").map(Number).filter((n) => n >= 1 && n <= 7);
   if (!weekdays.length) return { error: "Velg minst én ukedag." };
   const required = Number(text(fd, "required") ?? 0);
+  const validFrom = text(fd, "valid_from");
+  const validTo = text(fd, "valid_to");
+  if (validFrom && validTo && validTo < validFrom) return { error: "«Gjelder til» kan ikke være før «gjelder fra»." };
   const { error } = await ctx.supabase.from("staffing_templates").insert(
     weekdays.map((weekday) => ({
       org_id: ctx.org.id, weekday, start_time: start, end_time: end, required, work_role_id: text(fd, "work_role_id"),
+      valid_from: validFrom, valid_to: validTo,
     })),
   );
   if (error) return { error: error.message };
   refresh();
   return { ok: "Lagt til." };
+}
+
+/** Sett gjelder fra/til på flere rader i det faste behovet samtidig. */
+export async function setTemplatePeriod(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireAdmin();
+  const ids = fd.getAll("id").map(String).filter(Boolean);
+  if (!ids.length) return { error: "Velg minst én rad." };
+  const validFrom = text(fd, "valid_from");
+  const validTo = text(fd, "valid_to");
+  if (validFrom && validTo && validTo < validFrom) return { error: "«Gjelder til» kan ikke være før «gjelder fra»." };
+  const { error } = await ctx.supabase.from("staffing_templates").update({ valid_from: validFrom, valid_to: validTo }).in("id", ids).eq("org_id", ctx.org.id);
+  if (error) return { error: error.message };
+  refresh();
+  return { ok: `Oppdatert ${ids.length} ${ids.length === 1 ? "rad" : "rader"}.` };
 }
 
 export async function deleteTemplate(fd: FormData) {

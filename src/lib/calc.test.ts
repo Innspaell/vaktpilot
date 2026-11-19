@@ -118,6 +118,15 @@ describe("bemanning per tidsrom", () => {
     expect(o.requirements).toEqual([{ start: "10:00", end: "14:00", required: 1, workRoleId: null }]);
   });
 
+  it("fast behov gjelder bare i perioden det er satt til", () => {
+    const templates = [
+      { weekday: 1, start: "08:00", end: "16:00", required: 2, validFrom: "2026-12-01" },
+      { weekday: 1, start: "08:00", end: "16:00", required: 1, workRoleId: "ledelse", validTo: "2026-11-30" },
+    ];
+    expect(requirementsFor("2026-11-30", templates, []).requirements.map((r) => r.required)).toEqual([1]);
+    expect(requirementsFor("2026-12-07", templates, []).requirements.map((r) => r.required)).toEqual([2]);
+  });
+
   it("teller per arbeidsrolle", () => {
     const shifts = [{ startsAt: at("2026-11-13", "08:00"), endsAt: at("2026-11-13", "16:00"), employeeId: "a", workRoleId: "kasse" }];
     const c = dayCoverage("2026-11-13", [

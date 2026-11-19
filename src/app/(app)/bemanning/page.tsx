@@ -3,10 +3,18 @@ import { ActionForm, Field } from "@/components/Form";
 import { norwegianHolidays } from "@/lib/holidays";
 import { formatDateLong } from "@/lib/time";
 import { today } from "@/lib/data";
-import { addOverride, addShiftTemplate, addTemplate, deleteOverride, deleteShiftTemplate, deleteTemplate, setHolidayOpen } from "./actions";
+import { addOverride, addShiftTemplate, addTemplate, deleteOverride, deleteShiftTemplate, deleteTemplate, setHolidayOpen, setTemplatePeriod } from "./actions";
 
 const WEEKDAYS = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"];
 const hm = (t: string | null) => (t ? t.slice(0, 5) : "");
+const short = (d: string) => d.split("-").reverse().join(".");
+/** «fra 01.12.2026», «til 30.11.2026» eller «01.12.2026–31.03.2027». */
+function period(from: string | null, to: string | null) {
+  if (from && to) return `${short(from)}–${short(to)}`;
+  if (from) return `fra ${short(from)}`;
+  if (to) return `til ${short(to)}`;
+  return null;
+}
 
 export default async function StaffingPage() {
   const ctx = await requireAdmin();
@@ -38,7 +46,7 @@ export default async function StaffingPage() {
 
       <section className="card">
         <h2 className="h2">Fast behov per ukedag</h2>
-        <p className="mt-1 text-sm text-muted">Hvor mange som trengs i hvert tidsrom. Dager uten behov regnes som stengt.</p>
+        <p className="mt-1 text-sm text-muted">Hvor mange som trengs i hvert tidsrom. Dager uten behov regnes som stengt. Behovet kan gjelde fra eller til en dato, for eksempel når nye ansatte starter.</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {WEEKDAYS.map((name, i) => {
             const rows = (templates ?? []).filter((t) => t.weekday === i + 1);
@@ -47,12 +55,19 @@ export default async function StaffingPage() {
                 <div className="text-sm font-semibold">{name}</div>
                 {rows.length === 0 ? <div className="text-sm text-muted">Stengt</div> : (
                   <ul className="mt-1 space-y-1 text-sm">
-                    {rows.map((t) => (
-                      <li key={t.id} className="flex items-center justify-between">
-                        <span className="tabular-nums">{hm(t.start_time)}–{hm(t.end_time)}: <b>{t.required}</b> {t.work_role_id ? roleName.get(t.work_role_id) : "ansatte"}</span>
+                    {rows.map((t) => {
+                      const p = period(t.valid_from, t.valid_to);
+                      const inactive = (t.valid_from && t.valid_from > now) || (t.valid_to && t.valid_to < now);
+                      return (
+                      <li key={t.id} className={`flex items-center justify-between ${inactive ? "text-muted" : ""}`}>
+                        <span className="tabular-nums">
+                          {hm(t.start_time)}–{hm(t.end_time)}: <b>{t.required}</b> {t.work_role_id ? roleName.get(t.work_role_id) : "ansatte"}
+                          {p && <span className={`ml-2 badge ${t.valid_to && t.valid_to < now ? "bg-paper text-muted" : "bg-brand-soft text-brand"}`}>{p}</span>}
+                        </span>
                         <form action={deleteTemplate}><input type="hidden" name="id" value={t.id} /><button className="px-2 text-muted hover:text-bad" aria-label="Slett">×</button></form>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -72,8 +87,30 @@ export default async function StaffingPage() {
             <Field label="Til"><input name="end" type="time" required defaultValue="16:00" className="input" /></Field>
             <Field label="Antall"><input name="required" type="number" min={0} required defaultValue={2} className="input" /></Field>
             {roleSelect}
+            <Field label="Gjelder fra (valgfritt)"><input name="valid_from" type="date" className="input" /></Field>
+            <Field label="Gjelder til (valgfritt)"><input name="valid_to" type="date" className="input" /></Field>
           </div>
         </ActionForm>
+
+        {(templates ?? []).length > 0 && (
+          <details className="mt-4 border-t border-line pt-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-brand">Endre når behovet gjelder</summary>
+            <ActionForm action={setTemplatePeriod} submitLabel="Lagre periode" className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {(templates ?? []).map((t) => (
+                  <label key={t.id} className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+                    <input type="checkbox" name="id" value={t.id} defaultChecked className="h-4 w-4" />
+                    {WEEKDAYS[t.weekday - 1].slice(0, 3)} {hm(t.start_time)}–{hm(t.end_time)}
+                  </label>
+                ))}
+              </div>
+              <div className="grid gap-3 md:grid-cols-4">
+                <Field label="Gjelder fra" hint="Tomt = fra nå."><input name="valid_from" type="date" className="input" /></Field>
+                <Field label="Gjelder til" hint="Tomt = uten slutt."><input name="valid_to" type="date" className="input" /></Field>
+              </div>
+            </ActionForm>
+          </details>
+        )}
       </section>
 
       <section className="card">
