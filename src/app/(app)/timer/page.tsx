@@ -214,18 +214,14 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
 
       {mb && yb && (
         <section className="card">
-          <h2 className="h2">Timesaldo</h2>
-          <p className="mt-1 text-xs text-muted">Avtalt tid fram til i dag, mot timer du har registrert pluss betalt fravær. Helligdager er trukket fra.</p>
+          {/* Bare jobbede timer: avvik mot avtalt tid kan skyldes fri og ferie, og vises for lederen i Rapporter */}
+          <h2 className="h2">Dine timer</h2>
           <div className="mt-3 grid grid-cols-2 gap-3">
             {([["Denne måneden", mb], ["Hittil i år", yb]] as const).map(([t, b]) => (
               <div key={t} className="rounded-lg bg-paper p-3">
                 <div className="text-xs text-muted">{t}</div>
-                <div className={`text-2xl font-bold tabular-nums ${b.diffHours < -0.01 ? "text-warn" : b.diffHours > 0.01 ? "text-brand" : "text-good"}`}>
-                  {b.diffHours > 0 ? "+" : ""}{b.diffHours.toLocaleString("nb-NO")} t
-                </div>
-                <div className="text-xs text-muted tabular-nums">
-                  {(b.workedHours + b.paidAbsenceHours).toLocaleString("nb-NO")} av {b.expectedHours.toLocaleString("nb-NO")} t
-                </div>
+                <div className="text-2xl font-bold tabular-nums">{b.workedHours.toLocaleString("nb-NO")} t</div>
+                <div className="text-xs text-muted">jobbet</div>
               </div>
             ))}
           </div>
