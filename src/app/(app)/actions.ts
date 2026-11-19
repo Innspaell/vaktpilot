@@ -343,6 +343,12 @@ export async function clockAction(fd: FormData) {
   const kind = text(fd, "kind");
   if (!kind || !["in", "break_start", "break_end", "out"].includes(kind)) return;
   await ctx.supabase.rpc("clock", { p_org: ctx.org.id, p_kind: kind });
+  // Leder som stempler ut: egne timer godkjennes med en gang
+  if (kind === "out" && ctx.canPlan && ctx.employeeId) {
+    const { data: last } = await ctx.supabase.from("time_entries").select("id").eq("employee_id", ctx.employeeId)
+      .not("ends_at", "is", null).in("status", ["draft", "submitted"]).order("ends_at", { ascending: false }).limit(1).maybeSingle();
+    if (last) await ctx.supabase.rpc("approve_time_entries", { p_ids: [last.id] });
+  }
   revalidatePath("/");
   revalidatePath("/timer");
 }

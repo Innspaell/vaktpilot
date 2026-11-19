@@ -6,7 +6,9 @@ import { ClockButton } from "@/components/ClockButton";
 import { EntryForm } from "@/components/EntryForm";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { addDays, dayBounds, formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
-import { addPayEvent, approveEntries, confirmShift, deleteEntry, deletePayEvent } from "./actions";
+import { addPayEvent, approveEntries, approvePlannedShifts, confirmShift, deleteEntry, deletePayEvent } from "./actions";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { loadDepartments, managesEmployee } from "@/lib/departments";
 import { ActionForm, Field } from "@/components/Form";
 import { loadPayroll } from "@/lib/payroll-data";
 import { loadCompTime } from "@/lib/report-data";
@@ -26,7 +28,7 @@ type Entry = {
 
 const SELECT = "id, employee_id, shift_id, starts_at, ends_at, break_minutes, status, source, comment, shifts!time_entries_shift_id_fkey(starts_at, ends_at, break_minutes)";
 
-export default async function TimePage({ searchParams }: { searchParams: Promise<{ vis?: string; fra?: string; til?: string; ansatt?: string }> }) {
+export default async function TimePage({ searchParams }: { searchParams: Promise<{ vis?: string; fra?: string; til?: string; ansatt?: string; godkjente?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
@@ -51,10 +53,24 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       .gte("starts_at", dayBounds(from, tz).start.toISOString()).lt("starts_at", dayBounds(addDays(to, 1), tz).start.toISOString())
       .order("starts_at", { ascending: false }).limit(500);
     if (sp.ansatt) q = q.eq("employee_id", sp.ansatt);
-    const [{ data }, names] = await Promise.all([q, colleagues(ctx)]);
+    let sq = ctx.supabase.from("shifts").select("id, employee_id, starts_at, ends_at, break_minutes").eq("org_id", ctx.org.id)
+      .eq("status", "published").not("employee_id", "is", null)
+      .gte("starts_at", dayBounds(from, tz).start.toISOString()).lt("starts_at", dayBounds(addDays(to, 1), tz).start.toISOString())
+      .lte("starts_at", new Date().toISOString()).order("starts_at");
+    if (sp.ansatt) sq = sq.eq("employee_id", sp.ansatt);
+    const [{ data }, names, { data: pastShifts }, deps] = await Promise.all([q, colleagues(ctx), sq, loadDepartments(ctx)]);
     const rows = (data ?? []) as unknown as Entry[];
+    // Ikke bekreftet av den ansatte: utkast (f.eks. stemplet uten innsending) og passerte vakter uten timer
+    const drafts = rows.filter((r) => r.status === "draft" && r.ends_at);
+    const withEntry = new Set(rows.map((r) => r.shift_id).filter(Boolean));
+    const unconfirmed = (pastShifts ?? []).filter((s) => !withEntry.has(s.id) && new Date(s.ends_at) <= new Date() && managesEmployee(ctx.isAdmin, deps, s.employee_id!));
     const people = Array.from(names, ([id, name]) => ({ id, name }));
     const waiting = rows.filter((r) => r.status === "submitted" && r.ends_at);
+    // Godkjente og låste timer skjules til man ber om dem
+    const showApproved = sp.godkjente === "1";
+    const doneCount = rows.filter((r) => r.status === "approved" || r.status === "locked").length;
+    const listed = showApproved ? rows : rows.filter((r) => r.status !== "approved" && r.status !== "locked");
+    const toggleHref = `/timer?${new URLSearchParams({ vis: "alle", fra: from, til: to, ...(sp.ansatt ? { ansatt: sp.ansatt } : {}), ...(showApproved ? {} : { godkjente: "1" }) })}`;
     const totals = new Map<string, number>();
     for (const r of rows) if (r.ends_at) totals.set(r.employee_id, (totals.get(r.employee_id) ?? 0) + workedMinutes(new Date(r.starts_at), new Date(r.ends_at), r.break_minutes));
 
@@ -72,6 +88,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
               {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
+          {sp.godkjente === "1" && <input type="hidden" name="godkjente" value="1" />}
           <div className="self-end"><button className="btn-ghost w-full">Vis</button></div>
         </form>
 
@@ -92,6 +109,49 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
           <div className="mt-3"><EntryForm date={today} start="08:00" end="16:00" people={people} maxDate={today} /></div>
         </details>
 
+        {(drafts.length > 0 || unconfirmed.length > 0) && (
+          <section className="card p-0">
+            <div className="px-4 pt-4">
+              <h2 className="h2">Ikke bekreftet av den ansatte</h2>
+              <p className="mt-1 text-sm text-muted">Vakter som er gjennomført uten at den ansatte har bekreftet timene. Godkjenner du dem, blir timene lik det som var planlagt (eller det som ble stemplet).</p>
+            </div>
+            <form id="godkjenn-ubekreftet" action={approvePlannedShifts}>
+              <ul className="mt-2 divide-y divide-line text-sm">
+                {unconfirmed.map((s) => (
+                  <li key={s.id} className="px-4 py-2">
+                    <label className="flex items-start gap-3">
+                      <input type="checkbox" name="shift_ids" value={s.id} defaultChecked className="mt-1 h-4 w-4" />
+                      <span>
+                        <span className="font-medium">{names.get(s.employee_id!) ?? "Ukjent"}</span> · <span className="capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
+                        <span className="block tabular-nums text-muted">
+                          Planlagt {timeRange(s.starts_at, s.ends_at)}{s.break_minutes > 0 && ` · pause ${s.break_minutes} min`} · {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+                {drafts.map((r) => (
+                  <li key={r.id} className="px-4 py-2">
+                    <label className="flex items-start gap-3">
+                      <input type="checkbox" name="ids" value={r.id} defaultChecked className="mt-1 h-4 w-4" />
+                      <span>
+                        <span className="font-medium">{names.get(r.employee_id) ?? "Ukjent"}</span> · <span className="capitalize">{formatDateLong(localDate(new Date(r.starts_at), tz))}</span>
+                        <span className="block tabular-nums text-muted">
+                          {r.source === "clock" ? "Stemplet" : "Registrert"} {timeRange(r.starts_at, r.ends_at)}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min`} · {formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at!), r.break_minutes))}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </form>
+            <div className="px-4 pb-4 pt-2">
+              <ConfirmSubmit form="godkjenn-ubekreftet" label="Godkjenn valgte"
+                warning="Den ansatte har ikke bekreftet timene for disse dagene. Vil du godkjenne likevel?" />
+            </div>
+          </section>
+        )}
+
         <section className="card p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
             <h2 className="h2">Registreringer</h2>
@@ -101,9 +161,16 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
               </form>
             )}
           </div>
-          {rows.length === 0 ? <p className="p-4 text-sm text-muted">Ingen timer i perioden.</p> : (
+          {doneCount > 0 && (
+            <p className="px-4 pt-1 text-sm text-muted">
+              {showApproved ? "Viser også godkjente timer." : `${doneCount} godkjente ${doneCount === 1 ? "registrering er" : "registreringer er"} skjult.`}{" "}
+              <Link href={toggleHref} className="font-semibold text-brand">{showApproved ? "Skjul godkjente" : "Vis godkjente"}</Link>
+              {" "}· velg ansatt i filteret over for å se én person.
+            </p>
+          )}
+          {listed.length === 0 ? <p className="p-4 text-sm text-muted">{rows.length === 0 ? "Ingen timer i perioden." : "Alt i perioden er godkjent."}</p> : (
             <ul className="mt-2 divide-y divide-line">
-              {rows.map((r) => <AdminRow key={r.id} r={r} name={names.get(r.employee_id) ?? "Ukjent"} tz={tz} today={today} />)}
+              {listed.map((r) => <AdminRow key={r.id} r={r} name={names.get(r.employee_id) ?? "Ukjent"} tz={tz} today={today} />)}
             </ul>
           )}
         </section>
@@ -174,7 +241,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       {toConfirm.length > 0 && (
         <section id="bekreft" className="card border-brand/30">
           <h2 className="h2">Bekreft arbeidsdag</h2>
-          <p className="mt-1 text-sm text-muted">Timene registreres lik det som var planlagt. Jobbet du annerledes, endrer du før du bekrefter, eller retter etterpå til lederen har godkjent.</p>
+          <p className="mt-1 text-sm text-muted">Timene registreres lik det som var planlagt. Jobbet du annerledes, endrer du før du bekrefter, eller endrer etterpå til lederen har godkjent.</p>
           <ul className="mt-3 space-y-3">
             {toConfirm.map((s) => {
               const st = new Date(s.starts_at);
@@ -273,7 +340,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                   </div>
                   {editable && (
                     <details className="mt-2">
-                      <summary className="cursor-pointer font-semibold text-brand">Rett</summary>
+                      <summary className="cursor-pointer font-semibold text-brand">Endre</summary>
                       <div className="mt-2 space-y-2">
                         <EntryForm id={e.id} date={date} start={fmtTime(e.starts_at)} end={fmtTime(e.ends_at!)} breakMinutes={e.break_minutes} comment={e.comment} maxDate={today} />
                         <form action={deleteEntry}><input type="hidden" name="id" value={e.id} /><ConfirmButton label="Slett registreringen" confirmLabel="Ja, slett" /></form>
@@ -331,7 +398,7 @@ function AdminRow({ r, name, tz, today }: { r: Entry; name: string; tz: string; 
       </div>
       {r.ends_at && r.status !== "locked" && (
         <details className="ml-7 mt-2">
-          <summary className="cursor-pointer font-semibold text-brand">Rett</summary>
+          <summary className="cursor-pointer font-semibold text-brand">Endre</summary>
           <div className="mt-2">
             <EntryForm id={r.id} date={date} start={t(r.starts_at)} end={t(r.ends_at)} breakMinutes={r.break_minutes} comment={r.comment} maxDate={today} />
           </div>

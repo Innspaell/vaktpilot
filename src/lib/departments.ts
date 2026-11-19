@@ -49,3 +49,10 @@ export function shiftInDepartment(s: Pick<ShiftRow, "department_id" | "employee_
 export function selectedDepartment(param: string | undefined, info: DepartmentInfo) {
   return param && info.departments.some((d) => d.id === param) ? param : null;
 }
+
+/** Om innlogget leder har ansvar for den ansatte (samme regel som i databasen). */
+export function managesEmployee(isAdmin: boolean, info: DepartmentInfo, employeeId: string) {
+  if (isAdmin || info.departments.length === 0) return true;
+  const work = info.canWork.get(employeeId);
+  return !work || work.size === 0 || [...work].some((d) => info.managed.has(d));
+}

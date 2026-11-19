@@ -25,7 +25,21 @@ export async function confirmShift(fd: FormData) {
   if (!shiftId) return;
   // Databasen sjekker at vakten er din, publisert, ikke fram i tid og ikke registrert fra før
   await ctx.supabase.rpc("confirm_shift", { p_shift: shiftId, p_comment: "Bekreftet som planlagt" });
+  // Leder og administrator trenger ikke godkjenne sine egne timer en gang til
+  if (ctx.canPlan) await approveOwn(ctx, { shiftId });
   refresh();
+}
+
+type OrgCtx = Awaited<ReturnType<typeof requireOrg>>;
+/** Godkjenner egne timer for ledere: timene for en vakt, eller én registrering. */
+async function approveOwn(ctx: OrgCtx, by: { shiftId?: string; entryId?: string }) {
+  if (!ctx.canPlan || !ctx.employeeId) return;
+  let q = ctx.supabase.from("time_entries").select("id").eq("employee_id", ctx.employeeId).in("status", ["draft", "submitted"]).not("ends_at", "is", null);
+  if (by.shiftId) q = q.eq("shift_id", by.shiftId);
+  else if (by.entryId) q = q.eq("id", by.entryId);
+  else return;
+  const { data } = await q;
+  if (data?.length) await ctx.supabase.rpc("approve_time_entries", { p_ids: data.map((r) => r.id) });
 }
 
 /** Ny eller rettet timeregistrering. Ansatte retter egne til de er godkjent; admin kan rette alle. */
@@ -64,16 +78,19 @@ export async function saveEntry(_: ActionState, fd: FormData): Promise<ActionSta
     const { data: cur } = await ctx.supabase.from("time_entries").select("status, employee_id").eq("id", id).maybeSingle();
     if (!cur) return { error: "Fant ikke registreringen." };
     if (cur.status === "locked") return { error: "Timene er låst etter lønnseksport." };
-    if (!ctx.canPlan && cur.status === "approved") return { error: "Godkjente timer kan bare rettes av leder." };
+    if (!ctx.canPlan && cur.status === "approved") return { error: "Godkjente timer kan bare endres av leder." };
     const { error } = await ctx.supabase.from("time_entries")
       .update({ ...values, status: ctx.canPlan ? cur.status === "draft" ? "submitted" : cur.status : "submitted" })
       .eq("id", id);
     if (error) return { error: error.message };
+    if (cur.employee_id === ctx.employeeId) await approveOwn(ctx, { entryId: id });
     refresh();
-    return { ok: "Rettet." };
+    return { ok: "Endret." };
   }
 
+  // Leder som registrerer for andre eller seg selv: godkjent med en gang
   const adminForOther = ctx.canPlan && employeeId !== ctx.employeeId;
+  const selfLeader = ctx.canPlan && employeeId === ctx.employeeId;
   // Bekreftet med endringer: koble til vakten, men bare hvis vakten er den ansattes og ikke registrert fra før
   let shiftId = text(fd, "shift_id");
   if (shiftId) {
@@ -90,8 +107,13 @@ export async function saveEntry(_: ActionState, fd: FormData): Promise<ActionSta
     approved_at: adminForOther ? new Date().toISOString() : null,
   });
   if (error) return { error: error.message };
+  if (selfLeader) {
+    const { data: mine } = await ctx.supabase.from("time_entries").select("id").eq("employee_id", employeeId)
+      .eq("starts_at", values.starts_at).maybeSingle();
+    if (mine) await approveOwn(ctx, { entryId: mine.id });
+  }
   refresh();
-  return { ok: adminForOther ? "Registrert og godkjent." : "Registrert. Lederen godkjenner timene." };
+  return { ok: adminForOther || selfLeader ? "Registrert og godkjent." : "Registrert. Lederen godkjenner timene." };
 }
 
 export async function deleteEntry(fd: FormData) {
@@ -107,6 +129,33 @@ export async function approveEntries(fd: FormData) {
   const ctx = await requirePlanner();
   const ids = fd.getAll("ids").map(String).filter(Boolean);
   if (ids.length) await ctx.supabase.rpc("approve_time_entries", { p_ids: ids });
+  refresh();
+}
+
+/**
+ * Godkjenn vakter som timer selv om den ansatte ikke har bekreftet dem: timene blir lik planlagt vakt.
+ * Lederen har fått advarselen i skjemaet før dette kjøres.
+ */
+export async function approvePlannedShifts(fd: FormData) {
+  const ctx = await requirePlanner();
+  // Utkast (stemplet eller registrert, men ikke sendt inn) godkjennes som de er
+  const drafts = fd.getAll("ids").map(String).filter(Boolean);
+  if (drafts.length) await ctx.supabase.rpc("approve_time_entries", { p_ids: drafts });
+  const ids = fd.getAll("shift_ids").map(String).filter(Boolean);
+  if (!ids.length) return refresh();
+  const [{ data: shifts }, { data: taken }] = await Promise.all([
+    ctx.supabase.from("shifts").select("id, employee_id, starts_at, ends_at, break_minutes").eq("org_id", ctx.org.id)
+      .in("id", ids).eq("status", "published").not("employee_id", "is", null).lte("starts_at", new Date().toISOString()),
+    ctx.supabase.from("time_entries").select("shift_id").in("shift_id", ids),
+  ]);
+  const done = new Set((taken ?? []).map((t) => t.shift_id));
+  const now = new Date().toISOString();
+  const rows = (shifts ?? []).filter((s) => !done.has(s.id)).map((s) => ({
+    org_id: ctx.org.id, employee_id: s.employee_id!, shift_id: s.id, starts_at: s.starts_at, ends_at: s.ends_at,
+    break_minutes: s.break_minutes, source: "admin", status: "approved", approved_by: ctx.userId, approved_at: now,
+    comment: "Godkjent av leder uten bekreftelse fra den ansatte",
+  }));
+  if (rows.length) await ctx.supabase.from("time_entries").insert(rows);
   refresh();
 }
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { AppContext } from "@/lib/context";
 import { addDays, dayBounds, localDate } from "@/lib/time";
-import { loadDepartments } from "@/lib/departments";
+import { loadDepartments, managesEmployee } from "@/lib/departments";
 import { monthHours } from "@/lib/month-hours";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
@@ -29,11 +29,7 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
   ]);
   const term = new Map((terms ?? []).map((t) => [t.employee_id, t]));
   // Lederen ser de ansatte vedkommende har ansvar for
-  const mine = (id: string) => {
-    if (ctx.isAdmin || deps.departments.length === 0) return true;
-    const work = deps.canWork.get(id);
-    return !work || work.size === 0 || [...work].some((d) => deps.managed.has(d));
-  };
+  const mine = (id: string) => managesEmployee(ctx.isAdmin, deps, id);
   const active = (emps ?? []).filter((e) => (!e.end_date || e.end_date >= monthFrom) && e.start_date <= monthTo && mine(e.id));
   const rows = monthHours({
     now, monthFrom, monthTo,
