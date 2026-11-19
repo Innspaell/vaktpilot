@@ -7,7 +7,9 @@ import { AssignForm } from "@/components/AssignForm";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { AutoPlanPanel } from "@/components/AutoPlanPanel";
 import { DepartmentPills } from "@/components/DepartmentPills";
-import { loadDepartments, selectedDepartment, shiftInDepartment } from "@/lib/departments";
+import { loadDepartments, managesEmployee, selectedDepartment, shiftInDepartment } from "@/lib/departments";
+import { PlanBoard } from "@/components/PlanBoard";
+import { buildBoard } from "@/lib/plan-board";
 import { assignShift, cancelShift, clearPeriod, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "../actions";
 import { checkPlannedShifts } from "@/lib/worktime-check";
 
@@ -90,6 +92,41 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       : `${MONTHS[Number(anchor.slice(5, 7)) - 1]} ${anchor.slice(0, 4)}`;
 
   const time = (s: ShiftRow) => `${localTime(new Date(s.starts_at), tz)}–${localTime(new Date(s.ends_at), tz)}`;
+
+  // Ukeplan som tabell med dra og slipp (ledere, ukevisning)
+  let board: ReturnType<typeof buildBoard> | null = null;
+  let boardTemplates: { id: string; name: string; start: string; end: string; breakMinutes: number; workRoleId: string | null }[] = [];
+  if (ctx.canPlan && view === "uke") {
+    const to = addDays(from, days - 1);
+    const [{ data: emps }, { data: terms }, { data: avail }, { data: tpl }] = await Promise.all([
+      ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
+      ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call").eq("org_id", ctx.org.id)
+        .lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`),
+      ctx.supabase.from("availability").select("employee_id, kind, date, weekday").eq("org_id", ctx.org.id),
+      ctx.supabase.from("shift_templates").select("id, name, start_time, end_time, break_minutes, work_role_id").eq("org_id", ctx.org.id).order("start_time"),
+    ]);
+    const onShift = new Set(shifts.map((s) => s.employee_id).filter(Boolean));
+    const list = (emps ?? []).filter((e) => (!e.end_date || e.end_date >= from) && managesEmployee(ctx.isAdmin, deps, e.id)
+      && (e.start_date <= to || onShift.has(e.id))
+      && (!dep || onShift.has(e.id) || !deps.canWork.get(e.id)?.size || deps.canWork.get(e.id)!.has(dep)));
+    board = buildBoard({
+      from, days, tz,
+      coverage,
+      employees: list.map((e) => {
+        const t = (terms ?? []).filter((x) => x.employee_id === e.id).sort((a, b) => b.valid_from.localeCompare(a.valid_from))
+          .find((x) => x.valid_from <= to);
+        return { id: e.id, name: e.full_name, hoursPerWeek: t ? Number(t.hours_per_week) : null, onCall: Boolean(t?.on_call) };
+      }),
+      shifts: shifts.map((s) => {
+        const role = s.work_role_id ? roles.get(s.work_role_id) : null;
+        return { id: s.id, employeeId: s.employee_id, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: s.break_minutes,
+          draft: s.status === "draft", roleColor: role?.color ?? null, roleName: role?.name ?? null };
+      }),
+      absences: absences.map((a) => ({ employeeId: a.employee_id, from: a.from_date, to: a.to_date, typeName: a.type_name })),
+      availability: (avail ?? []).map((a) => ({ employeeId: a.employee_id as string, kind: a.kind as "available" | "unavailable" | "wants_extra", date: a.date as string | null, weekday: a.weekday as number | null })),
+    });
+    boardTemplates = (tpl ?? []).map((t) => ({ id: t.id, name: t.name, start: String(t.start_time).slice(0, 5), end: String(t.end_time).slice(0, 5), breakMinutes: t.break_minutes, workRoleId: t.work_role_id }));
+  }
 
   return (
     <div className="space-y-4">
@@ -222,7 +259,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </section>
       )}
 
-      {view === "maned" ? (
+      {board ? (
+        <PlanBoard days={board.days} rows={board.rows} templates={boardTemplates} department={dep} back={href(anchor)} />
+      ) : view === "maned" ? (
         <section className="card p-2">
           <div className="grid grid-cols-7 text-center text-xs font-semibold text-muted">
             {["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"].map((d) => <div key={d} className="py-1">{d}</div>)}

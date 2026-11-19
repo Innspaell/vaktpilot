@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePlanner, requireOrg } from "@/lib/context";
-import { addDays, formatDateLong, isoWeekday, localDate, zonedToUtc } from "@/lib/time";
+import { addDays, formatDateLong, isoWeekday, localDate, localTime, zonedToUtc } from "@/lib/time";
+import { coverageForDays, shiftsBetween } from "@/lib/data";
 import { holidayOn } from "@/lib/holidays";
 import { checkShift, type Warning } from "@/lib/warnings";
 import { insertEmployee } from "@/lib/employees";
@@ -328,4 +329,163 @@ export async function markAbsent(_: ActionState, fd: FormData): Promise<ActionSt
 export async function removeShiftAndBack(fd: FormData) {
   await cancelShift(fd);
   redirect(safeBack(text(fd, "back")));
+}
+
+
+// ---------------- Dra og slipp i planen ----------------
+
+export type BoardResult = {
+  ok?: string;
+  error?: string;
+  /** Ingen behov eller ledig vakt denne dagen: lederen må velge arbeidstid */
+  needTime?: boolean;
+  /** Advarsler fra sjekken (hvile, overlapp, fravær). Vakten er lagret. */
+  warning?: string;
+  /** Hvordan handlingen angres */
+  undo?: { kind: "delete" | "unassign" | "restore"; id: string; prev?: { employeeId: string | null; startsAt: string; endsAt: string; status: string } };
+};
+
+const BOARD_ERR = (code?: string, msg?: string) =>
+  code === "23P01" ? "Den ansatte har allerede en vakt som overlapper."
+    : code === "42501" ? "Du kan bare planlegge i avdelingene du har ansvar for."
+    : msg ?? "Kunne ikke lagre.";
+
+/**
+ * Ansatt sluppet på en dag. Rekkefølge: ledig vakt den dagen → hull i bemanningen → arbeidstid lederen har valgt.
+ * Uten noen av dem svarer den med needTime, så lederen kan velge vaktmal eller egen tid.
+ */
+export async function placeOnDay(input: {
+  employeeId: string; date: string; department?: string | null;
+  start?: string; end?: string; breakMinutes?: number; workRoleId?: string | null;
+}): Promise<BoardResult> {
+  const ctx = await requirePlanner();
+  const tz = ctx.org.timezone;
+  const { employeeId, date } = input;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Ugyldig dato." };
+  const name = (await ctx.supabase.from("employees").select("full_name").eq("id", employeeId).eq("org_id", ctx.org.id).maybeSingle()).data?.full_name;
+  if (!name) return { error: "Fant ikke den ansatte." };
+  const first = name.split(" ")[0];
+  const day = formatDateLong(date);
+
+  const { data: home } = await ctx.supabase.from("employee_departments").select("department_id").eq("employee_id", employeeId).eq("is_home", true).maybeSingle();
+  const dept = input.department ?? home?.department_id ?? null;
+
+  // Valgt arbeidstid (fra vaktmal eller egen tid)
+  if (input.start && input.end) {
+    if (!/^\d{2}:\d{2}$/.test(input.start) || !/^\d{2}:\d{2}$/.test(input.end) || input.start === input.end) return { error: "Sjekk klokkeslettene." };
+    const { s, e } = interval(date, input.start, input.end, tz);
+    const brk = Math.max(0, Math.round(input.breakMinutes ?? 0));
+    const { data, error } = await ctx.supabase.from("shifts").insert({
+      org_id: ctx.org.id, employee_id: employeeId, work_role_id: input.workRoleId ?? null, department_id: dept,
+      starts_at: s.toISOString(), ends_at: e.toISOString(), break_minutes: brk, status: "draft",
+    }).select("id").single();
+    if (error || !data) return { error: BOARD_ERR(error?.code, error?.message) };
+    const w = await warningsFor(ctx, employeeId, s, e, brk, data.id);
+    refresh();
+    return { ok: `Vakt lagt til ${first}, ${day} ${input.start}–${input.end}.`, warning: w.length ? describe(w) : undefined, undo: { kind: "delete", id: data.id } };
+  }
+
+  // 1. Ledig vakt den dagen
+  const dayShifts = await shiftsBetween(ctx, date, addDays(date, 1));
+  const open = dayShifts.find((x) => !x.employee_id && localDate(new Date(x.starts_at), tz) === date && (!input.department || x.department_id === input.department || !x.department_id));
+  if (open) {
+    const { error } = await ctx.supabase.from("shifts").update({ employee_id: employeeId }).eq("id", open.id).eq("org_id", ctx.org.id);
+    if (error) return { error: BOARD_ERR(error.code, error.message) };
+    const w = await warningsFor(ctx, employeeId, new Date(open.starts_at), new Date(open.ends_at), open.break_minutes, open.id);
+    refresh();
+    return { ok: `${first} har fått den ledige vakten ${day} ${localTime(new Date(open.starts_at), tz)}–${localTime(new Date(open.ends_at), tz)}.`,
+      warning: w.length ? describe(w) : undefined, undo: { kind: "unassign", id: open.id } };
+  }
+
+  // 2. Hull i bemanningen: helst et som passer den ansattes roller
+  const [cov] = await coverageForDays(ctx, date, 1, dayShifts, input.department ?? null);
+  const gaps = cov?.gaps ?? [];
+  if (gaps.length) {
+    const { data: myRoles } = await ctx.supabase.from("employee_work_roles").select("work_role_id").eq("employee_id", employeeId);
+    const roles = new Set((myRoles ?? []).map((r) => r.work_role_id));
+    const gap = gaps.find((g) => g.workRoleId && roles.has(g.workRoleId)) ?? gaps.find((g) => !g.workRoleId) ?? gaps[0];
+    const brk = (gap.end.getTime() - gap.start.getTime()) / 3600000 > 5.5 ? 30 : 0;
+    const { data, error } = await ctx.supabase.from("shifts").insert({
+      org_id: ctx.org.id, employee_id: employeeId, work_role_id: gap.workRoleId, department_id: gap.departmentId ?? dept,
+      starts_at: gap.start.toISOString(), ends_at: gap.end.toISOString(), break_minutes: brk, status: "draft",
+    }).select("id").single();
+    if (error || !data) return { error: BOARD_ERR(error?.code, error?.message) };
+    const w = await warningsFor(ctx, employeeId, gap.start, gap.end, brk, data.id);
+    refresh();
+    return { ok: `Vakt lagt til ${first}, ${day} ${localTime(gap.start, tz)}–${localTime(gap.end, tz)}.`,
+      warning: w.length ? describe(w) : undefined, undo: { kind: "delete", id: data.id } };
+  }
+
+  // 3. Ingen behov: spør om arbeidstid
+  return { needTime: true };
+}
+
+/** Flytt (eller kopier) en vakt til en annen ansatt og/eller dag. Klokkeslettene beholdes. */
+export async function moveShiftTo(input: { shiftId: string; employeeId: string | null; date: string; copy?: boolean }): Promise<BoardResult> {
+  const ctx = await requirePlanner();
+  const tz = ctx.org.timezone;
+  const { data: sh } = await ctx.supabase.from("shifts")
+    .select("id, employee_id, work_role_id, department_id, starts_at, ends_at, break_minutes, status, note")
+    .eq("id", input.shiftId).eq("org_id", ctx.org.id).maybeSingle();
+  if (!sh || sh.status === "cancelled") return { error: "Fant ikke vakten." };
+  const start = new Date(sh.starts_at);
+  const end = new Date(sh.ends_at);
+  const { s, e } = interval(input.date, localTime(start, tz), localTime(end, tz), tz);
+  const unchanged = input.employeeId === sh.employee_id && s.getTime() === start.getTime();
+  if (unchanged && !input.copy) return {};
+  const who = input.employeeId
+    ? (await ctx.supabase.from("employees").select("full_name").eq("id", input.employeeId).maybeSingle()).data?.full_name?.split(" ")[0] ?? "den ansatte"
+    : "ledig";
+  const when = `${formatDateLong(input.date)} ${localTime(start, tz)}–${localTime(end, tz)}`;
+
+  if (input.copy) {
+    const { data, error } = await ctx.supabase.from("shifts").insert({
+      org_id: ctx.org.id, employee_id: input.employeeId, work_role_id: sh.work_role_id, department_id: sh.department_id,
+      starts_at: s.toISOString(), ends_at: e.toISOString(), break_minutes: sh.break_minutes, status: "draft", note: sh.note,
+    }).select("id").single();
+    if (error || !data) return { error: BOARD_ERR(error?.code, error?.message) };
+    const w = input.employeeId ? await warningsFor(ctx, input.employeeId, s, e, sh.break_minutes, data.id) : [];
+    refresh();
+    return { ok: `Kopiert til ${who}, ${when}.`, warning: w.length ? describe(w) : undefined, undo: { kind: "delete", id: data.id } };
+  }
+
+  // En publisert vakt som flyttes blir utkast igjen, så den ansatte får beskjed når den publiseres på nytt
+  const { error } = await ctx.supabase.from("shifts").update({
+    employee_id: input.employeeId, starts_at: s.toISOString(), ends_at: e.toISOString(), status: "draft",
+  }).eq("id", sh.id).eq("org_id", ctx.org.id);
+  if (error) return { error: BOARD_ERR(error.code, error.message) };
+  const w = input.employeeId ? await warningsFor(ctx, input.employeeId, s, e, sh.break_minutes, sh.id) : [];
+  refresh();
+  return {
+    ok: input.employeeId ? `Flyttet til ${who}, ${when}.` : `Gjort til ledig vakt, ${when}.`,
+    warning: w.length ? describe(w) : undefined,
+    undo: { kind: "restore", id: sh.id, prev: { employeeId: sh.employee_id, startsAt: sh.starts_at, endsAt: sh.ends_at, status: sh.status } },
+  };
+}
+
+/** Angre siste handling i planen. */
+export async function undoBoard(undo: NonNullable<BoardResult["undo"]>): Promise<BoardResult> {
+  const ctx = await requirePlanner();
+  if (undo.kind === "delete") {
+    await ctx.supabase.from("shifts").delete().eq("id", undo.id).eq("org_id", ctx.org.id).eq("status", "draft");
+  } else if (undo.kind === "unassign") {
+    await ctx.supabase.from("shifts").update({ employee_id: null }).eq("id", undo.id).eq("org_id", ctx.org.id);
+  } else if (undo.prev) {
+    const status = undo.prev.status === "published" ? "published" : "draft";
+    await ctx.supabase.from("shifts").update({ employee_id: undo.prev.employeeId, starts_at: undo.prev.startsAt, ends_at: undo.prev.endsAt, status })
+      .eq("id", undo.id).eq("org_id", ctx.org.id);
+  }
+  refresh();
+  return { ok: "Angret." };
+}
+
+/** Fjern en vakt fra planen (utkast slettes, publiserte avlyses). */
+export async function removeFromBoard(shiftId: string): Promise<BoardResult> {
+  const ctx = await requirePlanner();
+  const { data: s } = await ctx.supabase.from("shifts").select("status").eq("id", shiftId).eq("org_id", ctx.org.id).maybeSingle();
+  if (!s) return { error: "Fant ikke vakten." };
+  if (s.status === "draft") await ctx.supabase.from("shifts").delete().eq("id", shiftId).eq("org_id", ctx.org.id);
+  else await ctx.supabase.from("shifts").update({ status: "cancelled" }).eq("id", shiftId).eq("org_id", ctx.org.id);
+  refresh();
+  return { ok: "Vakten er fjernet." };
 }
