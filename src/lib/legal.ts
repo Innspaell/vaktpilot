@@ -110,7 +110,7 @@ export const TERMS_SECTIONS: { title: string; body: string[] }[] = [
   {
     title: "4. Pris, betaling og oppsigelse",
     body: [
-      "4.1 Prisen følger prislisten på vaktpilot.no. Lanseringspris: 299 kr per måned eks. mva. med 5 aktive ansatte inkludert, og 39 kr per måned for hver aktiv ansatt utover det. En ansatt er aktiv når hen har hatt en publisert vakt eller registrerte timer i måneden.",
+      "4.1 Prisen følger prislisten på vaktpilot.no. Lanseringspris: 299 kr per måned eks. mva. med 5 aktive ansatte inkludert, og 39 kr per måned for hver aktiv ansatt utover det. En ansatt er aktiv når vedkommende har hatt en publisert vakt eller registrerte timer i måneden.",
       "4.2 Kunder som får lanseringspris, beholder den i 12 måneder fra avtalen inngås. Deretter gjelder ordinær prisliste.",
       "4.3 Antall aktive ansatte telles automatisk og vises for Kunden under Innstillinger › Abonnement. Fastprisen faktureres forskuddsvis ved starten av hver periode, og aktive ansatte utover det inkluderte etterskuddsvis på neste faktura. Fakturaen sendes som EHF eller e-post, med betalingsfrist 14 dager.",
       "4.4 Nye kunder får en gratis prøveperiode på 30 dager. Fra dagen etter prøveperioden betales det forholdsmessig ut måneden, og deretter for hele måneder. Avtalen fortsetter etter prøveperioden hvis Kunden ikke sier opp.",

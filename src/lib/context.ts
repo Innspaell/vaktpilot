@@ -26,7 +26,7 @@ export interface AppContext {
   canSetAvailability: boolean;
 }
 
-/** Innlogget bruker, bedriftene hen er med i, og valgt bedrift. */
+/** Innlogget bruker, bedriftene vedkommende er med i, og valgt bedrift. */
 export const getContext = cache(async (): Promise<AppContext> => {
   const supabase = await createClient();
   const {

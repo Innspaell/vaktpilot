@@ -92,7 +92,7 @@ export default async function SubscriptionPage() {
             {Number(cur.per_extra) > 0 ? ` Hver aktiv ansatt utover det koster ${kr(cur.per_extra)} per måned.` : ""}
           </p>
           <p className="mt-2 text-xs text-muted">
-            En ansatt er aktiv i en måned når hen har hatt en publisert vakt eller registrert timer i måneden.
+            En ansatt er aktiv i en måned når vedkommende har hatt en publisert vakt eller registrert timer i måneden.
             Ansatte som ikke har jobbet, og de som har sluttet, telles ikke.
           </p>
         </section>

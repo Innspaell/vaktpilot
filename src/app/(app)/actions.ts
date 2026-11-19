@@ -214,7 +214,7 @@ export async function addEmployee(_: ActionState, fd: FormData): Promise<ActionS
   redirect(`/ansatte/${r.id}?ny=1`);
 }
 
-/** Administrator legger seg selv inn som ansatt, så hen kan få vakter, stemple og søke fri. */
+/** Administrator legger seg selv inn som ansatt, så vedkommende kan få vakter, stemple og søke fri. */
 export async function addSelfAsEmployee(_: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await requireAdmin();
   if (ctx.employeeId) return { ok: "Du er allerede registrert som ansatt." };

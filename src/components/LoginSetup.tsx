@@ -88,7 +88,7 @@ export function LoginSetup({ passwordAction, inviteAction, employeeId, defaultLo
               }}>{copied ? "Kopiert" : "Kopier"}</button>
             </div>
           )}
-          {mode === "password" && <p className="mt-1">Første gang den ansatte logger inn, blir hen bedt om å lage sitt eget passord.</p>}
+          {mode === "password" && <p className="mt-1">Første gang den ansatte logger inn, blir vedkommende bedt om å lage sitt eget passord.</p>}
         </div>
       )}
     </div>

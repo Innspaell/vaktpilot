@@ -39,7 +39,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
       <h1 className="h1">{e.full_name}</h1>
       {ny && (
         <p className="card bg-good-soft text-sm text-good">
-          {e.full_name} er lagt til. {e.email ? `Be hen logge inn med ${e.email}.` : "Legg inn e-post så hen kan logge inn."}
+          {e.full_name} er lagt til. {e.email ? `Be vedkommende logge inn med ${e.email}.` : "Legg inn e-post så vedkommende kan logge inn."}
         </p>
       )}
 
@@ -77,7 +77,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             <label className="flex items-start gap-2 text-sm md:col-span-2">
               <input type="hidden" name="availability_shown" value="1" />
               <input type="checkbox" name="availability_enabled" defaultChecked={Boolean(e.availability_enabled)} className="mt-0.5 h-4 w-4" />
-              <span>Kan si fra om når hen kan jobbe<span className="block text-xs text-muted">For ekstrahjelp og folk på tilkalling. Fast ansatte med fast turnus trenger det sjelden.</span></span>
+              <span>Kan si fra om når vedkommende kan jobbe<span className="block text-xs text-muted">For ekstrahjelp og folk på tilkalling. Fast ansatte med fast turnus trenger det sjelden.</span></span>
             </label>
           )}
           <label className="flex items-start gap-2 text-sm md:col-span-2">
@@ -166,7 +166,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         <p className="mt-1 text-sm text-muted">
           {e.user_id
             ? `${e.full_name} har innlogging${e.email ? ` med ${e.email}` : ""}.${e.must_change_password ? " Har ikke byttet det midlertidige passordet ennå." : ""}`
-            : `${e.full_name} har ikke innlogging ennå. Send en lenke der hen lager passordet selv, eller sett et midlertidig passord. E-posten trenger ikke bekreftes.`}
+            : `${e.full_name} har ikke innlogging ennå. Send en lenke der vedkommende lager passordet selv, eller sett et midlertidig passord. E-posten trenger ikke bekreftes.`}
           {" "}Den ansatte kan også logge inn med kode på e-post, hvis e-posten er registrert.
         </p>
         {e.user_id && (

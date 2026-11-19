@@ -46,7 +46,7 @@ describe("lønnsgrunnlag", () => {
     expect(line(r, "supp_evening")).toBe(5);
   });
 
-  it("timelønnet får helligdagsgodtgjørelse når hen ikke jobber", () => {
+  it("timelønnet får helligdagsgodtgjørelse når vedkommende ikke jobber", () => {
     // Desember 2026: 1. juledag fredag 25.12 og 2. juledag lørdag (ikke hverdag)
     const r = calculatePay(kari, [], [], { from: "2026-12-01", to: "2026-12-31" });
     const hp = r.lines.find((l) => l.code === "holiday_pay");
