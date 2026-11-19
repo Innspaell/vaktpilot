@@ -23,7 +23,7 @@ export function TermsDateField({ terms, startDate }: { terms: Term[]; startDate:
     <div className="space-y-2 md:col-span-3">
       <label className="block max-w-xs">
         <span className="label">Fra dato</span>
-        <input name="valid_from" type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+        <input name="valid_from" type="date" required min="1990-01-01" max="2099-12-31" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
       </label>
       {same && <p className="text-sm text-bad">Det finnes allerede en avtale som starter {short(date)}. Velg en annen dato.</p>}
       {before && !same && nextStart && (

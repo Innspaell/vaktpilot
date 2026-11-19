@@ -21,23 +21,28 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
   const [deps, { data: emps }, { data: terms }, { data: entries }, { data: shifts }] = await Promise.all([
     loadDepartments(ctx),
     ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
-    ctx.supabase.from("employment_terms").select("employee_id, hours_per_week, on_call").eq("org_id", ctx.org.id).is("valid_to", null),
+    ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call").eq("org_id", ctx.org.id)
+      .lte("valid_from", monthTo).or(`valid_to.is.null,valid_to.gte.${monthFrom}`),
     ctx.supabase.from("time_entries").select("employee_id, starts_at, ends_at, break_minutes").eq("org_id", ctx.org.id)
       .gte("starts_at", start).lt("starts_at", end).not("ends_at", "is", null),
     ctx.supabase.from("shifts").select("employee_id, starts_at, ends_at, break_minutes").eq("org_id", ctx.org.id)
       .eq("status", "published").not("employee_id", "is", null).gte("starts_at", start).lt("starts_at", end),
   ]);
-  const term = new Map((terms ?? []).map((t) => [t.employee_id, t]));
+
   // Lederen ser de ansatte vedkommende har ansvar for
   const mine = (id: string) => managesEmployee(ctx.isAdmin, deps, id);
-  const active = (emps ?? []).filter((e) => (!e.end_date || e.end_date >= monthFrom) && e.start_date <= monthTo && mine(e.id));
+  // Med: alle som har avtale, timer eller vakter i måneden (også timebasis før startdato)
+  const busy = new Set([...(entries ?? []).map((x) => x.employee_id), ...(shifts ?? []).map((x) => x.employee_id as string)]);
+  const withTerms = new Set((terms ?? []).map((t) => t.employee_id));
+  const active = (emps ?? []).filter((e) => (!e.end_date || e.end_date >= monthFrom) && (busy.has(e.id) || (withTerms.has(e.id) && e.start_date <= monthTo)) && mine(e.id));
   const rows = monthHours({
     now, monthFrom, monthTo,
-    startDates: new Map(active.map((e) => [e.id, e.start_date])),
-    employees: active.map((e) => {
-      const t = term.get(e.id);
-      return { id: e.id, name: e.full_name, hoursPerWeek: t ? Number(t.hours_per_week) : null, onCall: Boolean(t?.on_call) };
-    }),
+    employees: active.map((e) => ({
+      id: e.id, name: e.full_name,
+      terms: (terms ?? []).filter((t) => t.employee_id === e.id).map((t) => ({
+        from: t.valid_from, to: t.valid_to, hoursPerWeek: Number(t.hours_per_week), onCall: Boolean(t.on_call),
+      })),
+    })),
     entries: (entries ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at!), breakMinutes: x.break_minutes })),
     shifts: (shifts ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at), breakMinutes: x.break_minutes })),
   }).filter((r) => r.done > 0 || r.plannedRest > 0 || (r.agreed ?? 0) > 0);
@@ -50,7 +55,7 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
         <h2 className="h2">Timer i {month}</h2>
         <Link href="/rapporter" className="text-sm text-brand">Flere tall i Rapporter</Link>
       </div>
-      <p className="px-4 text-xs text-muted">Jobbet = registrerte timer til nå. Planlagt = publiserte vakter som ikke har startet.</p>
+      <p className="px-4 text-xs text-muted">Jobbet = registrerte timer til nå. Planlagt = publiserte vakter som ikke har startet (utkast er ikke med). Avtalt = fast avtalt tid i måneden.</p>
       {rows.length === 0 ? (
         <p className="px-4 py-3 text-sm text-muted">Ingen timer eller vakter denne måneden ennå.</p>
       ) : (
@@ -75,7 +80,7 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
                   <td className="px-3 py-2 text-right">{num(r.plannedRest)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{num(total)}</td>
                   <td className="px-4 py-2 text-right text-muted">
-                    {r.agreed === null ? "tilkalling" : (
+                    {r.agreed === null ? "ingen fast tid" : (
                       <>{num(r.agreed)}{diff !== null && Math.abs(diff) >= 0.5 && (
                         <span className={`ml-1.5 ${diff < 0 ? "text-warn" : "text-brand"}`}>({diff > 0 ? "+" : ""}{num(diff)})</span>
                       )}</>

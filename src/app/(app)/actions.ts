@@ -282,6 +282,8 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
   const employeeId = text(fd, "employee_id")!;
   const validFrom = text(fd, "valid_from");
   if (!validFrom) return { error: "Velg fra-dato." };
+  // Fanger skrivefeil i årstallet (f.eks. 0026 i stedet for 2026)
+  if (!/^(19[9]\d|20\d\d)-\d\d-\d\d$/.test(validFrom)) return { error: "Sjekk årstallet i fra-datoen." };
 
   const dayBefore = (d: string) => new Date(Date.parse(d) - 86400000).toISOString().slice(0, 10);
   const short = (d: string) => d.split("-").reverse().join(".");
