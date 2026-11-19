@@ -3,7 +3,7 @@ import { colleagues } from "@/lib/data";
 import { formatDateLong, localDate, addDays } from "@/lib/time";
 import { workdaysBetween } from "@/lib/absence";
 import { ActionForm, Field } from "./Form";
-import { VacationOverview } from "./VacationOverview";
+import { VacationOverview, VacationTransfer } from "./VacationOverview";
 import { cancelAbsence, decideAbsence, registerAbsence, requestAbsence } from "@/app/(app)/foresporsler/absence-actions";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
@@ -16,11 +16,12 @@ const STATUS: Record<string, [string, string]> = {
 };
 
 type Row = {
-  id: string; employee_id: string; from_date: string; to_date: string; partial_hours: number | null;
+  id: string; employee_id: string; from_date: string; to_date: string; partial_hours: number | null; from_time: string | null; to_time: string | null;
   status: string; comment: string | null; absence_types: { name: string; key: string; is_sick: boolean } | null;
 };
 
-function range(r: { from_date: string; to_date: string; partial_hours: number | null }) {
+function range(r: { from_date: string; to_date: string; partial_hours: number | null; from_time?: string | null; to_time?: string | null }) {
+  if (r.from_time && r.to_time) return `${formatDateLong(r.from_date)}, kl. ${r.from_time.slice(0, 5)}–${r.to_time.slice(0, 5)}`;
   if (r.from_date === r.to_date) {
     return `${formatDateLong(r.from_date)}${r.partial_hours ? `, ${String(r.partial_hours).replace(".", ",")} t` : ""}`;
   }
@@ -31,7 +32,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
   const today = localDate(new Date(), ctx.org.timezone);
   let q = ctx.supabase
     .from("absence_requests")
-    .select("id, employee_id, from_date, to_date, partial_hours, status, comment, absence_types(name, key, is_sick)")
+    .select("id, employee_id, from_date, to_date, partial_hours, from_time, to_time, status, comment, absence_types(name, key, is_sick)")
     .eq("org_id", ctx.org.id)
     .order("from_date", { ascending: false })
     .limit(60);
@@ -77,7 +78,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
 
   return (
     <div className="space-y-4">
-      {ctx.employeeId && <VacationOverview ctx={ctx} employeeId={ctx.employeeId} />}
+      {ctx.employeeId && <VacationOverview ctx={ctx} employeeId={ctx.employeeId} transfer={false} />}
 
       {ctx.employeeId && (
         <section className="card">
@@ -91,7 +92,10 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
             <Field label="Type"><select name="absence_type_id" required className="input">{ownTypeOptions}</select></Field>
             <Field label="Fra"><input name="from_date" type="date" required min={today} defaultValue={today} className="input" /></Field>
             <Field label="Til"><input name="to_date" type="date" required min={today} defaultValue={today} className="input" /></Field>
-            <Field label="Timer (deler av dag)" hint="Tomt = hele dager."><input name="partial_hours" type="number" step="0.5" min="0.5" max="12" className="input" /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Fra kl." hint="Deler av dagen, f.eks. lege."><input name="from_time" type="time" className="input" /></Field>
+              <Field label="Til kl." hint="Tomt = hele dager."><input name="to_time" type="time" className="input" /></Field>
+            </div>
             <div className="md:col-span-4"><Field label="Kommentar (valgfritt)"><input name="comment" className="input" /></Field></div>
           </ActionForm>
         </section>
@@ -110,7 +114,10 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
             <Field label="Type"><select name="absence_type_id" required className="input">{typeOptions}</select></Field>
             <Field label="Fra"><input name="from_date" type="date" required defaultValue={today} className="input" /></Field>
             <Field label="Til"><input name="to_date" type="date" required defaultValue={today} className="input" /></Field>
-            <Field label="Timer (deler av dag)"><input name="partial_hours" type="number" step="0.5" min="0.5" max="12" className="input" /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Fra kl." hint="Deler av dagen."><input name="from_time" type="time" className="input" /></Field>
+              <Field label="Til kl." hint="Tomt = hele dager."><input name="to_time" type="time" className="input" /></Field>
+            </div>
             <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-3">
               <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene i perioden ledige
             </label>
@@ -194,6 +201,8 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
           </ul>
         </details>
       )}
+
+      {ctx.employeeId && <VacationTransfer ctx={ctx} employeeId={ctx.employeeId} />}
     </div>
   );
 }

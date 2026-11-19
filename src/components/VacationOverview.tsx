@@ -39,7 +39,7 @@ export async function VacationLine({ ctx }: { ctx: Ctx }) {
 }
 
 /** Feriesaldo per år, med overføring. mode: ansatt selv, eller leder på ansattsiden. */
-export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; employeeId: string; admin?: boolean }) {
+export async function VacationOverview({ ctx, employeeId, admin, transfer = true }: { ctx: Ctx; employeeId: string; admin?: boolean; transfer?: boolean }) {
   const cy = new Date().getFullYear();
   const data = await loadVacation(ctx, [cy - 1, cy, cy + 1], employeeId);
   const all = data.byEmployee.get(employeeId) ?? [];
@@ -47,8 +47,6 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
   const next = all.find((y) => y.year === data.currentYear + 1);
   const hasNext = Boolean(next && (next.booked || next.pending || next.carriedIn || next.adjustments));
   const years = relevantYears(data.currentYear, data.today, hasNext).map((y) => all.find((v) => v.year === y)).filter(Boolean) as VacationYear[];
-  const carryovers = data.carryovers;
-
   return (
     <div className="space-y-3">
       <div className={`grid gap-3 ${years.length > 1 ? "md:grid-cols-2" : ""}`}>
@@ -82,73 +80,88 @@ export async function VacationOverview({ ctx, employeeId, admin }: { ctx: Ctx; e
         </details>
       )}
 
-      <section className="card">
-        <h2 className="h2">Overføre ferie til neste år</h2>
-        <p className="mt-1 text-sm text-muted">
-          Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil 2 uker (12 virkedager etter ferieloven) overføres til neste år.
-          For {admin ? "denne ansatte" : "deg"} er det {n(data.carryoverLimit(employeeId))} arbeidsdager.
-          {admin
-            ? " Du lager avtalen og signerer for bedriften. Den ansatte får varsel og signerer med fingeren i appen. Når begge har signert, flyttes dagene av seg selv."
-            : " Ønsker du å overføre ferie, ta det opp med lederen din. Lederen lager avtalen, og du signerer den her i appen."}
-          {" "}Ferie som ikke kunne tas på grunn av sykdom eller foreldrepermisjon overføres uten avtale. Det registrerer lederen.
-        </p>
-        {carryovers.length > 0 && (
-          <ul className="mt-3 divide-y divide-line text-sm">
-            {carryovers.map((c) => {
-              const [label, cls] = STATUS[c.status] ?? [c.status, "bg-paper text-muted"];
-              return (
-                <li key={c.id}>
-                  <Link href={`/ferie/overforing/${c.id}`} className="flex items-center justify-between gap-2 py-2 hover:text-brand">
-                    <span>{n(Number(c.days))} dager fra {c.from_year} til {c.from_year + 1}{c.reason !== "agreement" && <span className="text-muted"> · {c.reason === "sick" ? "sykdom" : c.reason === "parental" ? "permisjon" : "ikke avviklet"}</span>}</span>
-                    <span className={`badge ${cls}`}>{label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {admin && (
-          <div className="mt-3 space-y-2">
-            <details className="rounded-lg border border-line p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-brand">Lag avtale om overføring</summary>
-              <ActionForm action={proposeCarryover} submitLabel="Signer og send til den ansatte" className="mt-3 grid gap-3 md:grid-cols-3">
-                <input type="hidden" name="employee_id" value={employeeId} />
-                <input type="hidden" name="reason" value="agreement" />
-                <Field label="Fra ferieår">
-                  <select name="from_year" defaultValue={data.currentYear} className="input">
-                    {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
-                  </select>
-                </Field>
-                <Field label="Arbeidsdager" hint={`Inntil ${n(data.carryoverLimit(employeeId))} (2 uker).`}>
-                  <input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.carryoverLimit(employeeId)) : ""} className="input" />
-                </Field>
-                <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
-                <div className="md:col-span-3"><SignaturePad label="Din signatur, for bedriften" /></div>
-              </ActionForm>
-            </details>
-            <details className="rounded-lg border border-line p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-brand">Registrer overføring som følger av loven</summary>
-              <p className="mt-2 text-xs text-muted">Sykdom, foreldrepermisjon eller forhold arbeidsgiver har ansvaret for. Ingen avtale eller grense. Den ansatte får beskjed.</p>
-              <ActionForm action={proposeCarryover} submitLabel="Registrer" className="mt-3 grid gap-3 md:grid-cols-4">
-                <input type="hidden" name="employee_id" value={employeeId} />
-                <Field label="Fra ferieår">
-                  <select name="from_year" defaultValue={data.currentYear} className="input">
-                    {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
-                  </select>
-                </Field>
-                <Field label="Dager"><input name="days" inputMode="decimal" required className="input" /></Field>
-                <Field label="Grunnlag">
-                  <select name="reason" className="input">
-                    {Object.entries(CARRYOVER_REASONS).filter(([k]) => k !== "agreement").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                  </select>
-                </Field>
-                <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
-              </ActionForm>
-            </details>
-          </div>
-        )}
-      </section>
+      {transfer && <TransferSection data={data} employeeId={employeeId} admin={admin} cur={cur} />}
     </div>
+  );
+}
+
+/** Overføring av ferie som egen del, for sider der den skal stå lenger ned. */
+export async function VacationTransfer({ ctx, employeeId, admin }: { ctx: Ctx; employeeId: string; admin?: boolean }) {
+  const cy = new Date().getFullYear();
+  const data = await loadVacation(ctx, [cy - 1, cy, cy + 1], employeeId);
+  const cur = (data.byEmployee.get(employeeId) ?? []).find((y) => y.year === data.currentYear);
+  return <TransferSection data={data} employeeId={employeeId} admin={admin} cur={cur} />;
+}
+
+function TransferSection({ data, employeeId, admin, cur }: { data: Awaited<ReturnType<typeof loadVacation>>; employeeId: string; admin?: boolean; cur?: VacationYear }) {
+  const carryovers = data.carryovers;
+  return (
+      <section className="card">
+      <h2 className="h2">Overføre ferie til neste år</h2>
+      <p className="mt-1 text-sm text-muted">
+        Ferie skal som hovedregel tas i ferieåret. Etter skriftlig avtale kan inntil 2 uker (12 virkedager etter ferieloven) overføres til neste år.
+        For {admin ? "denne ansatte" : "deg"} er det {n(data.carryoverLimit(employeeId))} arbeidsdager.
+        {admin
+          ? " Du lager avtalen og signerer for bedriften. Den ansatte får varsel og signerer med fingeren i appen. Når begge har signert, flyttes dagene av seg selv."
+          : " Ønsker du å overføre ferie, ta det opp med lederen din. Lederen lager avtalen, og du signerer den her i appen."}
+        {" "}Ferie som ikke kunne tas på grunn av sykdom eller foreldrepermisjon overføres uten avtale. Det registrerer lederen.
+      </p>
+      {carryovers.length > 0 && (
+        <ul className="mt-3 divide-y divide-line text-sm">
+          {carryovers.map((c) => {
+            const [label, cls] = STATUS[c.status] ?? [c.status, "bg-paper text-muted"];
+            return (
+              <li key={c.id}>
+                <Link href={`/ferie/overforing/${c.id}`} className="flex items-center justify-between gap-2 py-2 hover:text-brand">
+                  <span>{n(Number(c.days))} dager fra {c.from_year} til {c.from_year + 1}{c.reason !== "agreement" && <span className="text-muted"> · {c.reason === "sick" ? "sykdom" : c.reason === "parental" ? "permisjon" : "ikke avviklet"}</span>}</span>
+                  <span className={`badge ${cls}`}>{label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {admin && (
+        <div className="mt-3 space-y-2">
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-brand">Lag avtale om overføring</summary>
+            <ActionForm action={proposeCarryover} submitLabel="Signer og send til den ansatte" className="mt-3 grid gap-3 md:grid-cols-3">
+              <input type="hidden" name="employee_id" value={employeeId} />
+              <input type="hidden" name="reason" value="agreement" />
+              <Field label="Fra ferieår">
+                <select name="from_year" defaultValue={data.currentYear} className="input">
+                  {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
+                </select>
+              </Field>
+              <Field label="Arbeidsdager" hint={`Inntil ${n(data.carryoverLimit(employeeId))} (2 uker).`}>
+                <input name="days" inputMode="decimal" required defaultValue={cur && cur.remaining > 0 ? Math.min(cur.remaining, data.carryoverLimit(employeeId)) : ""} className="input" />
+              </Field>
+              <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
+              <div className="md:col-span-3"><SignaturePad label="Din signatur, for bedriften" /></div>
+            </ActionForm>
+          </details>
+          <details className="rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-brand">Registrer overføring som følger av loven</summary>
+            <p className="mt-2 text-xs text-muted">Sykdom, foreldrepermisjon eller forhold arbeidsgiver har ansvaret for. Ingen avtale eller grense. Den ansatte får beskjed.</p>
+            <ActionForm action={proposeCarryover} submitLabel="Registrer" className="mt-3 grid gap-3 md:grid-cols-4">
+              <input type="hidden" name="employee_id" value={employeeId} />
+              <Field label="Fra ferieår">
+                <select name="from_year" defaultValue={data.currentYear} className="input">
+                  {[data.currentYear - 1, data.currentYear].map((y) => <option key={y} value={y}>{y} → {y + 1}</option>)}
+                </select>
+              </Field>
+              <Field label="Dager"><input name="days" inputMode="decimal" required className="input" /></Field>
+              <Field label="Grunnlag">
+                <select name="reason" className="input">
+                  {Object.entries(CARRYOVER_REASONS).filter(([k]) => k !== "agreement").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </Field>
+              <Field label="Kommentar"><input name="note" placeholder="Valgfritt" className="input" /></Field>
+            </ActionForm>
+          </details>
+        </div>
+      )}
+    </section>
   );
 }
 
