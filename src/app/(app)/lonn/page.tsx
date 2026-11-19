@@ -98,7 +98,8 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
 
       {pendingTotal > 0 && (
         <p className="card border-warn/40 bg-warn-soft text-sm text-warn">
-          {pendingTotal} {pendingTotal === 1 ? "registrering venter" : "registreringer venter"} på godkjenning og er ikke med i lønnsgrunnlaget.{" "}
+          {pendingTotal} {pendingTotal === 1 ? "registrering venter" : "registreringer venter"} på godkjenning. De er ikke med i lønnsgrunnlaget eller filene,
+          men du ser en foreløpig beregning med dem hos hver ansatt.{" "}
           <Link href={`/timer?vis=alle&fra=${from}&til=${to}`} className="font-semibold underline">Gå til godkjenning</Link>
         </p>
       )}
@@ -156,7 +157,36 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                     </div>
                   </div>
                 </div>
-                {pending > 0 && <p className="mt-2 text-xs text-warn">{pending} ikke godkjent</p>}
+                {pending > 0 && (() => {
+                  const pr = data.projected.get(p.employee.id);
+                  if (!pr || locked) return <p className="mt-2 text-xs text-warn">{pending} ikke godkjent</p>;
+                  const val = (l: (typeof p.lines)[number]) => l.quantity ?? l.hours;
+                  const before = new Map(p.lines.map((l) => [`${l.code}|${l.rate ?? ""}|${l.percent ?? ""}`, val(l)]));
+                  return (
+                    <details open className="mt-3 rounded-lg border border-warn/40 p-2">
+                      <summary className="cursor-pointer text-sm font-semibold text-warn">
+                        Foreløpig, med {pending} {pending === 1 ? "registrering" : "registreringer"} som ikke er godkjent
+                      </summary>
+                      <p className="mt-1 text-xs text-muted">Slik blir grunnlaget hvis timene godkjennes som de er. Tallet i parentes er økningen fra det godkjente.</p>
+                      <table className="mt-1 w-full text-sm">
+                        <tbody className="divide-y divide-line">
+                          {pr.lines.map((l, i) => {
+                            const add = Math.round((val(l) - (before.get(`${l.code}|${l.rate ?? ""}|${l.percent ?? ""}`) ?? 0)) * 100) / 100;
+                            return (
+                              <tr key={`${l.code}-${i}`}>
+                                <td className="py-1.5">{l.label}</td>
+                                <td className="py-1.5 text-right tabular-nums">
+                                  {num(val(l))} {l.quantity != null ? "stk" : "t"}
+                                  {Math.abs(add) > 0.004 && <span className="ml-1 text-warn">({add > 0 ? "+" : ""}{num(add)})</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </details>
+                  );
+                })()}
                 {w.length > 0 && (
                   <details className="mt-2 rounded-lg border border-warn/40 bg-warn-soft p-2 text-xs text-warn">
                     <summary className="cursor-pointer font-semibold">{w.length} mulig{w.length === 1 ? "" : "e"} brudd på arbeidstidsreglene</summary>

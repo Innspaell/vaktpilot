@@ -87,6 +87,9 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const periodRows = rows.filter((r) => startLocal(r) >= from);
   const all = periodRows.map(toEntry);
   const pending = periodRows.filter((r) => r.status === "submitted" || r.status === "draft");
+  // Foreløpig: godkjente pluss timer som er registrert, men ikke godkjent ennå
+  const withPending = rows.map(toEntry);
+  const pendingIds = new Set(pending.map((r) => r.employee_id));
   const events: PayEvent[] = (evs ?? []).map((v) => ({ employeeId: v.employee_id, date: v.date, key: v.key, count: v.count }));
 
   type A = { employee_id: string; from_date: string; to_date: string; partial_hours: number | null;
@@ -101,6 +104,9 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   return {
     period,
     pay: employees.map((e) => calculatePay(e, approved, absences, period, rules.resolve, tz, events)),
+    /** Foreløpig beregning med ikke godkjente timer, for ansatte som har slike */
+    projected: new Map(employees.filter((e) => pendingIds.has(e.id))
+      .map((e) => [e.id, calculatePay(e, withPending, absences, period, rules.resolve, tz, events)])),
     rulesName: rules.setOn(to)?.name ?? "Uten tariff (arbeidsmiljøloven)",
     rules,
     events: evs ?? [],
