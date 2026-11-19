@@ -16,9 +16,9 @@ export const SITE_IMAGES: Record<SiteSlot, { label: string; where: string; src: 
     label: "Vaktlista på kjøleskapet",
     where: "Ved «Dette slipper du»",
     src: "/nettside/tavle-1600.webp",
-    srcSet: "/nettside/tavle-800.webp 800w, /nettside/tavle-1600.webp 1448w",
-    alt: "En tavle på kjøleskapet med vaktliste, spørsmålstegn og lapper: «Hvem tar ekstra vakt lørdag?»",
-    w: 1448, h: 1086,
+    srcSet: "/nettside/tavle-800.webp 800w, /nettside/tavle-1600.webp 1536w",
+    alt: "En vaktliste på tavla med hull og spørsmålstegn, «Mangler!» på søndagene og «Hvem tar ekstra vakt lørdag?». Nidarosdomen i høstlys utenfor vinduet.",
+    w: 1536, h: 1024,
   },
   syk: {
     label: "Sykmelding klokka sju",

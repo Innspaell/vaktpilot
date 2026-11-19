@@ -154,7 +154,7 @@ export default async function StartPage() {
           <h2 className="display text-2xl font-bold md:text-3xl">Lagd i Stjørdal</h2>
           <div className="mt-4 max-w-[36rem] space-y-4 leading-relaxed">
             <p>
-              Vaktpilot er lagd av InnSpæll i Stjørdal, sammen med en bedrift i Trøndelag som var lei av å planlegge i regneark.
+              Vaktpilot er lagd av InnSpæll AS i Stjørdal, sammen med en bedrift i Trøndelag som var lei av å planlegge i regneark.
               Alt i appen er noe en ekte leder eller ansatt har trengt i en ekte arbeidsuke.
             </p>
             <p>
