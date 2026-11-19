@@ -284,22 +284,36 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
   const validFrom = text(fd, "valid_from");
   if (!validFrom) return { error: "Velg fra-dato." };
 
-  const { data: current } = await ctx.supabase
-    .from("employment_terms")
-    .select("id, valid_from")
-    .eq("employee_id", employeeId)
-    .is("valid_to", null)
-    .maybeSingle();
-  if (current) {
-    if (current.valid_from >= validFrom) return { error: "Ny avtale må starte etter at gjeldende avtale startet." };
-    const dayBefore = new Date(Date.parse(validFrom) - 86400000).toISOString().slice(0, 10);
-    const { error } = await ctx.supabase.from("employment_terms").update({ valid_to: dayBefore }).eq("id", current.id);
+  const dayBefore = (d: string) => new Date(Date.parse(d) - 86400000).toISOString().slice(0, 10);
+  const short = (d: string) => d.split("-").reverse().join(".");
+  const { data: all } = await ctx.supabase.from("employment_terms").select("id, valid_from, valid_to").eq("employee_id", employeeId).eq("org_id", ctx.org.id);
+  const terms = all ?? [];
+  if (terms.some((t) => t.valid_from === validFrom)) return { error: `Det finnes allerede en avtale som starter ${short(validFrom)}.` };
+  // Neste avtale etter datoen: da gjelder den nye avtalen bare fram til den
+  const nextStart = terms.map((t) => t.valid_from).filter((f) => f > validFrom).sort()[0] ?? null;
+  if (nextStart && fd.get("before_ok") !== "on") {
+    return { error: `Datoen er før avtalen som gjelder fra ${short(nextStart)}. Kryss av for å legge inn avtalen for perioden ${short(validFrom)}–${short(dayBefore(nextStart))}.` };
+  }
+  // Timer i perioden som allerede er låst til lønn, beregnes ikke på nytt
+  const { count: locked } = await ctx.supabase.from("time_entries").select("id", { count: "exact", head: true })
+    .eq("employee_id", employeeId).eq("status", "locked").gte("starts_at", `${validFrom}T00:00:00Z`)
+    .lt("starts_at", `${nextStart ?? "9999-12-31"}T00:00:00Z`);
+  if (locked) return { error: "Det finnes timer i perioden som er låst til lønn. Velg en dato etter siste låste lønnsperiode." };
+
+  // Avtalen som gjelder på datoen (den gjeldende, eller en eldre), avsluttes dagen før
+  const covering = terms.find((t) => t.valid_from < validFrom && (!t.valid_to || t.valid_to >= validFrom));
+  if (covering) {
+    const { error } = await ctx.supabase.from("employment_terms").update({ valid_to: dayBefore(validFrom) }).eq("id", covering.id);
     if (error) return { error: error.message };
+  }
+  if (fd.get("move_start") === "on") {
+    await ctx.supabase.from("employees").update({ start_date: validFrom }).eq("id", employeeId).eq("org_id", ctx.org.id).gt("start_date", validFrom);
   }
   const { error } = await ctx.supabase.from("employment_terms").insert({
     org_id: ctx.org.id,
     employee_id: employeeId,
     valid_from: validFrom,
+    valid_to: nextStart ? dayBefore(nextStart) : null,
     position_pct: num(fd, "position_pct", 100),
     hours_per_week: num(fd, "hours_per_week", 37.5),
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
@@ -311,7 +325,7 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
   });
   if (error) return { error: error.message };
   revalidatePath(`/ansatte/${employeeId}`);
-  return { ok: "Ny avtale lagret." };
+  return { ok: nextStart ? `Avtalen er lagret for ${short(validFrom)}–${short(dayBefore(nextStart))}.` : "Ny avtale lagret." };
 }
 
 export async function setMemberRole(fd: FormData) {

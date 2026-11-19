@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { addTerms, createLoginInvite, resetEmployeeMfa, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
 import { LoginSetup } from "@/components/LoginSetup";
+import { TermsDateField } from "@/components/TermsDateField";
 import { VacationOverview } from "@/components/VacationOverview";
 import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status";
 
@@ -118,12 +119,22 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         ) : (
           <p className="mt-1 text-sm text-muted">Ingen gjeldende avtale.</p>
         )}
+        {(terms ?? []).length > 1 && (
+          <ul className="mt-3 divide-y divide-line rounded-lg border border-line text-sm">
+            {(terms ?? []).map((t) => (
+              <li key={t.id} className={`flex flex-wrap justify-between gap-2 px-3 py-2 ${t.valid_to ? "text-muted" : ""}`}>
+                <span className="tabular-nums">{t.valid_from.split("-").reverse().join(".")} – {t.valid_to ? t.valid_to.split("-").reverse().join(".") : "nå"}</span>
+                <span>{Number(t.position_pct)} % · {t.pay_type === "fixed" ? "fastlønn" : "timelønn"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <details className="mt-4">
           <summary className="cursor-pointer text-sm font-semibold text-brand">Ny avtale fra en dato</summary>
-          <p className="mt-2 text-sm text-muted">Gjeldende avtale avsluttes dagen før. Gamle timelister beregnes fortsatt etter avtalen som gjaldt da.</p>
+          <p className="mt-2 text-sm text-muted">Gjeldende avtale avsluttes dagen før. Gamle timelister beregnes fortsatt etter avtalen som gjaldt da. Du kan også legge inn en avtale for en periode før gjeldende avtale, for eksempel timebasis før fast ansettelse.</p>
           <ActionForm action={addTerms} className="mt-4 grid gap-4 md:grid-cols-3">
             <input type="hidden" name="employee_id" value={e.id} />
-            <Field label="Fra dato"><input name="valid_from" type="date" required className="input" /></Field>
+            <TermsDateField terms={(terms ?? []).map((t) => ({ valid_from: t.valid_from, valid_to: t.valid_to }))} startDate={e.start_date} />
             <Field label="Stillingsprosent"><input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" /></Field>
             <Field label="Timer per uke"><input name="hours_per_week" type="number" step="0.25" defaultValue={Number(current?.hours_per_week ?? 37.5)} className="input" /></Field>
             <Field label="Lønnstype">
