@@ -48,7 +48,8 @@ export async function requestAbsence(_: ActionState, fd: FormData): Promise<Acti
   if (error) return { error: error.message };
   refresh();
   let note = "";
-  const { data: t } = await ctx.supabase.from("absence_types").select("key").eq("id", typeId).single();
+  const { data: t } = await ctx.supabase.from("absence_types").select("key, is_sick").eq("id", typeId).single();
+  if (t?.is_sick) return { ok: "Lederen din har fått beskjed om at du er syk, og godkjenner fraværet. God bedring!" };
   if (t?.key === "ferie") {
     const startYear = Number(p.from.slice(0, 4)), endYear = Number(p.to.slice(0, 4));
     const v = await loadVacation(ctx, Array.from(new Set([startYear - 1, startYear, endYear])), ctx.employeeId);

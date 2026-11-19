@@ -37,16 +37,22 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
     .limit(60);
   if (!ctx.isAdmin) q = q.eq("employee_id", ctx.employeeId ?? "");
 
-  const [{ data }, { data: types }, names] = await Promise.all([
+  const [{ data }, { data: types }, names, { data: orgRow }] = await Promise.all([
     q,
     ctx.supabase.from("absence_types").select("id, name, key, is_sick, needs_approval, unit").eq("org_id", ctx.org.id).order("name"),
     colleagues(ctx),
+    ctx.supabase.from("organizations").select("sick_self_report").eq("id", ctx.org.id).single(),
   ]);
+  const sickSelfReport = orgRow?.sick_self_report !== false;
   const rows = (data ?? []) as unknown as Row[];
   const pending = rows.filter((r) => r.status === "pending");
   const upcoming = rows.filter((r) => r.status === "approved" && r.to_date >= today).reverse();
   const history = rows.filter((r) => !pending.includes(r) && !upcoming.includes(r)).slice(0, 15);
   const typeOptions = (types ?? []).map((t) => (
+    <option key={t.id} value={t.id}>{t.name}{t.needs_approval ? "" : " (registreres uten godkjenning)"}</option>
+  ));
+  // Ansatte ser sykefravær bare når bedriften lar dem melde sykdom i appen
+  const ownTypeOptions = (types ?? []).filter((t) => sickSelfReport || !t.is_sick).map((t) => (
     <option key={t.id} value={t.id}>{t.name}{t.needs_approval ? "" : " (registreres uten godkjenning)"}</option>
   ));
   const people = Array.from(names, ([id, name]) => ({ id, name }));
@@ -75,10 +81,14 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
 
       {ctx.employeeId && (
         <section className="card">
-          <h2 className="h2">Søk om fri</h2>
-          <p className="mt-1 text-sm text-muted">Ferie, avspasering eller annen fri fram i tid. Sykefravær registreres uten godkjenning, og du skal ikke oppgi årsak.</p>
+          <h2 className="h2">{sickSelfReport ? "Søk om fri eller meld deg syk" : "Søk om fri"}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {sickSelfReport
+              ? "Ferie, avspasering eller annen fri fram i tid. Er du syk, velg sykefravær: lederen din får beskjed med en gang og godkjenner det. Du skal ikke oppgi årsak."
+              : "Ferie, avspasering eller annen fri fram i tid."}
+          </p>
           <ActionForm action={requestAbsence} submitLabel="Send" className="mt-3 grid gap-3 md:grid-cols-4">
-            <Field label="Type"><select name="absence_type_id" required className="input">{typeOptions}</select></Field>
+            <Field label="Type"><select name="absence_type_id" required className="input">{ownTypeOptions}</select></Field>
             <Field label="Fra"><input name="from_date" type="date" required min={today} defaultValue={today} className="input" /></Field>
             <Field label="Til"><input name="to_date" type="date" required min={today} defaultValue={today} className="input" /></Field>
             <Field label="Timer (deler av dag)" hint="Tomt = hele dager."><input name="partial_hours" type="number" step="0.5" min="0.5" max="12" className="input" /></Field>

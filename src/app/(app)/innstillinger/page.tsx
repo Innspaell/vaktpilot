@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   const [{ data: org }, { data: roles }, { data: absenceTypes }, payRules, { data: ruleRequests }] = await Promise.all([
     ctx.supabase.from("organizations").select("*").eq("id", ctx.org.id).single(),
     ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id).order("sort_order").order("name"),
-    ctx.supabase.from("absence_types").select("id, name, paid, is_sick, unit").eq("org_id", ctx.org.id).order("name"),
+    ctx.supabase.from("absence_types").select("id, name, paid, is_sick, unit, needs_approval").eq("org_id", ctx.org.id).order("name"),
     loadPayRules(ctx),
     ctx.supabase.from("pay_rule_requests").select("id, message, file_name, status, reply, created_at").eq("org_id", ctx.org.id).order("created_at", { ascending: false }).limit(5),
   ]);
@@ -76,6 +76,15 @@ export default async function SettingsPage() {
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="auto_submit_clock_entries" defaultChecked={org?.auto_submit_clock_entries} className="mt-0.5 h-4 w-4" />
               <span>Send inn stemplede timer automatisk<span className="block text-xs text-muted">Gjelder bare når stempling er på.</span></span>
+            </label>
+          </fieldset>
+          <fieldset className="space-y-2 rounded-lg border border-line p-3 md:col-span-2">
+            <legend className="px-1 text-sm font-semibold">Sykefravær</legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="sick_self_report" defaultChecked={org?.sick_self_report ?? true} className="mt-0.5 h-4 w-4" />
+              <span>Ansatte kan melde sykdom i appen
+                <span className="block text-xs text-muted">Meldingen går til lederne med en gang, også på e-post, og må godkjennes før den gjelder. Slå av hvis bare lederen skal registrere sykefravær. Da ser ikke de ansatte sykefravær som valg, og følger bedriftens egne rutiner. Sykefravær må alltid godkjennes av en leder.</span>
+              </span>
             </label>
           </fieldset>
           <fieldset className="space-y-2 rounded-lg border border-line p-3 md:col-span-2">
@@ -233,7 +242,7 @@ export default async function SettingsPage() {
           {(absenceTypes ?? []).map((t) => (
             <li key={t.id} className="flex justify-between py-2">
               <span>{t.name}</span>
-              <span className="text-muted">{t.paid ? "betalt" : "ubetalt"} · {t.unit === "hour" ? "timer" : "dager"}{t.is_sick ? " · uten godkjenning" : ""}</span>
+              <span className="text-muted">{t.paid ? "betalt" : "ubetalt"} · {t.unit === "hour" ? "timer" : "dager"}{t.needs_approval ? " · leder godkjenner" : " · uten godkjenning"}</span>
             </li>
           ))}
         </ul>

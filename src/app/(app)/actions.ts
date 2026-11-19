@@ -130,6 +130,7 @@ export async function updateOrganization(_: ActionState, fd: FormData): Promise<
       staffing_slot_minutes: num(fd, "staffing_slot_minutes", 15),
       auto_submit_clock_entries: fd.get("auto_submit_clock_entries") === "on",
       clock_enabled: fd.get("clock_enabled") === "on",
+      sick_self_report: fd.get("sick_self_report") === "on",
       personnel_list: fd.get("personnel_list") === "on",
       personnel_list_staff_view: fd.get("personnel_list_staff_view") === "on",
     })
