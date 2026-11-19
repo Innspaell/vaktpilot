@@ -895,7 +895,7 @@ select pg_temp.check(exists (select 1 from notifications where kind = 'feedback_
 -- Support: svar-adresse i e-postene fra InnSpæll; driftsmeldinger
 reset role;
 select pg_temp.check(pg_get_functiondef('signup_request_code(text,jsonb)'::regprocedure) like '%support_reply_to()%'
-  and pg_get_functiondef('run_billing_dunning(date)'::regprocedure) like '%support_reply_to()%'
+  and pg_get_functiondef('run_billing_dunning(date)'::regprocedure) like '%faktura@vaktpilot.no%'
   and pg_get_functiondef('send_signup_confirmation(uuid)'::regprocedure) like '%support_reply_to()%', 'svar-adresse mangler i e-postene');
 set role authenticated;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a', 'plattform@test.no');
