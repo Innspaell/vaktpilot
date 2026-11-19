@@ -289,8 +289,10 @@ export async function cancelRequest(fd: FormData) {
 export async function decideRequest(fd: FormData) {
   const ctx = await requirePlanner();
   const id = text(fd, "id")!;
+  const decision = fd.get("decision");
+  if (decision !== "approve" && decision !== "reject") return;
   const { error } =
-    fd.get("decision") === "approve"
+    decision === "approve"
       ? await ctx.supabase.rpc("approve_shift_request", { p_request: id })
       : await ctx.supabase.rpc("reject_shift_request", { p_request: id, p_comment: text(fd, "comment") });
   refresh();

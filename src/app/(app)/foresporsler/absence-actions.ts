@@ -103,9 +103,12 @@ async function releaseShifts(ctx: Awaited<ReturnType<typeof requirePlanner>>, em
 
 export async function decideAbsence(fd: FormData) {
   const ctx = await requirePlanner();
+  // Avgjørelsen må være uttrykkelig: mangler den, gjøres ingenting (aldri avslag ved en feil)
+  const decision = fd.get("decision");
+  if (decision !== "approve" && decision !== "reject") return;
   await ctx.supabase.rpc("decide_absence", {
     p_id: text(fd, "id")!,
-    p_approve: fd.get("decision") === "approve",
+    p_approve: decision === "approve",
     p_release_shifts: fd.get("release_shifts") === "on",
   });
   refresh();

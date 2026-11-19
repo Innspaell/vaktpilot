@@ -12,6 +12,7 @@ import { VacationLine } from "@/components/VacationOverview";
 import { Intro } from "@/components/Intro";
 import { ChangePassword } from "@/components/ChangePassword";
 import { GettingStarted } from "@/components/GettingStarted";
+import { MonthHours } from "@/components/MonthHours";
 
 export default async function Home() {
   const ctx = await getContext();
@@ -146,6 +147,8 @@ export default async function Home() {
             <OpenShifts shifts={openShifts} tz={tz} />
           </section>
         </div>
+
+        <MonthHours ctx={ctx as Parameters<typeof MonthHours>[0]["ctx"]} />
 
         {ctx.employeeId ? (clock && <ClockButton state={clock.state} since={clock.since} />) : <SelfEmployeeCard email={ctx.email} />}
         {ctx.org.personnelList && (ctx.isAdmin || ctx.org.personnelListStaffView) && (

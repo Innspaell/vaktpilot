@@ -132,16 +132,23 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
                     {r.comment && <div className="text-muted">«{r.comment}»</div>}
                   </div>
                   {ctx.canPlan ? (
-                    <form action={decideAbsence} className="flex flex-wrap items-center gap-2">
-                      <input type="hidden" name="id" value={r.id} />
-                      {conflicts.get(r.id) && (
-                        <label className="flex items-center gap-1.5 text-xs">
-                          <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene ledige
-                        </label>
-                      )}
-                      <button name="decision" value="approve" className="btn-primary">Godkjenn</button>
-                      <button name="decision" value="reject" className="btn-ghost">Avslå</button>
-                    </form>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <form action={decideAbsence} className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="decision" value="approve" />
+                        {conflicts.get(r.id) && (
+                          <label className="flex items-center gap-1.5 text-xs">
+                            <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene ledige
+                          </label>
+                        )}
+                        <button className="btn-primary">Godkjenn</button>
+                      </form>
+                      <form action={decideAbsence}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <input type="hidden" name="decision" value="reject" />
+                        <button className="btn-ghost">Avslå</button>
+                      </form>
+                    </div>
                   ) : (
                     <form action={cancelAbsence}><input type="hidden" name="id" value={r.id} /><button className="btn-ghost">Trekk</button></form>
                   )}

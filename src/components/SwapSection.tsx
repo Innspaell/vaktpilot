@@ -68,11 +68,16 @@ export async function SwapSection({ ctx, preselect }: { ctx: Ctx; preselect?: st
                     <div>{when(w.shifts)}</div>
                     {w.comment && <div className="text-muted">«{w.comment}»</div>}
                   </div>
-                  <form action={decideSwap} className="flex gap-2">
-                    <input type="hidden" name="id" value={w.id} />
-                    <button name="decision" value="approve" className="btn-primary">{w.to_employee_id ? "Godkjenn bytte" : "Godkjenn – gjør ledig"}</button>
-                    <button name="decision" value="reject" className="btn-ghost">Avslå</button>
-                  </form>
+                  <div className="flex gap-2">
+                    <form action={decideSwap}>
+                      <input type="hidden" name="id" value={w.id} /><input type="hidden" name="decision" value="approve" />
+                      <button className="btn-primary">{w.to_employee_id ? "Godkjenn bytte" : "Godkjenn – gjør ledig"}</button>
+                    </form>
+                    <form action={decideSwap}>
+                      <input type="hidden" name="id" value={w.id} /><input type="hidden" name="decision" value="reject" />
+                      <button className="btn-ghost">Avslå</button>
+                    </form>
+                  </div>
                 </li>
               ))}
             </ul>

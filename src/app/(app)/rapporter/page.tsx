@@ -3,6 +3,7 @@ import { requirePlanner } from "@/lib/context";
 import { loadReport } from "@/lib/report-data";
 import { addDays, formatDateLong, localDate } from "@/lib/time";
 import type { Grouping } from "@/lib/report";
+import { MonthHours } from "@/components/MonthHours";
 
 const num = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
 const signed = (n: number) => `${n > 0.004 ? "+" : ""}${num(n)}`;
@@ -58,6 +59,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <Stat label="Bemanning" value={r.coverage.daysWithNeed ? `${r.coverage.daysCovered} av ${r.coverage.daysWithNeed} dager` : "Ingen behov"}
           hint={r.coverage.missingHours ? `mangler ${num(r.coverage.missingHours)} persontimer` : "fullt dekket"} warn={r.coverage.daysShort > 0} />
       </section>
+
+      <MonthHours ctx={ctx} />
 
       <section className="card overflow-x-auto p-0">
         <h2 className="h2 px-4 pt-4">Per ansatt</h2>

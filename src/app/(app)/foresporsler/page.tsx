@@ -85,11 +85,16 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                     {r.comment && <div className="text-muted">«{r.comment}»</div>}
                   </div>
                   {ctx.canPlan ? (
-                    <form action={decideRequest} className="flex gap-2">
-                      <input type="hidden" name="id" value={r.id} />
-                      <button name="decision" value="approve" className="btn-primary">Godkjenn</button>
-                      <button name="decision" value="reject" className="btn-ghost">Avslå</button>
-                    </form>
+                    <div className="flex gap-2">
+                      <form action={decideRequest}>
+                        <input type="hidden" name="id" value={r.id} /><input type="hidden" name="decision" value="approve" />
+                        <button className="btn-primary">Godkjenn</button>
+                      </form>
+                      <form action={decideRequest}>
+                        <input type="hidden" name="id" value={r.id} /><input type="hidden" name="decision" value="reject" />
+                        <button className="btn-ghost">Avslå</button>
+                      </form>
+                    </div>
                   ) : (
                     <form action={cancelRequest}><input type="hidden" name="id" value={r.id} /><button className="btn-ghost">Trekk</button></form>
                   )}

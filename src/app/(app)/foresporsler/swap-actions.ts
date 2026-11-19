@@ -41,7 +41,9 @@ export async function cancelSwap(fd: FormData) {
 
 export async function decideSwap(fd: FormData) {
   const ctx = await requirePlanner();
-  const { error } = await ctx.supabase.rpc("decide_swap", { p_swap: text(fd, "id")!, p_approve: fd.get("decision") === "approve" });
+  const decision = fd.get("decision");
+  if (decision !== "approve" && decision !== "reject") return;
+  const { error } = await ctx.supabase.rpc("decide_swap", { p_swap: text(fd, "id")!, p_approve: decision === "approve" });
   refresh();
   if (error) redirect(`/foresporsler?vis=bytte&feil=${encodeURIComponent(error.message)}`);
 }
