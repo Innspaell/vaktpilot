@@ -8,16 +8,15 @@ export function employeeImportExample() {
   const people: Cell[][] = [
     ["Olav Tryggvason", "olav@eksempel.no", "997 00 997", 1, "01.01.2025", 100, "Fastlønn", "Nei"],
     ["Kari Kjøttkakesen", "kari@eksempel.no", "900 00 001", 2, "01.03.2025", 80, "Timelønn", "Ja"],
-    ["Ola Ka-Dæ-Sei", "ola@eksempel.no", "900 00 002", 3, "15.04.2025", 60, "Timelønn", "Ja"],
-    ["Sigrid Sødd", "sigrid@eksempel.no", "900 00 003", 4, "01.06.2025", 40, "Timelønn", "Ja"],
-    ["Kåre Karbonade", null, null, 5, null, 20, "Timelønn", "Ja"],
+    ["Ola Ka-Di-Sei", "ola@eksempel.no", "900 00 002", 3, "15.04.2025", 60, "Timelønn", "Ja"],
+    ["Sigrid Sodd", "sigrid@eksempel.no", "900 00 003", 4, "01.06.2025", 40, "Timelønn", "Ja"],
   ];
   const guide: Cell[][] = [
     ["Slik fyller du ut fila"],
     [],
     ["Skriv over eksemplene på arket «Ansatte» med dine egne ansatte, én per rad. Overskriftene i første rad må stå."],
     ["Vaktpilot leser bare det første arket. Du ser alt før noe lagres, og kan hoppe over rader med feil."],
-    ["Olav Tryggvason grunnla Nidaros i 997, og er derfor daglig leder i eksemplet. Kåre Karbonade viser at bare navn er påkrevd."],
+    ["Olav Tryggvason grunnla Nidaros i 997, og er derfor daglig leder i eksemplet. Bare navn er påkrevd; resten kan stå tomt."],
     [],
     ["Kolonne", "Må fylles ut?", "Slik skriver du det"],
     ["Navn", "Ja", "Fullt navn. Du kan også bruke to kolonner: Fornavn og Etternavn."],

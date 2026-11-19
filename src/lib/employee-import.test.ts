@@ -38,9 +38,9 @@ describe("eksempelfila", () => {
     const { employeeImportExample } = await import("./employee-import-example");
     const { rows, missingName } = parseEmployees(readSpreadsheet(Buffer.from(employeeImportExample()), "eksempel.xlsx"));
     expect(missingName).toBe(false);
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(4);
     expect(rows.every((r) => r.problems.length === 0)).toBe(true);
     expect(rows[0]).toMatchObject({ full_name: "Olav Tryggvason", start_date: "2025-01-01", position_pct: 100, pay_type: "fixed", is_shift_worker: false });
-    expect(rows[4]).toMatchObject({ full_name: "Kåre Karbonade", email: null, position_pct: 20 });
+    expect(rows.map((r) => r.full_name)).toEqual(["Olav Tryggvason", "Kari Kjøttkakesen", "Ola Ka-Di-Sei", "Sigrid Sodd"]);
   });
 });
