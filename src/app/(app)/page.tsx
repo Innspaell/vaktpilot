@@ -7,6 +7,7 @@ import { ClockButton } from "@/components/ClockButton";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { Board } from "@/components/Board";
 import { requestOpenShift } from "./vaktplan/actions";
+import { signOut } from "./actions";
 import { VacationLine } from "@/components/VacationOverview";
 import { Intro } from "@/components/Intro";
 import { ChangePassword } from "@/components/ChangePassword";
@@ -25,10 +26,16 @@ export default async function Home() {
             <Link href="/ny-bedrift" className="btn-primary mt-4">Opprett bedrift</Link>
           </>
         ) : (
-          <p className="mt-2 text-muted">
-            Du er logget inn som {ctx.email}, men er ikke registrert hos noen arbeidsgiver ennå. Be arbeidsgiveren din legge deg inn med denne e-posten, og logg inn på nytt.
-          </p>
+          <>
+            <p className="mt-2 text-muted">
+              Du er logget inn som {ctx.email}, men er ikke registrert hos noen arbeidsgiver ennå. Be arbeidsgiveren din legge deg inn med denne e-posten, og logg inn på nytt.
+            </p>
+            <p className="mt-2 text-sm text-muted">Skal du ta i bruk Vaktpilot i egen bedrift? <Link href="/kom-i-gang" className="font-semibold text-brand">Kom i gang</Link></p>
+          </>
         )}
+        <form action={signOut} className="mt-4 border-t border-line pt-3">
+          <button className="text-sm font-semibold text-brand">Logg ut og bruk en annen e-post</button>
+        </form>
       </div>
     );
   }
