@@ -13,7 +13,7 @@ export async function navCounts(ctx: Awaited<ReturnType<typeof getContext>>): Pr
         sb.from("vacation_carryovers").select("id", head).eq("org_id", org).eq("status", "pending").eq("employee_id", ctx.employeeId).is("employee_accepted_at", null),
       ]).then((r) => r.reduce((s, x) => s + (x.count ?? 0), 0))
     : Promise.resolve(0);
-  const adminQ = ctx.isAdmin
+  const adminQ = ctx.canPlan
     ? Promise.all([
         sb.from("absence_requests").select("id", head).eq("org_id", org).eq("status", "pending"),
         sb.from("shift_requests").select("id", head).eq("org_id", org).eq("status", "pending"),

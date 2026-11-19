@@ -1,4 +1,5 @@
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner } from "@/lib/context";
+import { loadDepartments } from "@/lib/departments";
 import { ActionForm, Field } from "@/components/Form";
 import { norwegianHolidays } from "@/lib/holidays";
 import { formatDateLong } from "@/lib/time";
@@ -17,8 +18,10 @@ function period(from: string | null, to: string | null) {
 }
 
 export default async function StaffingPage() {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const now = today(ctx);
+  const deps = await loadDepartments(ctx);
+  const managedDeps = deps.departments.filter((d) => deps.managed.has(d.id));
   const [{ data: templates }, { data: overrides }, { data: roles }, { data: rules }, { data: shiftTemplates }] = await Promise.all([
     ctx.supabase.from("staffing_templates").select("*").eq("org_id", ctx.org.id).order("weekday").order("start_time"),
     ctx.supabase.from("staffing_overrides").select("*").eq("org_id", ctx.org.id).gte("date", now).order("date").order("start_time"),
@@ -36,6 +39,20 @@ export default async function StaffingPage() {
       <select name="work_role_id" className="input" defaultValue="">
         <option value="">Alle</option>
         {(roles ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+    </Field>
+  );
+
+  const depBadge = (id: string | null) => {
+    if (deps.departments.length === 0) return null;
+    const n = deps.name(id);
+    return <span className="ml-2 badge bg-paper text-muted ring-1 ring-line">{n ?? "hele bedriften"}</span>;
+  };
+  const depSelect = deps.departments.length > 0 && (
+    <Field label="Avdeling">
+      <select name="department_id" className="input" defaultValue={ctx.isAdmin ? "" : managedDeps[0]?.id ?? ""}>
+        {ctx.isAdmin && <option value="">Hele bedriften</option>}
+        {managedDeps.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
       </select>
     </Field>
   );
@@ -62,6 +79,7 @@ export default async function StaffingPage() {
                       <li key={t.id} className={`flex items-center justify-between ${inactive ? "text-muted" : ""}`}>
                         <span className="tabular-nums">
                           {hm(t.start_time)}–{hm(t.end_time)}: <b>{t.required}</b> {t.work_role_id ? roleName.get(t.work_role_id) : "ansatte"}
+                          {depBadge(t.department_id)}
                           {p && <span className={`ml-2 badge ${t.valid_to && t.valid_to < now ? "bg-paper text-muted" : "bg-brand-soft text-brand"}`}>{p}</span>}
                         </span>
                         <form action={deleteTemplate}><input type="hidden" name="id" value={t.id} /><button className="px-2 text-muted hover:text-bad" aria-label="Slett">×</button></form>
@@ -87,6 +105,7 @@ export default async function StaffingPage() {
             <Field label="Til"><input name="end" type="time" required defaultValue="16:00" className="input" /></Field>
             <Field label="Antall"><input name="required" type="number" min={0} required defaultValue={2} className="input" /></Field>
             {roleSelect}
+            {depSelect}
             <Field label="Gjelder fra (valgfritt)"><input name="valid_from" type="date" className="input" /></Field>
             <Field label="Gjelder til (valgfritt)"><input name="valid_to" type="date" className="input" /></Field>
           </div>
@@ -120,7 +139,7 @@ export default async function StaffingPage() {
           <ul className="mt-3 divide-y divide-line text-sm">
             {(overrides ?? []).map((o) => (
               <li key={o.id} className="flex items-center justify-between py-2">
-                <span className="capitalize">{formatDateLong(o.date)}: {o.closed ? "Stengt" : <span className="tabular-nums">{hm(o.start_time)}–{hm(o.end_time)}, {o.required} {o.work_role_id ? roleName.get(o.work_role_id) : "ansatte"}</span>}</span>
+                <span className="capitalize">{formatDateLong(o.date)}: {o.closed ? "Stengt" : <span className="tabular-nums">{hm(o.start_time)}–{hm(o.end_time)}, {o.required} {o.work_role_id ? roleName.get(o.work_role_id) : "ansatte"}</span>}{depBadge(o.department_id)}</span>
                 <form action={deleteOverride}><input type="hidden" name="id" value={o.id} /><button className="px-2 text-muted hover:text-bad" aria-label="Slett">×</button></form>
               </li>
             ))}
@@ -132,10 +151,12 @@ export default async function StaffingPage() {
           <Field label="Til"><input name="end" type="time" className="input" /></Field>
           <Field label="Antall"><input name="required" type="number" min={0} defaultValue={1} className="input" /></Field>
           {roleSelect}
+          {depSelect}
           <label className="flex items-center gap-2 text-sm md:col-span-5"><input type="checkbox" name="closed" className="h-4 w-4" /> Stengt hele dagen</label>
         </ActionForm>
       </section>
 
+      {ctx.isAdmin && (<>
       <section className="card">
         <h2 className="h2">Helligdager</h2>
         <p className="mt-1 text-sm text-muted">Stengt er standard. Åpne en helligdag her, og legg inn behovet som avvik på datoen.</p>
@@ -177,6 +198,7 @@ export default async function StaffingPage() {
           {roleSelect}
         </ActionForm>
       </section>
+      </>)}
     </div>
   );
 }

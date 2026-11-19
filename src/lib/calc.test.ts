@@ -176,3 +176,17 @@ describe("ferie og fravær", () => {
     expect(overlapDays("2026-12-28", "2027-01-08", "2026-01-01", "2026-12-31")).toBe(4);
   });
 });
+
+describe("bemanning per avdeling", () => {
+  it("behov i en avdeling dekkes bare av vakter i samme avdeling", () => {
+    const at = (h: string) => new Date(`2026-11-13T${h}:00+01:00`);
+    const shifts = [
+      { startsAt: at("08:00"), endsAt: at("16:00"), employeeId: "a", departmentId: "verksted" },
+      { startsAt: at("08:00"), endsAt: at("16:00"), employeeId: "b", departmentId: "skranke" },
+    ];
+    const c = dayCoverage("2026-11-13", [{ start: "08:00", end: "16:00", required: 2, departmentId: "skranke" }], shifts);
+    expect(c.gaps[0]).toMatchObject({ missing: 1, departmentId: "skranke" });
+    const all = dayCoverage("2026-11-13", [{ start: "08:00", end: "16:00", required: 2 }], shifts);
+    expect(all.gaps).toHaveLength(0);
+  });
+});

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner } from "@/lib/context";
 import { loadPayroll } from "@/lib/payroll-data";
 import { addDays, localDate } from "@/lib/time";
 import { ActionForm } from "@/components/Form";
@@ -13,7 +13,7 @@ const num = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 
 
 export default async function PayrollPage({ searchParams }: { searchParams: Promise<{ fra?: string; til?: string }> }) {
   const sp = await searchParams;
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const today = localDate(new Date(), ctx.org.timezone);
   const monthStart = today.slice(0, 8) + "01";
   const iso = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
@@ -85,14 +85,14 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               <li key={p.employee.id}><b>{p.employee.name}:</b> {p.lines.map((l) => `${l.label.replace(" (differanse)", "")} ${l.hours > 0 ? "+" : ""}${num(l.hours)} t${l.amount !== undefined ? ` (${l.amount > 0 ? "+" : ""}${num(l.amount)} kr)` : ""}`).join(" · ")}</li>
             ))}
           </ul>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
+          {ctx.isAdmin && <div className="mt-3 flex flex-wrap items-center gap-3">
             <a href={`/api/lonn?type=diff&format=xlsx&fra=${from}&til=${to}`} className="btn-primary">Last ned etterbetaling (Excel)</a>
             <a href={`/api/lonn?type=diff&fra=${from}&til=${to}`} className="btn-ghost">Som CSV</a>
             <ActionForm action={recordDifference} submitLabel="Registrer som tatt med">
               <input type="hidden" name="fra" value={from} /><input type="hidden" name="til" value={to} />
               <input type="hidden" name="period_id" value={thisPeriod!.id} />
             </ActionForm>
-          </div>
+          </div>}
         </section>
       )}
 
@@ -103,6 +103,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
         </p>
       )}
 
+      {!ctx.isAdmin ? (
+        <p className="card text-sm text-muted">Du ser lønnsgrunnlaget for dine ansatte. Det lastes ned og låses av administrator.</p>
+      ) : (
       <section className="card flex flex-wrap items-center gap-3">
         <a href={`/api/lonn?type=lonn&format=xlsx&fra=${from}&til=${to}`} className="btn-primary">Last ned lønnsgrunnlag (Excel)</a>
         <a href={`/api/lonn?type=lonn&fra=${from}&til=${to}`} className="btn-ghost">Som CSV</a>
@@ -123,6 +126,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
           Excel-filen har ett ark med én rad per ansatt og lønnsart, og ett kontrollark med alle registreringene. CSV-filen har samme lønnsgrunnlag.
         </p>
       </section>
+      )}
 
       {shown.length === 0 ? <p className="card text-sm text-muted">Ingen ansatte i perioden.</p> : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -159,7 +163,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                     <ul className="mt-1 list-disc space-y-0.5 pl-4">{w.map((x, i) => <li key={i}>{x.text}</li>)}</ul>
                   </details>
                 )}
-                <CompTime employeeId={p.employee.id} c={comp.balances.get(p.employee.id)} history={comp.history.filter((h) => h.employeeId === p.employee.id).slice(0, 5)} today={today} />
+                <CompTime canEdit={ctx.isAdmin} employeeId={p.employee.id} c={comp.balances.get(p.employee.id)} history={comp.history.filter((h) => h.employeeId === p.employee.id).slice(0, 5)} today={today} />
               </section>
             );
           })}
@@ -209,7 +213,8 @@ function Line({ l }: { l: PayLine }) {
   );
 }
 
-function CompTime({ employeeId, c, history, today }: {
+function CompTime({ canEdit, employeeId, c, history, today }: {
+  canEdit: boolean;
   employeeId: string; c?: { earned: number; used: number; balance: number };
   history: { id: string; hours: number; comment: string; date: string }[]; today: string;
 }) {
@@ -231,12 +236,12 @@ function CompTime({ employeeId, c, history, today }: {
           ))}
         </ul>
       )}
-      <ActionForm action={addCompTime} submitLabel="Legg til" className="mt-2 grid grid-cols-2 gap-2">
+      {canEdit && <ActionForm action={addCompTime} submitLabel="Legg til" className="mt-2 grid grid-cols-2 gap-2">
         <input type="hidden" name="employee_id" value={employeeId} />
         <input name="hours" inputMode="decimal" placeholder="Timer, f.eks. 7,5" className="input" aria-label="Timer" required />
         <input name="date" type="date" defaultValue={today} className="input" aria-label="Dato" />
         <input name="comment" placeholder="Forklaring, f.eks. overtid oktober" className="input col-span-2" aria-label="Forklaring" required />
-      </ActionForm>
+      </ActionForm>}
     </details>
   );
 }

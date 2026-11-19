@@ -7,7 +7,7 @@ import { entriesSheet, payrollSheet } from "@/lib/report-sheets";
 /** Rapport som Excel-fil med flere ark. */
 export async function GET(request: Request) {
   const ctx = await getContext();
-  if (!ctx.org || !ctx.isAdmin) return NextResponse.json({ error: "Ikke tillatt" }, { status: 403 });
+  if (!ctx.org || !ctx.canPlan) return NextResponse.json({ error: "Ikke tillatt" }, { status: 403 });
   const url = new URL(request.url);
   const from = url.searchParams.get("fra") ?? "";
   const to = url.searchParams.get("til") ?? "";

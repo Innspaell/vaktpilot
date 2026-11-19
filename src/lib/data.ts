@@ -9,6 +9,7 @@ export interface ShiftRow {
   id: string;
   employee_id: string | null;
   work_role_id: string | null;
+  department_id?: string | null;
   starts_at: string;
   ends_at: string;
   break_minutes: number;
@@ -25,7 +26,7 @@ export async function colleagues(ctx: Ctx) {
 export async function shiftsBetween(ctx: Ctx, from: string, toExclusive: string) {
   const { data } = await ctx.supabase
     .from("shifts")
-    .select("id, employee_id, work_role_id, starts_at, ends_at, break_minutes, status, auto_approve, note")
+    .select("id, employee_id, work_role_id, department_id, starts_at, ends_at, break_minutes, status, auto_approve, note")
     .eq("org_id", ctx.org.id)
     .neq("status", "cancelled")
     .lt("starts_at", dayBounds(toExclusive, ctx.org.timezone).start.toISOString())
@@ -35,19 +36,20 @@ export async function shiftsBetween(ctx: Ctx, from: string, toExclusive: string)
 }
 
 /** Behov per dag: fast mal, avvik på dato, og helligdager (stengt med mindre åpnet). */
-export async function needsForDays(ctx: Ctx, from: string, days: number) {
+/** department: bare behov for denne avdelingen. */
+export async function needsForDays(ctx: Ctx, from: string, days: number, department: string | null = null) {
   const to = addDays(from, days);
   const [{ data: templates }, { data: overrides }, { data: holidayRules }] = await Promise.all([
-    ctx.supabase.from("staffing_templates").select("weekday, start_time, end_time, required, work_role_id, valid_from, valid_to").eq("org_id", ctx.org.id),
-    ctx.supabase.from("staffing_overrides").select("date, closed, start_time, end_time, required, work_role_id").eq("org_id", ctx.org.id).gte("date", from).lt("date", to),
+    ctx.supabase.from("staffing_templates").select("weekday, start_time, end_time, required, work_role_id, valid_from, valid_to, department_id").eq("org_id", ctx.org.id),
+    ctx.supabase.from("staffing_overrides").select("date, closed, start_time, end_time, required, work_role_id, department_id").eq("org_id", ctx.org.id).gte("date", from).lt("date", to),
     ctx.supabase.from("holiday_rules").select("holiday_key, is_open").eq("org_id", ctx.org.id),
   ]);
   const t: StaffingTemplateRow[] = (templates ?? []).map((r) => ({
     weekday: r.weekday, start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5), required: r.required, workRoleId: r.work_role_id,
-    validFrom: r.valid_from, validTo: r.valid_to,
+    validFrom: r.valid_from, validTo: r.valid_to, ...(r.department_id ? { departmentId: r.department_id } : {}),
   }));
   const o: StaffingOverrideRow[] = (overrides ?? []).map((r) => ({
-    date: r.date, closed: r.closed, start: r.start_time?.slice(0, 5), end: r.end_time?.slice(0, 5), required: r.required, workRoleId: r.work_role_id,
+    date: r.date, closed: r.closed, start: r.start_time?.slice(0, 5), end: r.end_time?.slice(0, 5), required: r.required, workRoleId: r.work_role_id, departmentId: r.department_id,
   }));
   const openOnHoliday = new Set((holidayRules ?? []).filter((r) => r.is_open).map((r) => r.holiday_key));
 
@@ -56,17 +58,19 @@ export async function needsForDays(ctx: Ctx, from: string, days: number) {
     const holiday = holidayOn(date);
     const hasOverride = o.some((x) => x.date === date);
     const closedForHoliday = holiday !== null && !openOnHoliday.has(holiday.key) && !hasOverride;
-    const { closed, requirements } = requirementsFor(date, t, o);
+    const r = requirementsFor(date, t, o);
+    const closed = r.closed;
+    const requirements = department ? r.requirements.filter((x) => x.departmentId === department) : r.requirements;
     return { date, closed: closed || closedForHoliday, requirements: closed || closedForHoliday ? [] : requirements, holiday: holiday?.name ?? null };
   });
 }
 
 /** Bemanning for et antall dager framover, med helligdager og stengte dager. */
-export async function coverageForDays(ctx: Ctx, from: string, days: number, shifts: ShiftRow[]) {
-  const needs = await needsForDays(ctx, from, days);
+export async function coverageForDays(ctx: Ctx, from: string, days: number, shifts: ShiftRow[], department: string | null = null) {
+  const needs = await needsForDays(ctx, from, days, department);
   const planned = shifts
-    .filter((s) => s.status === "published" || ctx.isAdmin)
-    .map((s) => ({ startsAt: new Date(s.starts_at), endsAt: new Date(s.ends_at), employeeId: s.employee_id, workRoleId: s.work_role_id }));
+    .filter((s) => s.status === "published" || ctx.canPlan)
+    .map((s) => ({ startsAt: new Date(s.starts_at), endsAt: new Date(s.ends_at), employeeId: s.employee_id, workRoleId: s.work_role_id, departmentId: s.department_id }));
   return needs.map((n) => ({
     ...dayCoverage(n.date, n.requirements, planned, { tz: ctx.org.timezone, closed: n.closed }),
     holiday: n.holiday,

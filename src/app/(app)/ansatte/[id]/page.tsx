@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner, type AppContext } from "@/lib/context";
+import { EmergencyContacts, type EmergencyContact } from "@/components/EmergencyContacts";
 import { ActionForm, Field } from "@/components/Form";
 import { addTerms, createLoginInvite, resetEmployeeMfa, setEmployeeLogin, setMemberRole, updateEmployee } from "../../actions";
 import { LoginSetup } from "@/components/LoginSetup";
@@ -11,8 +12,10 @@ import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status
 export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ny?: string }> }) {
   const { id } = await params;
   const { ny } = await searchParams;
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
+  if (!ctx.isAdmin) return <ManagerView ctx={ctx} id={id} />;
 
+  const { data: kin } = await ctx.supabase.from("emergency_contacts").select("id, name, relation, phone").eq("employee_id", id).order("sort_order").order("created_at");
   const [{ data: e }, { data: terms }, { data: roles }, { data: myRoles }, { data: statusRows }, { data: ruleSets }] = await Promise.all([
     ctx.supabase.from("employees").select("*").eq("id", id).eq("org_id", ctx.org.id).maybeSingle(),
     ctx.supabase.from("employment_terms").select("*").eq("employee_id", id).order("valid_from", { ascending: false }),
@@ -57,11 +60,15 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             <input name="end_date" type="date" defaultValue={e.end_date ?? ""} className="input" />
           </Field>
           <Field label="Stillingsprosent" hint={current ? `Gjelder avtalen fra ${current.valid_from}. Endring fra en senere dato: bruk «Ny avtale» under.` : undefined}>
-            <input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" />
+            <input name="position_pct" type="number" min={0} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" />
           </Field>
           <Field label="Timer per uke" hint="Tomt = regnes ut fra stillingsprosent og heltid.">
-            <input name="hours_per_week" type="number" step="0.25" defaultValue={current ? Number(current.hours_per_week) : ""} className="input" />
+            <input name="hours_per_week" type="number" min={0} step="0.25" defaultValue={current ? Number(current.hours_per_week) : ""} className="input" />
           </Field>
+          <label className="flex items-start gap-2 text-sm md:col-span-2">
+            <input type="checkbox" name="on_call" defaultChecked={Boolean(current?.on_call)} className="mt-0.5 h-4 w-4" />
+            <span>Tilkallingsvikar eller ekstrahjelp uten avtalt arbeidstid<span className="block text-xs text-muted">Ingen timer må fylles. Stillingsprosent og timer settes til 0, og timer opp til heltid regnes som ordinære.</span></span>
+          </label>
           <Field label="Lønnstype">
             <select name="pay_type" defaultValue={current?.pay_type ?? "hourly"} className="input">
               <option value="hourly">Timelønn</option>
@@ -110,7 +117,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         <h2 className="h2">Avtale</h2>
         {current ? (
           <p className="mt-1 text-sm text-muted">
-            Gjelder fra {current.valid_from}: {Number(current.position_pct)} % · {Number(current.hours_per_week)} t/uke ·{" "}
+            Gjelder fra {current.valid_from}: {current.on_call ? "tilkalling, ingen avtalt tid" : `${Number(current.position_pct)} % · ${Number(current.hours_per_week)} t/uke`} ·{" "}
             {current.pay_type === "fixed" ? "fastlønn" : "timelønn"} · {current.paid_holidays ? "betalte helligdager" : "ikke betalte helligdager"} ·{" "}
             {Number(current.days_per_week ?? 5)} arbeidsdager i uka
             {current.pay_rule_set_id ? ` · egen tariff: ${(ruleSets ?? []).find((r) => r.id === current.pay_rule_set_id)?.name ?? "ukjent"}` : ""}
@@ -124,7 +131,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             {(terms ?? []).map((t) => (
               <li key={t.id} className={`flex flex-wrap justify-between gap-2 px-3 py-2 ${t.valid_to ? "text-muted" : ""}`}>
                 <span className="tabular-nums">{t.valid_from.split("-").reverse().join(".")} – {t.valid_to ? t.valid_to.split("-").reverse().join(".") : "nå"}</span>
-                <span>{Number(t.position_pct)} % · {t.pay_type === "fixed" ? "fastlønn" : "timelønn"}</span>
+                <span>{t.on_call ? "tilkalling" : `${Number(t.position_pct)} %`} · {t.pay_type === "fixed" ? "fastlønn" : "timelønn"}</span>
               </li>
             ))}
           </ul>
@@ -135,8 +142,8 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <ActionForm action={addTerms} className="mt-4 grid gap-4 md:grid-cols-3">
             <input type="hidden" name="employee_id" value={e.id} />
             <TermsDateField terms={(terms ?? []).map((t) => ({ valid_from: t.valid_from, valid_to: t.valid_to }))} startDate={e.start_date} />
-            <Field label="Stillingsprosent"><input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" /></Field>
-            <Field label="Timer per uke"><input name="hours_per_week" type="number" step="0.25" defaultValue={Number(current?.hours_per_week ?? 37.5)} className="input" /></Field>
+            <Field label="Stillingsprosent"><input name="position_pct" type="number" min={0} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" /></Field>
+            <Field label="Timer per uke"><input name="hours_per_week" type="number" min={0} step="0.25" defaultValue={Number(current?.hours_per_week ?? 37.5)} className="input" /></Field>
             <Field label="Lønnstype">
               <select name="pay_type" defaultValue={current?.pay_type ?? "hourly"} className="input">
                 <option value="hourly">Timelønn</option>
@@ -154,6 +161,10 @@ export default async function EmployeePage({ params, searchParams }: { params: P
               <input name="averaging_weeks" type="number" min={2} max={52} defaultValue={current?.averaging_weeks ?? ""} className="input" />
             </Field>
             <Field label="Snitt beregnes fra"><input name="averaging_from" type="date" defaultValue={current?.averaging_from ?? ""} className="input" /></Field>
+            <label className="flex items-start gap-2 text-sm md:col-span-3">
+            <input type="checkbox" name="on_call" defaultChecked={Boolean(current?.on_call)} className="mt-0.5 h-4 w-4" />
+            <span>Tilkallingsvikar eller ekstrahjelp uten avtalt arbeidstid<span className="block text-xs text-muted">Ingen timer må fylles. Stillingsprosent og timer settes til 0, og timer opp til heltid regnes som ordinære.</span></span>
+          </label>
             <label className="flex items-center gap-2 self-end pb-3 text-sm">
               <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? true} className="h-4 w-4" /> Betalte helligdager
             </label>
@@ -162,7 +173,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         {(terms ?? []).length > 1 && (
           <ul className="mt-4 space-y-1 border-t border-line pt-3 text-sm text-muted">
             {(terms ?? []).filter((t) => t.valid_to).map((t) => (
-              <li key={t.id}>{t.valid_from} – {t.valid_to}: {Number(t.position_pct)} % · {t.pay_type === "fixed" ? "fast" : "time"}</li>
+              <li key={t.id}>{t.valid_from} – {t.valid_to}: {t.on_call ? "tilkalling" : `${Number(t.position_pct)} %`} · {t.pay_type === "fixed" ? "fast" : "time"}</li>
             ))}
           </ul>
         )}
@@ -200,6 +211,9 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         )}
       </section>
 
+      <EmergencyContacts contacts={(kin ?? []) as EmergencyContact[]} editable employeeId={e.id}
+        intro="Den ansatte legger inn dette selv under Profil og får varsel til minst én er registrert. Du kan også legge inn eller rette her." />
+
       <div>
         <h2 className="h2 mb-2 px-1">Ferie</h2>
         <VacationOverview ctx={ctx} employeeId={e.id} admin />
@@ -212,12 +226,53 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             <input type="hidden" name="user_id" value={e.user_id} />
             <select name="role" defaultValue={membershipRole} className="input w-auto">
               <option value="employee">Ansatt</option>
+              <option value="manager">Leder</option>
               <option value="admin">Administrator</option>
             </select>
             <button className="btn-ghost">Endre tilgang</button>
           </form>
+          <p className="mt-2 text-xs text-muted">
+            Leder planlegger vakter, godkjenner timer, fravær og bytter, og ser lønnsgrunnlaget for avdelingene vedkommende har ansvar for
+            (velges under Ansatte → Avdelinger). Uten avdelinger gjelder det hele bedriften. Bare administrator endrer innstillinger, ansatte og avtaler, og låser lønn.
+          </p>
         </section>
       )}
+    </div>
+  );
+}
+
+/** Lesevisning for ledere: kontaktinfo, avtale og pårørende. Endringer gjøres av administrator. */
+async function ManagerView({ ctx, id }: { ctx: AppContext & { org: NonNullable<AppContext["org"]> }; id: string }) {
+  const [{ data: e }, { data: term }, { data: kin }, { data: roleRows }] = await Promise.all([
+    ctx.supabase.from("employees").select("id, full_name, email, phone, employee_number, start_date, end_date").eq("id", id).eq("org_id", ctx.org.id).maybeSingle(),
+    ctx.supabase.from("employment_terms").select("valid_from, position_pct, hours_per_week, on_call, pay_type").eq("employee_id", id).is("valid_to", null).maybeSingle(),
+    ctx.supabase.from("emergency_contacts").select("id, name, relation, phone").eq("employee_id", id).order("sort_order").order("created_at"),
+    ctx.supabase.from("employee_work_roles").select("work_roles(name)").eq("employee_id", id),
+  ]);
+  if (!e) notFound();
+  const roles = (roleRows ?? []).map((r) => (r.work_roles as unknown as { name: string } | null)?.name).filter(Boolean).join(", ");
+  const d = (x: string | null) => (x ? x.split("-").reverse().join(".") : "");
+  const rows: [string, React.ReactNode][] = [
+    ["E-post", e.email ? <a href={`mailto:${e.email}`} className="text-brand">{e.email}</a> : "–"],
+    ["Telefon", e.phone ? <a href={`tel:${e.phone.replace(/\s+/g, "")}`} className="text-brand">{e.phone}</a> : "–"],
+    ["Ansattnummer", e.employee_number ?? "–"],
+    ["Startdato", d(e.start_date)],
+    ...(e.end_date ? [["Sluttdato", d(e.end_date)] as [string, React.ReactNode]] : []),
+    ["Roller", roles || "–"],
+    ["Stilling", term ? (term.on_call ? "Tilkalling, ingen avtalt arbeidstid" : `${Number(term.position_pct)} % · ${Number(term.hours_per_week)} t/uke`) + ` · ${term.pay_type === "fixed" ? "fastlønn" : "timelønn"}` : "–"],
+  ];
+  return (
+    <div className="space-y-4">
+      <Link href="/ansatte" className="text-sm font-medium text-brand">← Alle ansatte</Link>
+      <h1 className="h1">{e.full_name}</h1>
+      <section className="card">
+        <h2 className="h2">Opplysninger</h2>
+        <dl className="mt-2 divide-y divide-line text-sm">
+          {rows.map(([k, v]) => <div key={k} className="flex justify-between gap-3 py-1.5"><dt className="text-muted">{k}</dt><dd className="text-right">{v}</dd></div>)}
+        </dl>
+        <p className="mt-2 text-xs text-muted">Endringer i opplysninger og avtale gjøres av administrator.</p>
+      </section>
+      <EmergencyContacts contacts={(kin ?? []) as EmergencyContact[]} editable={false} />
     </div>
   );
 }

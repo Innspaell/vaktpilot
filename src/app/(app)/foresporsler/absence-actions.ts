@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireOrg } from "@/lib/context";
+import { requirePlanner, requireOrg } from "@/lib/context";
 import { addDays, localDate } from "@/lib/time";
 import type { ActionState } from "../actions";
 import { loadVacation } from "@/lib/vacation-data";
@@ -67,7 +67,7 @@ export async function cancelAbsence(fd: FormData) {
 
 /** Administrator registrerer fravær for en ansatt. Godkjent med en gang. */
 export async function registerAbsence(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const p = period(fd);
   if ("error" in p) return { error: p.error };
   const employeeId = text(fd, "employee_id");
@@ -87,7 +87,7 @@ export async function registerAbsence(_: ActionState, fd: FormData): Promise<Act
   return { ok: released ? `Registrert. ${released} ${released === 1 ? "vakt er" : "vakter er"} gjort ledige.` : "Registrert." };
 }
 
-async function releaseShifts(ctx: Awaited<ReturnType<typeof requireAdmin>>, employeeId: string, from: string, to: string) {
+async function releaseShifts(ctx: Awaited<ReturnType<typeof requirePlanner>>, employeeId: string, from: string, to: string) {
   const { data } = await ctx.supabase.from("shifts").select("id, starts_at")
     .eq("employee_id", employeeId).neq("status", "cancelled")
     .gte("starts_at", new Date(Date.parse(from) - 86400000).toISOString())
@@ -102,7 +102,7 @@ async function releaseShifts(ctx: Awaited<ReturnType<typeof requireAdmin>>, empl
 }
 
 export async function decideAbsence(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   await ctx.supabase.rpc("decide_absence", {
     p_id: text(fd, "id")!,
     p_approve: fd.get("decision") === "approve",

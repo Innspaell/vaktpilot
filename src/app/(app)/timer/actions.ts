@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireOrg } from "@/lib/context";
+import { requirePlanner, requireOrg } from "@/lib/context";
 import { addDays, localDate, zonedToUtc } from "@/lib/time";
 
 import type { ActionState } from "../actions";
@@ -44,7 +44,7 @@ export async function saveEntry(_: ActionState, fd: FormData): Promise<ActionSta
   if ((endsAt.getTime() - startsAt.getTime()) / 60000 <= breakMinutes) return { error: "Pausen er lengre enn arbeidstiden." };
   if (date > localDate(new Date(), tz)) return { error: "Du kan ikke registrere timer fram i tid." };
 
-  const employeeId = ctx.isAdmin ? text(fd, "employee_id") ?? ctx.employeeId : ctx.employeeId;
+  const employeeId = ctx.canPlan ? text(fd, "employee_id") ?? ctx.employeeId : ctx.employeeId;
   if (!employeeId) return { error: "Velg ansatt." };
 
   // Overlapp med andre registreringer
@@ -64,16 +64,16 @@ export async function saveEntry(_: ActionState, fd: FormData): Promise<ActionSta
     const { data: cur } = await ctx.supabase.from("time_entries").select("status, employee_id").eq("id", id).maybeSingle();
     if (!cur) return { error: "Fant ikke registreringen." };
     if (cur.status === "locked") return { error: "Timene er låst etter lønnseksport." };
-    if (!ctx.isAdmin && cur.status === "approved") return { error: "Godkjente timer kan bare rettes av leder." };
+    if (!ctx.canPlan && cur.status === "approved") return { error: "Godkjente timer kan bare rettes av leder." };
     const { error } = await ctx.supabase.from("time_entries")
-      .update({ ...values, status: ctx.isAdmin ? cur.status === "draft" ? "submitted" : cur.status : "submitted" })
+      .update({ ...values, status: ctx.canPlan ? cur.status === "draft" ? "submitted" : cur.status : "submitted" })
       .eq("id", id);
     if (error) return { error: error.message };
     refresh();
     return { ok: "Rettet." };
   }
 
-  const adminForOther = ctx.isAdmin && employeeId !== ctx.employeeId;
+  const adminForOther = ctx.canPlan && employeeId !== ctx.employeeId;
   // Bekreftet med endringer: koble til vakten, men bare hvis vakten er den ansattes og ikke registrert fra før
   let shiftId = text(fd, "shift_id");
   if (shiftId) {
@@ -104,7 +104,7 @@ export async function deleteEntry(fd: FormData) {
 }
 
 export async function approveEntries(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const ids = fd.getAll("ids").map(String).filter(Boolean);
   if (ids.length) await ctx.supabase.rpc("approve_time_entries", { p_ids: ids });
   refresh();

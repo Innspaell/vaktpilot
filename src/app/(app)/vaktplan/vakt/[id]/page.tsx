@@ -11,7 +11,7 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
   const { id } = await params;
   const { tilbake } = await searchParams;
   const ctx = await requireOrg();
-  if (!ctx.isAdmin) redirect("/vaktplan");
+  if (!ctx.canPlan) redirect("/vaktplan");
   const back = tilbake && tilbake.startsWith("/vaktplan") ? tilbake : "/vaktplan";
   const tz = ctx.org.timezone;
 

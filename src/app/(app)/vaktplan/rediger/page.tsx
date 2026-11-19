@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner } from "@/lib/context";
 import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from "@/lib/data";
 import { addDays, formatDateLong, isoWeekday, localDate, localTime, formatHours, workedMinutes } from "@/lib/time";
 import { ActionForm, Field } from "@/components/Form";
 import { AssignForm } from "@/components/AssignForm";
 import { EmployeePicker } from "@/components/EmployeePicker";
 import { AutoPlanPanel } from "@/components/AutoPlanPanel";
+import { DepartmentPills } from "@/components/DepartmentPills";
+import { loadDepartments, selectedDepartment, shiftInDepartment } from "@/lib/departments";
 import { assignShift, cancelShift, clearPeriod, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "../actions";
 import { checkPlannedShifts } from "@/lib/worktime-check";
 
@@ -25,9 +27,9 @@ function weekNumber(date: string) {
 
 const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; tilby?: string; ny?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; tilby?: string; ny?: string; avdeling?: string }> }) {
   const sp = await searchParams;
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const tz = ctx.org.timezone;
   const view: View = sp.visning === "dag" || sp.visning === "maned" ? sp.visning : "uke";
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.dato ?? "") ? sp.dato! : today(ctx);
@@ -48,7 +50,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     while (addDays(from, days) < nextMonth || isoWeekday(addDays(from, days)) !== 1) days++;
   }
 
-  const [names, shifts, rolesRes, requestsRes, absencesRes, pctRes] = await Promise.all([
+  const deps = await loadDepartments(ctx);
+  // Ledere med én avdeling ser den som standard
+  const dep = selectedDepartment(sp.avdeling, deps)
+    ?? (sp.avdeling === undefined && !ctx.isAdmin && deps.managed.size === 1 ? [...deps.managed][0] : null);
+  const [names, allShifts, rolesRes, requestsRes, absencesRes, pctRes] = await Promise.all([
     colleagues(ctx),
     shiftsBetween(ctx, from, addDays(from, days)),
     ctx.supabase.from("work_roles").select("id, name, color").eq("org_id", ctx.org.id).order("name"),
@@ -56,15 +62,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? ctx.supabase.from("shift_requests").select("shift_id").eq("employee_id", ctx.employeeId).eq("status", "pending")
       : Promise.resolve({ data: [] as { shift_id: string | null }[] }),
     ctx.supabase.rpc("org_absences", { p_org: ctx.org.id, p_from: from, p_to: addDays(from, days - 1) }),
-    ctx.isAdmin
+    ctx.canPlan
       ? ctx.supabase.from("employment_terms").select("employee_id, position_pct").eq("org_id", ctx.org.id).is("valid_to", null)
       : Promise.resolve({ data: [] as { employee_id: string; position_pct: number }[] }),
   ]);
   const absences = (absencesRes.data ?? []) as { employee_id: string; from_date: string; to_date: string; type_name: string }[];
   const pct = new Map((pctRes.data ?? []).map((t) => [t.employee_id, Number(t.position_pct)]));
   const newShiftDate = /^\d{4}-\d{2}-\d{2}$/.test(sp.ny ?? "") ? sp.ny! : null;
+  const shifts = dep ? allShifts.filter((s) => shiftInDepartment(s, dep, deps)) : allShifts;
   const [coverage, planWarnings] = await Promise.all([
-    coverageForDays(ctx, from, days, shifts),
+    coverageForDays(ctx, from, days, shifts, dep),
     checkPlannedShifts(ctx, from, addDays(from, days - 1)),
   ]);
   const roles = new Map((rolesRes.data ?? []).map((r) => [r.id, r]));
@@ -75,7 +82,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const step = view === "dag" ? 1 : view === "uke" ? 7 : 0;
   const prev = step ? addDays(anchor, -step) : addDays(anchor.slice(0, 8) + "01", -1);
   const next = step ? addDays(anchor, step) : addDays(anchor.slice(0, 8) + "01", 32);
-  const href = (d: string, v: View = view) => `/vaktplan/rediger?visning=${v}&dato=${d}`;
+  const href = (d: string, v: View = view) => `/vaktplan/rediger?visning=${v}&dato=${d}${dep ? `&avdeling=${dep}` : ""}`;
+  const depOptions = deps.departments.filter((d) => deps.managed.has(d.id));
   const title =
     view === "dag" ? formatDateLong(anchor)
       : view === "uke" ? `Uke ${weekNumber(from)}`
@@ -115,9 +123,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </details>
       )}
 
+      {deps.departments.length > 0 && (
+        <DepartmentPills departments={deps.departments} selected={dep} hrefFor={(id) => `/vaktplan/rediger?visning=${view}&dato=${anchor}&avdeling=${id ?? ""}`} />
+      )}
+
       <Legend />
 
-      {ctx.isAdmin && view !== "maned" && (
+      {ctx.canPlan && view !== "maned" && (
         <section className="card space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             {drafts > 0 ? (
@@ -135,7 +147,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               </ActionForm>
             )}
           </div>
-          {(
+          {ctx.isAdmin && (
             <AutoPlanPanel from={from} days={days} monthStart={anchor.slice(0, 8) + "01"} hasAutoDrafts={shifts.some((s) => s.status === "draft" && s.note === "Automatisk forslag")} />
           )}
           <details>
@@ -174,6 +186,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   {Array.from(roles.values()).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </Field>
+              {depOptions.length > 0 && (
+                <Field label="Avdeling" hint="Tomt = den ansattes hjemmeavdeling.">
+                  <select name="department_id" className="input" defaultValue={dep ?? ""}>
+                    <option value="">{ctx.isAdmin ? "Hjemmeavdeling / ingen" : "Hjemmeavdeling"}</option>
+                    {depOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </Field>
+              )}
               <fieldset className="md:col-span-4">
                 <legend className="label">Ukedager i perioden</legend>
                 <div className="flex flex-wrap gap-2">
@@ -214,7 +234,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               const open = shifts.filter((s) => !s.employee_id && localDate(new Date(s.starts_at), tz) === c.date).length;
               const short = c.gaps.length > 0;
               return (
-                <Link key={c.date} href={ctx.isAdmin ? `/vaktplan/rediger?visning=dag&dato=${c.date}&ny=${c.date}#ny-vakt` : href(c.date, "dag")}
+                <Link key={c.date} href={ctx.canPlan ? `/vaktplan/rediger?visning=dag&dato=${c.date}&ny=${c.date}#ny-vakt` : href(c.date, "dag")}
                   className={`min-h-16 rounded-lg border p-1.5 text-left text-xs ${inMonth ? "bg-white" : "bg-paper text-muted"} ${short ? "border-bad/40" : "border-line"} ${c.date === today(ctx) ? "ring-2 ring-brand" : ""}`}>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">{Number(c.date.slice(8))}</span>
@@ -239,7 +259,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             return (
               <section key={c.date} className={`card ${c.date === today(ctx) ? "ring-2 ring-brand/30" : ""}`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  {ctx.isAdmin ? (
+                  {ctx.canPlan ? (
                     <Link href={`/vaktplan/rediger?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="h2 capitalize hover:text-brand" title="Legg inn vakt denne dagen">
                       {formatDateLong(c.date)}
                     </Link>
@@ -286,12 +306,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {!ctx.isAdmin && !s.employee_id && ctx.employeeId && (
+                            {!ctx.canPlan && !s.employee_id && ctx.employeeId && (
                               requested.has(s.id)
                                 ? <span className="badge bg-warn-soft text-warn">Påmeldt, venter</span>
                                 : <form action={requestOpenShift}><input type="hidden" name="shift_id" value={s.id} /><button className="btn-primary">Jeg kan jobbe</button></form>
                             )}
-                            {ctx.isAdmin && (
+                            {ctx.canPlan && (
                               <>
                                 <AssignForm action={assignShift} shiftId={s.id} current={s.employee_id} people={people} />
                                 <form action={cancelShift}>
@@ -307,12 +327,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   </ul>
                 )}
 
-                {ctx.isAdmin && !c.closed && (
+                {ctx.canPlan && !c.closed && (
                   <Link href={`/vaktplan/rediger?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="mt-3 inline-block text-sm font-semibold text-brand">
                     + Vakt denne dagen
                   </Link>
                 )}
-                {!ctx.isAdmin && ctx.employeeId && c.gaps.length > 0 && (
+                {!ctx.canPlan && ctx.employeeId && c.gaps.length > 0 && (
                   <Link href={`/vaktplan/rediger?visning=${view}&dato=${anchor}&tilby=${c.date}#tilby`} className="mt-3 inline-block text-sm font-semibold text-brand">
                     Jeg kan jobbe denne dagen →
                   </Link>
@@ -323,7 +343,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      {!ctx.isAdmin && ctx.employeeId && (
+      {!ctx.canPlan && ctx.employeeId && (
         <section id="tilby" className="card">
           <h2 className="h2">Tilby deg en dag</h2>
           <p className="mt-1 text-sm text-muted">Si hvilken dag og når du kan jobbe. Lederen godkjenner og setter deg opp.</p>

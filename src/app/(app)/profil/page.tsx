@@ -8,6 +8,7 @@ import { signOut, switchOrganization } from "../actions";
 import { SelfEmployeeCard } from "@/components/SelfEmployeeCard";
 import { NOTIFICATION_GROUPS } from "@/lib/notification-kinds";
 import { MfaSettings } from "@/components/MfaSettings";
+import { EmergencyContacts, type EmergencyContact } from "@/components/EmergencyContacts";
 
 async function resetCalendar() {
   "use server";
@@ -42,17 +43,20 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   }
   let calendarUrl: string | null = null;
   let me: { name: string; roles: string; terms: string } | null = null;
+  let contacts: EmergencyContact[] = [];
   if (ctx.employeeId) {
-    const [{ data }, { data: roleRows }, { data: term }] = await Promise.all([
+    const [{ data }, { data: roleRows }, { data: term }, { data: kin }] = await Promise.all([
       ctx.supabase.from("employees").select("calendar_token, full_name").eq("id", ctx.employeeId).single(),
       ctx.supabase.from("employee_work_roles").select("work_roles(name)").eq("employee_id", ctx.employeeId),
-      ctx.supabase.from("employment_terms").select("position_pct, hours_per_week").eq("employee_id", ctx.employeeId).is("valid_to", null).maybeSingle(),
+      ctx.supabase.from("employment_terms").select("position_pct, hours_per_week, on_call").eq("employee_id", ctx.employeeId).is("valid_to", null).maybeSingle(),
+      ctx.supabase.from("emergency_contacts").select("id, name, relation, phone").eq("employee_id", ctx.employeeId).order("sort_order").order("created_at"),
     ]);
+    contacts = (kin ?? []) as EmergencyContact[];
     const roleNames = (roleRows ?? []).map((r) => (r.work_roles as unknown as { name: string } | null)?.name).filter(Boolean).join(", ");
     me = {
       name: data?.full_name ?? "",
       roles: roleNames,
-      terms: term ? `${Number(term.position_pct ?? 0).toLocaleString("nb-NO")} % · ${Number(term.hours_per_week ?? 0).toLocaleString("nb-NO")} t/uke` : "",
+      terms: term?.on_call ? "Tilkalling, ingen avtalt arbeidstid" : term ? `${Number(term.position_pct ?? 0).toLocaleString("nb-NO")} % · ${Number(term.hours_per_week ?? 0).toLocaleString("nb-NO")} t/uke` : "",
     };
     const h = await headers();
     const host = h.get("x-forwarded-host") ?? h.get("host");
@@ -73,6 +77,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         )}
         <p className="mt-2 text-xs text-muted">Er noe feil? Si fra til lederen din.</p>
       </section>
+      {ctx.org && ctx.employeeId && (
+        <EmergencyContacts contacts={contacts} editable
+          intro="Hvem skal kontaktes hvis noe skjer med deg på jobb? Legg inn minst én, gjerne flere. Bare lederen din og administrator ser dem." />
+      )}
       <Link href="/innspill?fra=/profil" className="card flex items-center justify-between gap-3 hover:bg-paper">
         <span><b className="block">Ønsker og innspill</b><span className="text-sm text-muted">Savner du noe i Vaktpilot, eller virker noe ikke? Si fra til oss som lager den.</span></span>
         <span className="text-muted">›</span>

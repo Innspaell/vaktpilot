@@ -209,9 +209,9 @@ export function parseEmployees(rows: string[][], existingEmails: string[] = []):
     const start = col.start_date === undefined ? null : toDate(col.start_date === undefined ? "" : (r[col.start_date] ?? ""));
     if (start === "invalid") problems.push("Ukjent dato");
     const pctRaw = get(r, "position_pct").replace("%", "").replace(",", ".");
-    let pct = pctRaw ? Number(pctRaw) : null;
+    let pct = pctRaw ? (/tilkall|ekstra|vikar/i.test(pctRaw) ? 0 : Number(pctRaw)) : null;
     if (pct !== null && pct > 0 && pct <= 1) pct = Math.round(pct * 1000) / 10; // 0,8 = 80 %
-    if (pct !== null && (isNaN(pct) || pct <= 0 || pct > 100)) { problems.push("Ugyldig stillingsprosent"); pct = null; }
+    if (pct !== null && (isNaN(pct) || pct < 0 || pct > 100)) { problems.push("Ugyldig stillingsprosent"); pct = null; }
     const payRaw = norm(get(r, "pay_type"));
     const pay = !payRaw ? null : /fast|mnd|månedslønn|maned/.test(payRaw) ? "fixed" : /time/.test(payRaw) ? "hourly" : null;
     const shiftRaw = norm(get(r, "is_shift_worker"));

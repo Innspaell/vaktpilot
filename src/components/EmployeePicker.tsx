@@ -33,8 +33,8 @@ export function EmployeePicker({
           <div className="text-sm font-semibold md:col-span-4">Ny ansatt</div>
           <label className="block"><span className="label">Navn</span><input name="full_name" required className="input" /></label>
           <label className="block"><span className="label">E-post (for innlogging)</span><input name="email" type="email" className="input" /></label>
-          <label className="block"><span className="label">Stillingsprosent</span>
-            <input name="position_pct" type="number" min={1} max={100} step="0.5" defaultValue={100} className="input" />
+          <label className="block"><span className="label">Stillingsprosent (0 = tilkalling)</span>
+            <input name="position_pct" type="number" min={0} max={100} step="0.5" defaultValue={100} className="input" />
           </label>
           <label className="block"><span className="label">Lønnstype</span>
             <select name="pay_type" defaultValue="hourly" className="input">

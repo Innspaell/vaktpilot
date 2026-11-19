@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner } from "@/lib/context";
 import { addDays, formatDateLong, localDate } from "@/lib/time";
 import { vacationYearOf } from "@/lib/vacation";
 import { loadVacation } from "@/lib/vacation-data";
@@ -10,7 +10,7 @@ const pct = (n: number) => `${n.toLocaleString("nb-NO", { maximumFractionDigits:
 
 export default async function AbsenceOverviewPage({ searchParams }: { searchParams: Promise<{ aar?: string }> }) {
   const sp = await searchParams;
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const today = localDate(new Date(), ctx.org.timezone);
   const year = /^\d{4}$/.test(sp.aar ?? "") ? Number(sp.aar) : Number(today.slice(0, 4));
   const from = `${year}-01-01`;

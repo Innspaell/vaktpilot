@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin, requireOrg } from "@/lib/context";
+import { requirePlanner, requireOrg } from "@/lib/context";
 import { addDays, formatDateLong, isoWeekday, localDate, zonedToUtc } from "@/lib/time";
 import { holidayOn } from "@/lib/holidays";
 import { checkShift, type Warning } from "@/lib/warnings";
@@ -58,7 +58,7 @@ function describe(w: Warning[]) {
 // ---------------- Administrator ----------------
 
 export async function createShift(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const date = text(fd, "date");
   const start = text(fd, "start");
   const end = text(fd, "end");
@@ -90,6 +90,12 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
   if (dates.length === 0) return { error: "Ingen datoer passer valgene. Sjekk ukedagene." };
   if (dates.length > 400) return { error: "For mange vakter på én gang. Velg en kortere periode." };
   const seriesId = dates.length > 1 ? crypto.randomUUID() : null;
+  // Avdeling: valgt i skjemaet, ellers den ansattes hjemmeavdeling
+  let departmentId = text(fd, "department_id");
+  if (!departmentId && employeeId) {
+    const { data: home } = await ctx.supabase.from("employee_departments").select("department_id").eq("employee_id", employeeId).eq("is_home", true).maybeSingle();
+    departmentId = home?.department_id ?? null;
+  }
 
   const rows = [];
   const warningLines: string[] = [];
@@ -103,6 +109,7 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
       org_id: ctx.org.id,
       employee_id: employeeId,
       work_role_id: text(fd, "work_role_id"),
+      department_id: departmentId,
       starts_at: s.toISOString(),
       ends_at: e.toISOString(),
       break_minutes: breakMinutes,
@@ -121,6 +128,7 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
     const { error } = await ctx.supabase.from("shifts").insert(row);
     if (!error) created++;
     else if (error.code === "23P01") overlaps++;
+    else if (error.code === "42501") return { error: "Du kan bare legge vakter i avdelingene du har ansvar for." };
     else return { error: error.message };
   }
   refresh();
@@ -134,7 +142,7 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
 
 /** Fjern vakter i en periode, for alle eller én ansatt. */
 export async function clearPeriod(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const from = text(fd, "from");
   const to = text(fd, "to") ?? from;
   if (!from || !to || to < from) return { error: "Velg en gyldig periode." };
@@ -151,7 +159,7 @@ export async function clearPeriod(_: ActionState, fd: FormData): Promise<ActionS
 }
 
 export async function cancelShift(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const id = text(fd, "id")!;
   const { data: s } = await ctx.supabase.from("shifts").select("status").eq("id", id).single();
   if (s?.status === "draft") await ctx.supabase.from("shifts").delete().eq("id", id).eq("org_id", ctx.org.id);
@@ -160,7 +168,7 @@ export async function cancelShift(fd: FormData) {
 }
 
 export async function assignShift(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const id = text(fd, "id")!;
   const employeeId = text(fd, "employee_id");
   const { data: shift } = await ctx.supabase.from("shifts").select("starts_at, ends_at, break_minutes").eq("id", id).single();
@@ -176,7 +184,7 @@ export async function assignShift(_: ActionState, fd: FormData): Promise<ActionS
 }
 
 export async function publishWeek(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const from = text(fd, "from")!;
   const days = Number(text(fd, "days") ?? 7);
   await ctx.supabase.rpc("publish_shifts", {
@@ -189,7 +197,7 @@ export async function publishWeek(fd: FormData) {
 
 /** Kopier forrige ukes vakter inn i denne uken som utkast. */
 export async function copyPreviousWeek(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const monday = text(fd, "from")!;
   const tz = ctx.org.timezone;
   const prev = addDays(monday, -7);
@@ -279,7 +287,7 @@ export async function cancelRequest(fd: FormData) {
 }
 
 export async function decideRequest(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const id = text(fd, "id")!;
   const { error } =
     fd.get("decision") === "approve"
@@ -295,7 +303,7 @@ function safeBack(v: string | null) {
 
 /** Sett den ansatte på vakten fraværende, med årsak. */
 export async function markAbsent(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const shiftId = text(fd, "shift_id");
   const typeId = text(fd, "absence_type_id");
   if (!shiftId || !typeId) return { error: "Velg årsak." };

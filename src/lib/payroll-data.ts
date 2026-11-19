@@ -17,7 +17,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const tz = ctx.org.timezone;
   // Arbeidsvilkår først: gjennomsnittsberegning kan kreve timer fra før perioden
   let termsQ = ctx.supabase.from("employment_terms")
-    .select("employee_id, valid_from, valid_to, hours_per_week, pay_type, paid_holidays, pay_rule_set_id, averaging_weeks, averaging_from")
+    .select("employee_id, valid_from, valid_to, hours_per_week, on_call, pay_type, paid_holidays, pay_rule_set_id, averaging_weeks, averaging_from")
     .eq("org_id", ctx.org.id).lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`);
   if (onlyEmployee) termsQ = termsQ.eq("employee_id", onlyEmployee);
   const { data: terms } = await termsQ;
@@ -67,7 +67,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     return {
       id: e.id, name: e.full_name, employeeNumber: e.employee_number,
       payType: (t?.pay_type ?? "hourly") as "fixed" | "hourly",
-      hoursPerWeek: Number(t?.hours_per_week ?? 0), fullTimeHours: fullTime,
+      hoursPerWeek: Number(t?.hours_per_week ?? 0), fullTimeHours: fullTime, onCall: Boolean(t?.on_call),
       isShiftWorker: e.is_shift_worker, paidHolidays: t?.paid_holidays ?? true, startDate: e.start_date,
       averaging: t?.averaging_weeks && t.averaging_from ? { from: t.averaging_from, weeks: t.averaging_weeks } : null,
     };

@@ -7,6 +7,8 @@ export interface Requirement {
   end: string; // "HH:MM", "00:00" = midnatt
   required: number;
   workRoleId?: string | null;
+  /** Avdelingen behovet gjelder. Tom = hele bedriften. */
+  departmentId?: string | null;
 }
 
 export interface StaffingTemplateRow extends Requirement {
@@ -23,6 +25,7 @@ export interface StaffingOverrideRow {
   end?: string | null;
   required?: number | null;
   workRoleId?: string | null;
+  departmentId?: string | null;
 }
 
 export interface PlannedShift {
@@ -30,6 +33,7 @@ export interface PlannedShift {
   endsAt: Date;
   employeeId: string | null;
   workRoleId?: string | null;
+  departmentId?: string | null;
 }
 
 export interface Gap {
@@ -39,6 +43,7 @@ export interface Gap {
   planned: number;
   missing: number;
   workRoleId: string | null;
+  departmentId?: string | null;
 }
 
 export interface DayCoverage {
@@ -65,6 +70,7 @@ export function requirementsFor(
         end: o.end!,
         required: o.required ?? 0,
         workRoleId: o.workRoleId ?? null,
+        ...(o.departmentId ? { departmentId: o.departmentId } : {}),
       })),
     };
   }
@@ -92,15 +98,17 @@ export function dayCoverage(
   const { start: dayStart, end: dayEnd } = dayBounds(date, tz);
   if (opts.closed) return { date, closed: true, peakRequired: 0, peakPlanned: 0, gaps: [] };
 
-  const roleKeys = Array.from(new Set(requirements.map((r) => r.workRoleId ?? null)));
+  // Behov telles per arbeidsrolle og avdeling. Behov uten avdeling teller vakter i alle avdelinger.
+  const keyOf = (r: { workRoleId?: string | null; departmentId?: string | null }) => `${r.workRoleId ?? ""}|${r.departmentId ?? ""}`;
+  const groups = Array.from(new Map(requirements.map((r) => [keyOf(r), { role: r.workRoleId ?? null, dept: r.departmentId ?? null }])).values());
   const assigned = shifts.filter((s) => s.employeeId);
   const gaps: Gap[] = [];
   let peakRequired = 0;
   let peakPlanned = 0;
 
-  for (const role of roleKeys) {
-    const reqs = requirements.filter((r) => (r.workRoleId ?? null) === role).map((r) => ({ ...r, ...reqInterval(date, r, tz) }));
-    const relevant = role === null ? assigned : assigned.filter((s) => s.workRoleId === role);
+  for (const { role, dept } of groups) {
+    const reqs = requirements.filter((r) => (r.workRoleId ?? null) === role && (r.departmentId ?? null) === dept).map((r) => ({ ...r, ...reqInterval(date, r, tz) }));
+    const relevant = assigned.filter((s) => (role === null || s.workRoleId === role) && (dept === null || s.departmentId === dept));
     let open: Gap | null = null;
 
     for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += slot) {
@@ -117,7 +125,7 @@ export function dayCoverage(
         open.end = new Date(b);
       } else {
         if (open) gaps.push(open);
-        open = missing > 0 ? { start: new Date(a), end: new Date(b), required, planned, missing, workRoleId: role } : null;
+        open = missing > 0 ? { start: new Date(a), end: new Date(b), required, planned, missing, workRoleId: role, ...(dept ? { departmentId: dept } : {}) } : null;
       }
     }
     if (open) gaps.push(open);

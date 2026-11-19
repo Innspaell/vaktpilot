@@ -16,12 +16,12 @@ export default async function AvailabilityPage() {
       <div className="space-y-4">
         <h1 className="h1">Når kan jeg jobbe</h1>
         <p className="card text-sm text-muted">
-          {ctx.isAdmin ? <>Denne funksjonen er ikke slått på. Du kan slå den på under <Link href="/innstillinger" className="text-brand">Innstillinger</Link>.</> : "Bedriften bruker ikke denne funksjonen."}
+          {ctx.canPlan ? <>Denne funksjonen er ikke slått på. Du kan slå den på under <Link href="/innstillinger" className="text-brand">Innstillinger</Link>.</> : "Bedriften bruker ikke denne funksjonen."}
         </p>
       </div>
     );
   }
-  if (ctx.isAdmin && (!ctx.employeeId || !ctx.canSetAvailability)) return <AdminOverview ctx={ctx} today={today} />;
+  if (ctx.canPlan && (!ctx.employeeId || !ctx.canSetAvailability)) return <AdminOverview ctx={ctx} today={today} />;
   if (!ctx.employeeId) return <p className="card text-sm text-muted">Du er ikke registrert som ansatt.</p>;
   if (!ctx.canSetAvailability) return <p className="card text-sm text-muted">Lederen din har ikke slått på denne funksjonen for deg.</p>;
 
@@ -89,7 +89,7 @@ export default async function AvailabilityPage() {
         )}
       </section>
 
-      {ctx.isAdmin && <AdminOverview ctx={ctx} today={today} />}
+      {ctx.canPlan && <AdminOverview ctx={ctx} today={today} />}
     </div>
   );
 }

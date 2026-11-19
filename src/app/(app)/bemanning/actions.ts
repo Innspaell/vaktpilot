@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/context";
+import { requireAdmin, requirePlanner } from "@/lib/context";
 import type { ActionState } from "../actions";
 
 function text(fd: FormData, key: string) {
@@ -20,7 +20,7 @@ function validTimes(start: string | null, end: string | null) {
 }
 
 export async function addTemplate(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const start = text(fd, "start");
   const end = text(fd, "end");
   if (!validTimes(start, end)) return { error: "Velg fra- og til-klokkeslett." };
@@ -33,17 +33,17 @@ export async function addTemplate(_: ActionState, fd: FormData): Promise<ActionS
   const { error } = await ctx.supabase.from("staffing_templates").insert(
     weekdays.map((weekday) => ({
       org_id: ctx.org.id, weekday, start_time: start, end_time: end, required, work_role_id: text(fd, "work_role_id"),
-      valid_from: validFrom, valid_to: validTo,
+      valid_from: validFrom, valid_to: validTo, department_id: text(fd, "department_id"),
     })),
   );
-  if (error) return { error: error.message };
+  if (error) return { error: error.code === "42501" ? "Du kan bare legge inn behov for avdelingene du har ansvar for." : error.message };
   refresh();
   return { ok: "Lagt til." };
 }
 
 /** Sett gjelder fra/til på flere rader i det faste behovet samtidig. */
 export async function setTemplatePeriod(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const ids = fd.getAll("id").map(String).filter(Boolean);
   if (!ids.length) return { error: "Velg minst én rad." };
   const validFrom = text(fd, "valid_from");
@@ -56,13 +56,13 @@ export async function setTemplatePeriod(_: ActionState, fd: FormData): Promise<A
 }
 
 export async function deleteTemplate(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   await ctx.supabase.from("staffing_templates").delete().eq("id", text(fd, "id")!).eq("org_id", ctx.org.id);
   refresh();
 }
 
 export async function addOverride(_: ActionState, fd: FormData): Promise<ActionState> {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const date = text(fd, "date");
   if (!date) return { error: "Velg dato." };
   const closed = fd.get("closed") === "on";
@@ -77,14 +77,15 @@ export async function addOverride(_: ActionState, fd: FormData): Promise<ActionS
     end_time: closed ? null : end,
     required: closed ? null : Number(text(fd, "required") ?? 0),
     work_role_id: closed ? null : text(fd, "work_role_id"),
+    department_id: text(fd, "department_id"),
   });
-  if (error) return { error: error.message };
+  if (error) return { error: error.code === "42501" ? "Du kan bare legge inn avvik for avdelingene du har ansvar for." : error.message };
   refresh();
   return { ok: "Lagret." };
 }
 
 export async function deleteOverride(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   await ctx.supabase.from("staffing_overrides").delete().eq("id", text(fd, "id")!).eq("org_id", ctx.org.id);
   refresh();
 }

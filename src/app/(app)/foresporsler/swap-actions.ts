@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin, requireOrg } from "@/lib/context";
+import { requirePlanner, requireOrg } from "@/lib/context";
 import type { ActionState } from "../actions";
 
 function text(fd: FormData, key: string) {
@@ -40,7 +40,7 @@ export async function cancelSwap(fd: FormData) {
 }
 
 export async function decideSwap(fd: FormData) {
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const { error } = await ctx.supabase.rpc("decide_swap", { p_swap: text(fd, "id")!, p_approve: fd.get("decision") === "approve" });
   refresh();
   if (error) redirect(`/foresporsler?vis=bytte&feil=${encodeURIComponent(error.message)}`);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/context";
+import { requirePlanner } from "@/lib/context";
 import { loadReport } from "@/lib/report-data";
 import { addDays, formatDateLong, localDate } from "@/lib/time";
 import type { Grouping } from "@/lib/report";
@@ -9,7 +9,7 @@ const signed = (n: number) => `${n > 0.004 ? "+" : ""}${num(n)}`;
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ fra?: string; til?: string; per?: string }> }) {
   const sp = await searchParams;
-  const ctx = await requireAdmin();
+  const ctx = await requirePlanner();
   const today = localDate(new Date(), ctx.org.timezone);
   const iso = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
   const from = iso(sp.fra) ?? today.slice(0, 8) + "01";

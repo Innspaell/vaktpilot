@@ -11,6 +11,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await ctx.supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", ctx.userId).eq("org_id", ctx.org.id).is("read_at", null)
     : { count: 0 };
   const counts = ctx.org ? await navCounts(ctx) : { approvals: 0, mine: 0 };
+  // Ansatte uten pårørende får et varsel øverst til minst én er lagt inn
+  const { count: kin } = ctx.org && ctx.employeeId
+    ? await ctx.supabase.from("emergency_contacts").select("id", { count: "exact", head: true }).eq("employee_id", ctx.employeeId)
+    : { count: null };
+  const kinNotice = ctx.org && ctx.employeeId && kin === 0 && (
+    <Link href="/profil#parorende" className="card flex items-center justify-between gap-3 border-warn bg-warn-soft" role="status">
+      <span>
+        <b className="block text-warn">Legg inn nærmeste pårørende</b>
+        <span className="text-sm">Hvem skal kontaktes hvis noe skjer med deg på jobb? Legg inn minst én person.</span>
+      </span>
+      <span className="text-warn">›</span>
+    </Link>
+  );
   // Forfalte fakturaer vises for lederne øverst på alle sider
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Oslo" }).format(new Date());
   const { data: overdue } = ctx.org && ctx.isLeader
@@ -63,7 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
           {bell}
         </div>
-        {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} isPlatformAdmin={ctx.isPlatformAdmin} counts={counts} />}
+        {(ctx.org || ctx.isPlatformAdmin) && <SideNav isAdmin={ctx.isAdmin} canPlan={ctx.canPlan} isPlatformAdmin={ctx.isPlatformAdmin} counts={counts} />}
         {ctx.org?.logoUrl && (
           <div className="mt-6 border-t border-line px-3 pt-3">
             <VaktpilotMark size="sm" />
@@ -85,10 +98,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <ServiceNotices />
         {billingNotice}
-        {ctx.isAdmin && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} personnelList={ctx.org.personnelList} />}
+        {kinNotice}
+        {ctx.canPlan && ctx.org && <AreaTabs availability={ctx.org.availabilityEnabled} personnelList={ctx.org.personnelList} isAdmin={ctx.isAdmin} />}
         {children}
       </main>
-      {ctx.org && <BottomNav isAdmin={ctx.isAdmin} counts={counts} />}
+      {ctx.org && <BottomNav isAdmin={ctx.canPlan} counts={counts} />}
     </div>
   );
 }

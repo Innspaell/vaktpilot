@@ -5,7 +5,7 @@ import { createClient } from "./supabase/server";
 
 export const ORG_COOKIE = "vp_org";
 
-export type Role = "owner" | "admin" | "employee";
+export type Role = "owner" | "admin" | "manager" | "employee";
 
 export interface AppContext {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -19,7 +19,12 @@ export interface AppContext {
     blocked: boolean } | null;
   /** Eier eller administrator i bedriften, også når bedriften er sperret (abonnement og fakturaer). */
   isLeader: boolean;
+  /** Eier eller administrator: alt i bedriften. */
   isAdmin: boolean;
+  /** Leder: planlegger og godkjenner for sine avdelinger, men endrer ikke innstillinger, tilganger eller lønn. */
+  isManager: boolean;
+  /** Kan planlegge og godkjenne: administrator eller leder. */
+  canPlan: boolean;
   isPlatformAdmin: boolean;
   employeeId: string | null;
   /** «Når kan jeg jobbe» er slått på for bedriften og for denne ansatte. */
@@ -81,8 +86,10 @@ export const getContext = cache(async (): Promise<AppContext> => {
     email: user.email ?? "",
     orgs,
     org,
-    isAdmin: org ? org.role !== "employee" && !org.blocked : false,
-    isLeader: org ? org.role !== "employee" : false,
+    isAdmin: org ? (org.role === "owner" || org.role === "admin") && !org.blocked : false,
+    isManager: org ? org.role === "manager" && !org.blocked : false,
+    canPlan: org ? org.role !== "employee" && !org.blocked : false,
+    isLeader: org ? org.role === "owner" || org.role === "admin" : false,
     isPlatformAdmin: Boolean(platform),
     employeeId,
     canSetAvailability,
@@ -100,6 +107,13 @@ export async function requireOrg() {
 export async function requireLeader() {
   const ctx = await requireOrg();
   if (!ctx.isLeader) redirect("/");
+  return ctx;
+}
+
+/** Planlegging og godkjenning: administrator eller leder. Databasen avgjør hvilke avdelinger lederen styrer. */
+export async function requirePlanner() {
+  const ctx = await requireOrg();
+  if (!ctx.canPlan) redirect("/");
   return ctx;
 }
 

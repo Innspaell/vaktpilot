@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LEAD } from "@/lib/nav-items";
+import { LEAD, leadItems } from "@/lib/nav-items";
 
 export type { NavCounts } from "@/lib/nav-items";
 import type { NavCounts } from "@/lib/nav-items";
@@ -73,7 +73,7 @@ export function BottomNav({ isAdmin, counts }: { isAdmin: boolean; counts: NavCo
 }
 
 /** Sidemeny på PC: «Meg» og «Ledelse». */
-export function SideNav({ isAdmin, isPlatformAdmin, counts }: { isAdmin: boolean; isPlatformAdmin?: boolean; counts: NavCounts }) {
+export function SideNav({ isAdmin, canPlan, isPlatformAdmin, counts }: { isAdmin: boolean; canPlan: boolean; isPlatformAdmin?: boolean; counts: NavCounts }) {
   const path = usePathname();
   const link = (href: string, label: string, on: boolean, n = 0) => (
     <Link key={href} href={href}
@@ -85,10 +85,10 @@ export function SideNav({ isAdmin, isPlatformAdmin, counts }: { isAdmin: boolean
   const heading = (t: string) => <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-muted">{t}</div>;
   return (
     <nav className="space-y-1">
-      {isAdmin && heading("Meg")}
+      {canPlan && heading("Meg")}
       {ME.map((i) => link(i.href, i.label, isActive(path, i.href), i.count ? counts[i.count] : 0))}
-      {isAdmin && heading("Ledelse")}
-      {isAdmin && LEAD.map((i) => link(i.href, i.label, isActive(path, i.href, i.match), i.count ? counts[i.count] : 0))}
+      {canPlan && heading("Ledelse")}
+      {canPlan && leadItems(isAdmin).map((i) => link(i.href, i.label, isActive(path, i.href, i.match), i.count ? counts[i.count] : 0))}
       {isPlatformAdmin && heading("InnSpæll")}
       {isPlatformAdmin && link("/plattform", "Plattform", path.startsWith("/plattform"))}
       <Link href={`/innspill?fra=${encodeURIComponent(path)}`}
@@ -102,10 +102,12 @@ export function SideNav({ isAdmin, isPlatformAdmin, counts }: { isAdmin: boolean
 /** Faner inne i et lederområde, f.eks. Planlegge: Plan · Bemanningsbehov · Turnus. */
 export function SubNav({ tabs }: { tabs: { href: string; label: string }[] }) {
   const path = usePathname();
+  // Den mest presise fanen er aktiv (/ansatte/avdelinger slår /ansatte)
+  const active = tabs.filter((t) => path === t.href || path.startsWith(t.href + "/")).sort((a, b) => b.href.length - a.href.length)[0]?.href;
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-line px-1" aria-label="Underside">
       {tabs.map((t) => {
-        const on = path === t.href || path.startsWith(t.href + "/");
+        const on = t.href === active;
         return (
           <Link key={t.href} href={t.href} aria-current={on ? "page" : undefined}
             className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${on ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>
@@ -118,21 +120,26 @@ export function SubNav({ tabs }: { tabs: { href: string; label: string }[] }) {
 }
 
 /** Viser riktige faner for lederområdet man står i. */
-export function AreaTabs({ availability, personnelList = false }: { availability: boolean; personnelList?: boolean }) {
+export function AreaTabs({ availability, personnelList = false, isAdmin = true }: { availability: boolean; personnelList?: boolean; isAdmin?: boolean }) {
   const path = usePathname();
   const plan = [
     { href: "/vaktplan/rediger", label: "Plan" },
     { href: "/bemanning", label: "Bemanningsbehov" },
-    { href: "/turnus", label: "Turnus" },
+    ...(isAdmin ? [{ href: "/turnus", label: "Turnus" }] : []),
     ...(availability ? [{ href: "/tilgjengelighet", label: "Når kan de jobbe" }] : []),
   ];
   const pay = [
     { href: "/lonn", label: "Lønn" },
     { href: "/rapporter", label: "Rapporter" },
-    ...(personnelList ? [{ href: "/personalliste", label: "Personalliste" }] : []),
+    ...(personnelList && isAdmin ? [{ href: "/personalliste", label: "Personalliste" }] : []),
+  ];
+  const people = [
+    { href: "/ansatte", label: "Ansatte" },
+    { href: "/ansatte/avdelinger", label: "Avdelinger" },
   ];
   const inGroup = (tabs: { href: string }[]) => tabs.some((t) => path === t.href || path.startsWith(t.href + "/"));
   if (inGroup(plan)) return <SubNav tabs={plan} />;
+  if (inGroup(people)) return <SubNav tabs={people} />;
   if (inGroup(pay)) return <SubNav tabs={pay} />;
   return null;
 }

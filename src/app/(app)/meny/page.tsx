@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getContext } from "@/lib/context";
-import { LEAD } from "@/lib/nav-items";
+import { leadItems } from "@/lib/nav-items";
 import { navCounts } from "@/lib/nav-counts";
 
 /** Meny på mobil for ledere: det personlige og lederområdene samlet. */
@@ -38,11 +38,11 @@ export default async function MenuPage() {
           {row("/innspill", "Ønsker og innspill", "Savner du noe? Si fra")}
         </ul>
       </section>
-      {ctx.isAdmin && (
+      {ctx.canPlan && (
         <section>
           <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Ledelse</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white">
-            {LEAD.map((l) => row(l.href, l.label, hints[l.href], l.count ? counts[l.count] : 0))}
+            {leadItems(ctx.isAdmin).map((l) => row(l.href, l.label, hints[l.href], l.count ? counts[l.count] : 0))}
           </ul>
         </section>
       )}

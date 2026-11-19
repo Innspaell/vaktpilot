@@ -30,7 +30,7 @@ export function employeeImportExample() {
     ["Mobil", "Med eller uten mellomrom.", "Ingenting skjer."],
     ["Ansattnummer", "Samme nummer som i lønnssystemet.", "Lønnsgrunnlaget får ikke ansattnummer."],
     ["Startdato", "01.03.2025 eller 2025-03-01.", "Du velger én dato for alle når du importerer."],
-    ["Stillingsprosent", "100, 80 eller 0,8.", "Du velger én verdi for alle når du importerer."],
+    ["Stillingsprosent", "100, 80 eller 0,8. Skriv 0 eller «tilkalling» for tilkallingsvikar uten avtalt arbeidstid.", "Du velger én verdi for alle når du importerer."],
     ["Lønnstype", "Timelønn eller Fastlønn.", "Du velger for alle når du importerer."],
     ["Turnus", "Ja eller Nei. Ja hvis den ansatte jobber turnus eller skift.", "Regnes som Nei."],
     [],

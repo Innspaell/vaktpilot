@@ -35,7 +35,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
     .eq("org_id", ctx.org.id)
     .order("from_date", { ascending: false })
     .limit(60);
-  if (!ctx.isAdmin) q = q.eq("employee_id", ctx.employeeId ?? "");
+  if (!ctx.canPlan) q = q.eq("employee_id", ctx.employeeId ?? "");
 
   const [{ data }, { data: types }, names, { data: orgRow }] = await Promise.all([
     q,
@@ -59,7 +59,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
 
   // Vakter som kolliderer med ventende søknader (for administrator)
   const conflicts = new Map<string, number>();
-  if (ctx.isAdmin && pending.length) {
+  if (ctx.canPlan && pending.length) {
     const minFrom = pending.reduce((m, r) => (r.from_date < m ? r.from_date : m), pending[0].from_date);
     const maxTo = pending.reduce((m, r) => (r.to_date > m ? r.to_date : m), pending[0].to_date);
     const { data: shifts } = await ctx.supabase.from("shifts").select("employee_id, starts_at")
@@ -97,7 +97,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
         </section>
       )}
 
-      {ctx.isAdmin && (
+      {ctx.canPlan && (
         <section className="card">
           <h2 className="h2">Registrer fravær for en ansatt</h2>
           <ActionForm action={registerAbsence} submitLabel="Registrer" className="mt-3 grid gap-3 md:grid-cols-4">
@@ -119,19 +119,19 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
       )}
 
       <section className="card p-0">
-        <h2 className="h2 px-4 pt-4">{ctx.isAdmin ? "Søknader om fri som venter" : "Dine søknader som venter"}</h2>
+        <h2 className="h2 px-4 pt-4">{ctx.canPlan ? "Søknader om fri som venter" : "Dine søknader som venter"}</h2>
         {pending.length === 0 ? <p className="p-4 text-sm text-muted">Ingenting venter.</p> : (
           <ul className="mt-2 divide-y divide-line">
             {pending.map((r) => (
               <li key={r.id} className="space-y-2 px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2 text-sm">
                   <div>
-                    {ctx.isAdmin && <div className="font-medium">{names.get(r.employee_id)}</div>}
+                    {ctx.canPlan && <div className="font-medium">{names.get(r.employee_id)}</div>}
                     <div><b>{r.absence_types?.name}</b>: <span className="capitalize">{range(r)}</span></div>
                     <div className="text-muted">{workdaysBetween(r.from_date, r.to_date)} arbeidsdager</div>
                     {r.comment && <div className="text-muted">«{r.comment}»</div>}
                   </div>
-                  {ctx.isAdmin ? (
+                  {ctx.canPlan ? (
                     <form action={decideAbsence} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="id" value={r.id} />
                       {conflicts.get(r.id) && (
@@ -163,7 +163,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
           <ul className="mt-2 divide-y divide-line text-sm">
             {upcoming.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-                <span>{ctx.isAdmin && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
+                <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
                 <span className="badge bg-good-soft text-good">Godkjent</span>
               </li>
             ))}
@@ -179,7 +179,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
               const [label, cls] = STATUS[r.status];
               return (
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <span>{ctx.isAdmin && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
+                  <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
                   <span className={`badge ${cls}`}>{label}</span>
                 </li>
               );

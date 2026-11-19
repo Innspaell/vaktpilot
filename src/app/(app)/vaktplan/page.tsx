@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/context";
 import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from "@/lib/data";
+import { DepartmentPills } from "@/components/DepartmentPills";
+import { loadDepartments, selectedDepartment, shiftInDepartment } from "@/lib/departments";
 import { addDays, dayBounds, formatHours, isoWeekday, localDate, localTime, workedMinutes } from "@/lib/time";
 import { groupByRole, primaryRoles, shortName, shortTime, type RosterRole } from "@/lib/roster";
 import { ActionForm, Field } from "@/components/Form";
@@ -29,7 +31,7 @@ function dayLabelLong(date: string) {
   return `${WD[isoWeekday(date) - 1]} ${Number(date.slice(8))}. ${MONTHS[Number(date.slice(5, 7)) - 1]}`;
 }
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: Who; vakt?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: Who; vakt?: string; avdeling?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
@@ -41,7 +43,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     if (fs) { sp.dato = localDate(new Date(fs.starts_at), tz); focusShift = fs.id; }
   }
   const view: View = sp.visning === "dag" || sp.visning === "maned" ? sp.visning : "uke";
-  const who: Who = sp.vis === "alle" || sp.vis === "mine" ? sp.vis : ctx.isAdmin || !ctx.employeeId ? "alle" : "mine";
+  const who: Who = sp.vis === "alle" || sp.vis === "mine" ? sp.vis : ctx.canPlan || !ctx.employeeId ? "alle" : "mine";
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.dato ?? "") ? sp.dato! : now;
 
   let from: string;
@@ -61,7 +63,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   }
   const to = addDays(from, days - 1);
 
-  const [names, allShifts, rolesRes, linksRes, absRes, reqRes] = await Promise.all([
+  const deps = await loadDepartments(ctx);
+  const dep = selectedDepartment(sp.avdeling, deps);
+  const [names, orgShifts, rolesRes, linksRes, absRes, reqRes] = await Promise.all([
     colleagues(ctx),
     shiftsBetween(ctx, from, addDays(from, days)),
     ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id),
@@ -71,7 +75,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? ctx.supabase.from("shift_requests").select("shift_id").eq("employee_id", ctx.employeeId).eq("status", "pending")
       : Promise.resolve({ data: [] as { shift_id: string | null }[] }),
   ]);
-  const coverage = await coverageForDays(ctx, from, days, allShifts);
+  // Avdeling valgt: bare vaktene der (alle ansatte kan se hele planen)
+  const allShifts = dep ? orgShifts.filter((s) => shiftInDepartment(s, dep, deps)) : orgShifts;
+  const coverage = await coverageForDays(ctx, from, days, allShifts, dep);
   const roles = (rolesRes.data ?? []) as RosterRole[];
   const roleById = new Map(roles.map((r) => [r.id, r]));
   const primary = primaryRoles(roles, linksRes.data ?? []);
@@ -81,7 +87,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const mine = who === "mine" && ctx.employeeId;
   // Ansatte ser bare publiserte vakter; utkast vises for administrator
-  const visible = allShifts.filter((s) => s.status === "published" || ctx.isAdmin);
+  const visible = allShifts.filter((s) => s.status === "published" || ctx.canPlan);
   const shifts = mine ? visible.filter((s) => s.employee_id === ctx.employeeId) : visible;
   const absences = mine ? allAbsences.filter((a) => a.employee_id === ctx.employeeId) : allAbsences;
   const openShifts = visible.filter((s) => !s.employee_id && s.status === "published");
@@ -95,9 +101,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const step = view === "dag" ? 1 : view === "uke" ? 7 : 0;
   const prev = step ? addDays(anchor, -step) : addDays(anchor.slice(0, 8) + "01", -1);
   const next = step ? addDays(anchor, step) : addDays(anchor.slice(0, 8) + "01", 32);
-  const href = (p: { d?: string; v?: View; w?: Who }) => `/vaktplan?visning=${p.v ?? view}&dato=${p.d ?? anchor}&vis=${p.w ?? who}`;
+  const href = (p: { d?: string; v?: View; w?: Who; a?: string | null }) =>
+    `/vaktplan?visning=${p.v ?? view}&dato=${p.d ?? anchor}&vis=${p.w ?? who}${(p.a === undefined ? dep : p.a) ? `&avdeling=${p.a === undefined ? dep : p.a}` : ""}`;
   // Admin trykker på en vakt for å sette personen fraværende eller endre vakten
-  const shiftLink = ctx.isAdmin ? (s: ShiftRow) => `/vaktplan/vakt/${s.id}?tilbake=${encodeURIComponent(href({}))}` : undefined;
+  const shiftLink = ctx.canPlan ? (s: ShiftRow) => `/vaktplan/vakt/${s.id}?tilbake=${encodeURIComponent(href({}))}` : undefined;
   const title =
     view === "dag" ? dayLabelLong(anchor)
       : view === "uke" ? `Uke ${weekNumber(from)}`
@@ -122,8 +129,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <Link href={href({ d: next })} className="btn-ghost px-3" aria-label="Neste">›</Link>
             {anchor !== now && <Link href={href({ d: now })} className="text-sm font-medium text-brand">I dag</Link>}
           </div>
-          {ctx.isAdmin && <Link href={`/vaktplan/rediger?visning=${view === "maned" ? "uke" : view}&dato=${anchor}`} className="btn-primary">Rediger plan</Link>}
+          {ctx.canPlan && <Link href={`/vaktplan/rediger?visning=${view === "maned" ? "uke" : view}&dato=${anchor}${dep ? `&avdeling=${dep}` : ""}`} className="btn-primary">Rediger plan</Link>}
         </div>
+        {deps.departments.length > 0 && who !== "mine" && (
+          <DepartmentPills departments={deps.departments} selected={dep} hrefFor={(id) => href({ a: id })} />
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Segmented items={[["dag", "Dag"], ["uke", "Uke"], ["maned", "Måned"]]} active={view} link={(v) => href({ v: v as View })} />
           {ctx.employeeId && (
@@ -140,8 +150,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       {/* ---------------- DAG ---------------- */}
       {view === "dag" && (
         <DayView linkFor={shiftLink} date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
-          cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.isAdmin}
-          canClaim={!ctx.isAdmin && Boolean(ctx.employeeId)} requested={requested} />
+          cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.canPlan}
+          canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested} />
       )}
 
       {/* ---------------- UKE ---------------- */}
@@ -196,7 +206,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                       {coverage.map((c) => (
                         <td key={c.date} className="px-2 py-1.5 align-top">
                           {openShifts.filter((s) => dateOf(s) === c.date).map((s) => (
-                            <OpenShift key={s.id} s={s} tz={tz} canClaim={!ctx.isAdmin && Boolean(ctx.employeeId)} requested={requested.has(s.id)} compact />
+                            <OpenShift key={s.id} s={s} tz={tz} canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested.has(s.id)} compact />
                           ))}
                         </td>
                       ))}
@@ -237,7 +247,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   )}
                   {open.length > 0 && (
                     <div className="mt-2 space-y-1.5">
-                      {open.map((s) => <OpenShift key={s.id} s={s} tz={tz} canClaim={!ctx.isAdmin && Boolean(ctx.employeeId)} requested={requested.has(s.id)} />)}
+                      {open.map((s) => <OpenShift key={s.id} s={s} tz={tz} canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested.has(s.id)} />)}
                     </div>
                   )}
                   {day.length === 0 && away.length === 0 && open.length === 0 && <p className="mt-1 text-sm text-muted">Ingen vakter.</p>}
@@ -311,7 +321,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         </>
       )}
 
-      {!ctx.isAdmin && ctx.employeeId && (
+      {!ctx.canPlan && ctx.employeeId && (
         <details className="card">
           <summary className="h2 cursor-pointer">Tilby deg en dag</summary>
           <p className="mt-1 text-sm text-muted">Si hvilken dag og når du kan jobbe. Lederen godkjenner og setter deg opp.</p>

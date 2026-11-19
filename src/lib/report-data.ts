@@ -38,7 +38,7 @@ export async function loadReport(ctx: Ctx, from: string, to: string, grouping: G
     loadCompTime(ctx),
   ]);
   const published = shifts.filter((s) => s.status === "published");
-  const coverage = await coverageForDays({ ...ctx, isAdmin: false }, from, days, published);
+  const coverage = await coverageForDays({ ...ctx, isAdmin: false, canPlan: false }, from, days, published);
   const report = buildReport({
     from, to, tz: ctx.org.timezone, grouping,
     employees: payroll.pay.map((p) => ({ id: p.employee.id, name: p.employee.name })),

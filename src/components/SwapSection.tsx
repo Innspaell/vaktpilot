@@ -56,7 +56,7 @@ export async function SwapSection({ ctx, preselect }: { ctx: Ctx; preselect?: st
         </section>
       )}
 
-      {ctx.isAdmin && (
+      {ctx.canPlan && (
         <section className="card p-0">
           <h2 className="h2 px-4 pt-4">Bytter som venter på deg</h2>
           {forAdmin.length === 0 ? <p className="p-4 text-sm text-muted">Ingenting venter.</p> : (

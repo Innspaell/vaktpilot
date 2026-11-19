@@ -31,9 +31,9 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
   const today = localDate(new Date(), tz);
-  const tab = ctx.isAdmin && (sp.vis === "alle" || !ctx.employeeId) ? "alle" : "mine";
+  const tab = ctx.canPlan && (sp.vis === "alle" || !ctx.employeeId) ? "alle" : "mine";
 
-  const tabs = ctx.isAdmin && ctx.employeeId && (
+  const tabs = ctx.canPlan && ctx.employeeId && (
     <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
       <Link href="/timer" className={`rounded-md px-3 py-1.5 font-medium ${tab === "mine" ? "bg-brand text-white" : "text-muted"}`}>Mine timer</Link>
       <Link href="/timer?vis=alle" className={`rounded-md px-3 py-1.5 font-medium ${tab === "alle" ? "bg-brand text-white" : "text-muted"}`}>Alle ansatte</Link>

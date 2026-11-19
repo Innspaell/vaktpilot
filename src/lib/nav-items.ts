@@ -8,5 +8,10 @@ export const LEAD = [
   { href: "/ansatte", label: "Ansatte", match: ["/ansatte"] },
   { href: "/fravaer", label: "Fravær og godkjenning", match: ["/fravaer", "/ferie"], count: "approvals" as const },
   { href: "/lonn", label: "Lønn og rapporter", match: ["/lonn", "/rapporter", "/personalliste"] },
-  { href: "/innstillinger", label: "Innstillinger", match: ["/innstillinger"] },
+  { href: "/innstillinger", label: "Innstillinger", match: ["/innstillinger"], adminOnly: true },
 ];
+
+/** Lederområdene en bruker skal se: ledere (ikke administrator) ser ikke innstillingene. */
+export function leadItems(isAdmin: boolean) {
+  return LEAD.filter((l) => isAdmin || !("adminOnly" in l && l.adminOnly));
+}

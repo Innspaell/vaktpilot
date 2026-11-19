@@ -129,6 +129,8 @@ export interface PayEmployee {
   payType: "fixed" | "hourly";
   hoursPerWeek: number;
   fullTimeHours: number;
+  /** Tilkalling/ekstrahjelp: ingen avtalt tid. Timer opp til heltid er ordinære, og ingen tid må fylles. */
+  onCall?: boolean;
   isShiftWorker: boolean;
   paidHolidays: boolean;
   startDate: string;
@@ -304,8 +306,8 @@ export function calculatePay(
   for (const [bk, { weeks, list }] of blocks) {
     const blockRules = rulesAt(bk);
     const fullTimeMin = (blockRules.weeklyOvertimeAfterHours ?? employee.fullTimeHours) * 60 * weeks;
-    const contractBlock = contractMin * weeks;
-    const partTime = contractMin * weeks < fullTimeMin - 1;
+    const contractBlock = employee.onCall ? fullTimeMin : contractMin * weeks;
+    const partTime = !employee.onCall && contractMin * weeks < fullTimeMin - 1;
     let blockOrdinary = 0;
     const dayUsed = new Map<string, number>();
     for (const e of list) {
@@ -375,7 +377,9 @@ export function calculatePay(
       if (rest > 0) lowReasons.push(weeks > 1 ? `over ${round2(fullTimeMin / 60 / weeks)} t/uke i snitt over ${weeks} uker` : `over ${round2(fullTimeMin / 60)} t i uka`);
       if (!count) continue;
       const per = weeks > 1 ? ` i snitt over ${weeks} uker` : " per uke";
-      add("ordinary", "Ordinære timer", date, toContract, { why: `Arbeid innenfor ordinær arbeidstid, opp til avtalt tid (${employee.hoursPerWeek.toLocaleString("nb-NO")} t${per}).` });
+      add("ordinary", "Ordinære timer", date, toContract, { why: employee.onCall
+        ? `Tilkalling uten avtalt tid: ordinære timer opp til heltid (${round2(fullTimeMin / 60 / weeks).toLocaleString("nb-NO")} t${per}).`
+        : `Arbeid innenfor ordinær arbeidstid, opp til avtalt tid (${employee.hoursPerWeek.toLocaleString("nb-NO")} t${per}).` });
       add("extra", "Mertid (deltid over avtalt tid)", date, toFull, { why: `Over avtalt tid, men ikke over heltid (${round2(fullTimeMin / 60 / weeks).toLocaleString("nb-NO")} t${per}).` });
       add(`overtime_${rules.overtimePercent}`, `Overtid ${rules.overtimePercent} %`, date, rest + outLow, { reason: lowReasons.join(", "), why: "Arbeid utover grensene for ordinær tid og heltid." });
       add("overtime_100", "Overtid 100 %", date, out100, { reason: [...c.reason100].join(", "), why: "Arbeid på tidspunkter som gir 100 % etter reglene." });
@@ -487,7 +491,7 @@ export function timeBalance(
   period: { from: string; to: string },
   tz = DEFAULT_TZ,
 ): Balance {
-  const dayMin = (employee.hoursPerWeek * 60) / 5;
+  const dayMin = employee.onCall ? 0 : (employee.hoursPerWeek * 60) / 5;
   let expected = 0;
   const from = period.from > employee.startDate ? period.from : employee.startDate;
   for (let d = from; d <= period.to; d = addDays(d, 1)) {

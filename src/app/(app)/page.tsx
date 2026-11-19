@@ -54,7 +54,7 @@ export default async function Home() {
   const time = (s: ShiftRow) => `${localTime(new Date(s.starts_at), tz)}–${localTime(new Date(s.ends_at), tz)}`;
   const openShifts = shifts.filter((s) => !s.employee_id && s.status === "published");
 
-  if (ctx.isAdmin) {
+  if (ctx.canPlan) {
     const [{ count: pendingShifts }, { count: pendingAbsence }, { count: pendingTime }, { data: onClock }, { data: absences }] = await Promise.all([
       ctx.supabase.from("shift_requests").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).eq("status", "pending"),
       ctx.supabase.from("absence_requests").select("id", { count: "exact", head: true }).eq("org_id", ctx.org.id).eq("status", "pending"),
@@ -73,7 +73,7 @@ export default async function Home() {
           {todayCov.holiday && <p className="mt-1 text-warn">{todayCov.holiday}</p>}
         </header>
 
-        <GettingStarted ctx={ctx as Parameters<typeof GettingStarted>[0]["ctx"]} />
+        {ctx.isAdmin && <GettingStarted ctx={ctx as Parameters<typeof GettingStarted>[0]["ctx"]} />}
 
         <Board ctx={org} compact />
 

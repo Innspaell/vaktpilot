@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getContext, requireAdmin, requireOrg, ORG_COOKIE } from "@/lib/context";
-import { insertEmployee } from "@/lib/employees";
+import { insertEmployee, termsHours } from "@/lib/employees";
 
 export type ActionState = { error?: string; ok?: string; link?: string } | undefined;
 
@@ -250,13 +250,12 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
 
   // Stillingsprosent og lønnstype rettes på gjeldende avtale. Endringer fra en dato lages som ny avtale.
   if (text(fd, "position_pct")) {
-    const pct = Math.min(100, Math.max(1, num(fd, "position_pct", 100)));
     const { data: org } = await ctx.supabase.from("organizations").select("full_time_hours_week").eq("id", ctx.org.id).single();
-    const hours = text(fd, "hours_per_week") ? num(fd, "hours_per_week", 37.5) : Math.round(Number(org?.full_time_hours_week ?? 37.5) * pct) / 100;
+    const th = termsHours(fd, Number(org?.full_time_hours_week ?? 37.5));
     const { error: tErr } = await ctx.supabase
       .from("employment_terms")
       .update({
-        position_pct: pct, hours_per_week: hours, pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
+        ...th, pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
         days_per_week: Math.min(6, Math.max(1, num(fd, "days_per_week", 5))),
       })
       .eq("employee_id", id)
@@ -314,8 +313,7 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
     employee_id: employeeId,
     valid_from: validFrom,
     valid_to: nextStart ? dayBefore(nextStart) : null,
-    position_pct: num(fd, "position_pct", 100),
-    hours_per_week: num(fd, "hours_per_week", 37.5),
+    ...termsHours(fd, 37.5, num(fd, "hours_per_week", 37.5)),
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
     paid_holidays: fd.get("paid_holidays") === "on",
     days_per_week: Math.min(6, Math.max(1, num(fd, "days_per_week", 5))),
@@ -331,7 +329,8 @@ export async function addTerms(_: ActionState, fd: FormData): Promise<ActionStat
 export async function setMemberRole(fd: FormData) {
   const ctx = await requireAdmin();
   const userId = text(fd, "user_id")!;
-  const role = text(fd, "role") === "admin" ? "admin" : "employee";
+  const r = text(fd, "role");
+  const role = r === "admin" ? "admin" : r === "manager" ? "manager" : "employee";
   if (userId === ctx.userId) return;
   await ctx.supabase.from("memberships").update({ role }).eq("org_id", ctx.org.id).eq("user_id", userId).neq("role", "owner");
   revalidatePath(`/ansatte`, "layout");

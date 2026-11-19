@@ -55,7 +55,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
     .eq("org_id", ctx.org.id)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (!ctx.isAdmin) q = q.eq("employee_id", ctx.employeeId ?? "");
+  if (!ctx.canPlan) q = q.eq("employee_id", ctx.employeeId ?? "");
   const [{ data }, names] = await Promise.all([q, colleagues(ctx)]);
   const rows = (data ?? []) as unknown as Req[];
   const pending = rows.filter((r) => r.status === "pending");
@@ -73,18 +73,18 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       {feil && <p className="card bg-bad-soft text-sm text-bad">{feil}</p>}
 
       <section className="card p-0">
-        <h2 className="h2 px-4 pt-4">{ctx.isAdmin ? "Venter på deg" : "Dine ventende forespørsler"}</h2>
+        <h2 className="h2 px-4 pt-4">{ctx.canPlan ? "Venter på deg" : "Dine ventende forespørsler"}</h2>
         {pending.length === 0 ? <p className="p-4 text-sm text-muted">Ingenting venter.</p> : (
           <ul className="mt-2 divide-y divide-line">
             {pending.map((r) => (
               <li key={r.id} className="space-y-2 px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="text-sm">
-                    {ctx.isAdmin && <div className="font-medium">{names.get(r.employee_id)}</div>}
+                    {ctx.canPlan && <div className="font-medium">{names.get(r.employee_id)}</div>}
                     <div>{r.kind === "open_shift" ? "Vil ta ledig vakt" : "Tilbyr seg"}: {when(r)}</div>
                     {r.comment && <div className="text-muted">«{r.comment}»</div>}
                   </div>
-                  {ctx.isAdmin ? (
+                  {ctx.canPlan ? (
                     <form action={decideRequest} className="flex gap-2">
                       <input type="hidden" name="id" value={r.id} />
                       <button name="decision" value="approve" className="btn-primary">Godkjenn</button>
@@ -94,7 +94,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                     <form action={cancelRequest}><input type="hidden" name="id" value={r.id} /><button className="btn-ghost">Trekk</button></form>
                   )}
                 </div>
-                {ctx.isAdmin && r.warnings?.length > 0 && (
+                {ctx.canPlan && r.warnings?.length > 0 && (
                   <ul className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
                     {r.warnings.map((w, i) => <li key={i}>⚠ {w.message}</li>)}
                   </ul>
@@ -113,7 +113,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
               const [label, cls] = STATUS[r.status];
               return (
                 <li key={r.id} className="flex items-center justify-between gap-2 px-4 py-2">
-                  <span>{ctx.isAdmin && <b>{names.get(r.employee_id)} · </b>}{when(r)}</span>
+                  <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{when(r)}</span>
                   <span className={`badge ${cls}`}>{label}</span>
                 </li>
               );

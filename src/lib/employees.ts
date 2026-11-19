@@ -14,6 +14,18 @@ function num(fd: FormData, key: string, fallback: number) {
 
 type AdminCtx = Awaited<ReturnType<typeof requireAdmin>>;
 
+/**
+ * Stillingsprosent og timer fra skjemaet. Tilkalling (avkrysset, eller 0 %) gir 0 % og 0 t/uke:
+ * da finnes ingen avtalt tid som må fylles, og alle timer opp til heltid er ordinære.
+ */
+export function termsHours(fd: FormData, fullTime: number, fallbackHours?: number) {
+  const onCall = fd.get("on_call") === "on" || num(fd, "position_pct", 100) === 0;
+  if (onCall) return { on_call: true, position_pct: 0, hours_per_week: 0 };
+  const pct = Math.min(100, Math.max(1, num(fd, "position_pct", 100)));
+  const hours = text(fd, "hours_per_week") ? Math.max(0, num(fd, "hours_per_week", 37.5)) : fallbackHours ?? Math.round(fullTime * pct) / 100;
+  return { on_call: false, position_pct: pct, hours_per_week: hours };
+}
+
 /** Lager ansattkort og første avtale. Brukes fra ansattsiden og fra vaktplanen. */
 export async function insertEmployee(ctx: AdminCtx, fd: FormData): Promise<{ id?: string; error?: string }> {
   const fullName = text(fd, "full_name");
@@ -36,15 +48,13 @@ export async function insertEmployee(ctx: AdminCtx, fd: FormData): Promise<{ id?
     .single();
   if (error) return { error: error.code === "23505" ? "Det finnes allerede en ansatt med denne e-posten." : error.message };
 
-  const pct = Math.min(100, Math.max(1, num(fd, "position_pct", 100)));
   const { data: org } = await ctx.supabase.from("organizations").select("full_time_hours_week, vacation_days_year").eq("id", ctx.org.id).single();
   const fullTime = Number(org?.full_time_hours_week ?? 37.5);
   const { error: termsError } = await ctx.supabase.from("employment_terms").insert({
     org_id: ctx.org.id,
     employee_id: emp.id,
     valid_from: startDate,
-    position_pct: pct,
-    hours_per_week: Math.round(fullTime * pct) / 100,
+    ...termsHours(fd, fullTime, undefined),
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
     paid_holidays: true,
     vacation_days: Number(org?.vacation_days_year ?? 25),

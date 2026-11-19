@@ -1060,5 +1060,108 @@ exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
 reset role;
 update organizations set sick_self_report = true where id = :'org_a';
 
+-- Leder og avdelinger: Kari blir leder for Værnes; Ola jobber på Stjørdal; Per på Værnes
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into departments (org_id, name) values (:'org_a', 'Værnes') returning id as dep_v \gset
+insert into departments (org_id, name) values (:'org_a', 'Stjørdal') returning id as dep_s \gset
+insert into employees (org_id, full_name) values (:'org_a', 'Per Værnes') returning id as per \gset
+select id as kari_emp from employees where org_id = :'org_a' and full_name = 'Kari Nordmann' \gset
+select id as ola_emp from employees where org_id = :'org_a' and full_name = 'Ola Nordmann' \gset
+insert into employee_departments (org_id, employee_id, department_id, is_home) values
+  (:'org_a', :'per', :'dep_v', true), (:'org_a', :'ola_emp', :'dep_s', true), (:'org_a', :'kari_emp', :'dep_v', true);
+delete from memberships where org_id = :'org_a' and user_id = '00000000-0000-0000-0000-0000000000a2';
+insert into memberships (org_id, user_id, role) values (:'org_a', '00000000-0000-0000-0000-0000000000a2', 'manager');
+update employees set user_id = '00000000-0000-0000-0000-0000000000a2' where id = :'kari_emp';
+insert into manager_departments (org_id, user_id, department_id) values (:'org_a', '00000000-0000-0000-0000-0000000000a2', :'dep_v');
+
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select pg_temp.check(is_manager(:'org_a') and can_plan(:'org_a') and not is_admin(:'org_a') and mfa_required(), 'lederrolle');
+select pg_temp.check((select count(*) from employees where org_id = :'org_a') >= 3, 'leder ser ikke de ansatte');
+insert into shifts (org_id, employee_id, department_id, starts_at, ends_at, status)
+values (:'org_a', :'per', :'dep_v', '2027-01-04 08:00+01', '2027-01-04 16:00+01', 'draft');
+do $$ begin
+  insert into shifts (org_id, employee_id, department_id, starts_at, ends_at, status)
+  select o.id, e.id, d.id, '2027-01-04 08:00+01', '2027-01-04 16:00+01', 'draft'
+  from organizations o join employees e on e.org_id = o.id and e.full_name = 'Ola Nordmann' join departments d on d.org_id = o.id and d.name = 'Stjørdal'
+  where o.org_number = '123456789';
+  raise exception 'FEIL: leder la vakt i annen avdeling';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.check(publish_shifts(:'org_a', '2027-01-01', '2027-01-31') = 1, 'leder publiserte ikke egen avdeling');
+do $$ begin
+  update organizations set name = 'Hacket' where org_number = '123456789';
+  if exists (select 1 from organizations where name = 'Hacket') then raise exception 'FEIL: leder endret bedriften'; end if;
+end $$;
+do $$ begin
+  update employees set full_name = 'Endret' where full_name = 'Ola Nordmann';
+  if exists (select 1 from employees where full_name = 'Endret') then raise exception 'FEIL: leder endret ansattkort'; end if;
+end $$;
+-- Bemanningsbehov: bare egne avdelinger
+insert into staffing_templates (org_id, weekday, start_time, end_time, required, department_id) values (:'org_a', 1, '08:00', '16:00', 1, :'dep_v');
+do $$ begin
+  insert into staffing_templates (org_id, weekday, start_time, end_time, required, department_id)
+  select o.id, 1, '08:00', '16:00', 1, null from organizations o where o.org_number = '123456789';
+  raise exception 'FEIL: leder la inn behov for hele bedriften';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+
+-- Fravær: Per (Værnes) varsler Kari; Ola (Stjørdal, uten leder) varsler eier
+reset role;
+select pg_temp.check(exists (select 1 from leaders_for(:'org_a', :'per') l where l.user_id = '00000000-0000-0000-0000-0000000000a2')
+  and not exists (select 1 from leaders_for(:'org_a', :'per') l where l.user_id = '00000000-0000-0000-0000-0000000000a1'), 'varsel til avdelingsleder');
+select pg_temp.check(exists (select 1 from leaders_for(:'org_a', :'ola_emp') l where l.user_id = '00000000-0000-0000-0000-0000000000a1'), 'varsel til eier når avdelingen mangler leder');
+insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date)
+select :'org_a', :'per', id, '2027-01-05', '2027-01-05' from absence_types where org_id = :'org_a' and key = 'ferie' returning id as per_ferie \gset
+insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date)
+select :'org_a', :'ola_emp', id, '2027-01-06', '2027-01-06' from absence_types where org_id = :'org_a' and key = 'ferie' returning id as ola_ferie \gset
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select decide_absence(:'per_ferie', true, false);
+do $$ begin
+  perform decide_absence((select id from absence_requests a join employees e on e.id = a.employee_id where e.full_name = 'Ola Nordmann' and a.from_date = '2027-01-06'), true, false);
+  raise exception 'FEIL: leder godkjente fravær i annen avdeling';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+do $$ begin perform lock_pay_period((select id from organizations where org_number = '123456789'), '2027-01-01', '2027-01-31', 'x');
+  raise exception 'FEIL: leder låste lønn';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+-- Pårørende: egen registrering; leder ser bare for ansatte i sine avdelinger
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+insert into emergency_contacts (org_id, employee_id, name, relation, phone) values (:'org_a', :'ola_emp', 'Mor Nordmann', 'mor', '900 00 000');
+select pg_temp.check((select count(*) from emergency_contacts) = 1, 'ansatt ser egne pårørende');
+select set_config('t.per', :'per', false), set_config('t.org', :'org_a', false);
+do $$ begin
+  insert into emergency_contacts (org_id, employee_id, name, phone)
+    values (current_setting('t.org')::uuid, current_setting('t.per')::uuid, 'Feil', '12345');
+  raise exception 'FEIL: ansatt la inn pårørende for en annen';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into emergency_contacts (org_id, employee_id, name, phone) values (:'org_a', :'per', 'Kone Værnes', '911 11 111');
+select pg_temp.check((select count(*) from emergency_contacts) = 2, 'admin ser alle pårørende');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select pg_temp.check((select count(*) from emergency_contacts) = 1 and exists (select 1 from emergency_contacts where employee_id = :'per'), 'leder ser bare pårørende i egen avdeling');
+delete from emergency_contacts where employee_id = :'per';
+reset role;
+select pg_temp.check((select count(*) from emergency_contacts) = 2, 'leder kan ikke slette pårørende');
+-- Tilkalling: 0 % er bare lov med tilkalling
+do $$ begin
+  insert into employment_terms (org_id, employee_id, valid_from, position_pct, hours_per_week)
+    values (current_setting('t.org')::uuid, current_setting('t.per')::uuid, '2030-01-01', 0, 0);
+  raise exception 'FEIL: 0 %% uten tilkalling';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+insert into employment_terms (org_id, employee_id, valid_from, position_pct, hours_per_week, on_call)
+  values (:'org_a', :'per', '2030-01-01', 0, 0, true);
+delete from employment_terms where employee_id = :'per' and valid_from = '2030-01-01';
+
+-- Uten avdelinger styrer lederen alt
+reset role;
+update departments set archived_at = now() where org_id = :'org_a';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a2', 'kari@a.no');
+select pg_temp.check(manages_employee(:'org_a', :'ola_emp'), 'uten avdelinger styrer leder alle');
+reset role;
+update memberships set role = 'employee' where org_id = :'org_a' and user_id = '00000000-0000-0000-0000-0000000000a2';
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

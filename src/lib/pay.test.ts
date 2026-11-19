@@ -28,6 +28,17 @@ describe("lønnsgrunnlag", () => {
     expect(line(more, "overtime_50")).toBe(4); // lørdag 08–12 er innenfor vinduet, men over heltid
   });
 
+  it("tilkalling uten avtalt tid: ordinært opp til heltid, og ingen tid må fylles", () => {
+    const vikar: PayEmployee = { ...kari, hoursPerWeek: 0, onCall: true };
+    const days = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map((d) => entry(d, "08:00", "16:00"));
+    const r = calculatePay(vikar, days, [], { from: "2026-11-16", to: "2026-11-22" });
+    expect(line(r, "ordinary")).toBe(37.5);
+    expect(line(r, "extra")).toBe(0);
+    const b = timeBalance(vikar, [entry("2026-11-16", "08:00", "12:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" });
+    expect(b.expectedHours).toBe(0);
+    expect(b.diffHours).toBe(4);
+  });
+
   it("arbeid etter kl. 21 og på søndag er overtid 100 %", () => {
     const r = calculatePay(kari, [entry("2026-11-16", "17:00", "23:00", 0), entry("2026-11-22", "10:00", "14:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" });
     expect(line(r, "ordinary")).toBe(4); // 17–21
