@@ -44,6 +44,11 @@ export function ImportEmployees({ today }: { today: string }) {
   if (!rows) {
     return (
       <form onSubmit={read} className="card space-y-4">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-paper px-3 py-2 text-sm">
+          <span>Usikker på oppsettet? Start med eksempelfila og skriv over med dine egne.</span>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/ansatte/eksempelfil" download className="font-semibold text-brand">Last ned eksempelfil (Excel)</a>
+        </p>
         <label className="block">
           <span className="label">Excel- eller CSV-fil</span>
           <input type="file" name="file" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="input" />
