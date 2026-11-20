@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { RememberView } from "@/components/RememberView";
 import { requireOrg } from "@/lib/context";
 import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from "@/lib/data";
 import { DepartmentPills } from "@/components/DepartmentPills";
@@ -8,8 +10,8 @@ import { groupByRole, primaryRoles, shortName, shortTime, type RosterRole } from
 import { ActionForm, Field } from "@/components/Form";
 import { proposeShift, requestOpenShift } from "./actions";
 
-type View = "dag" | "uke" | "maned";
-type Who = "alle" | "mine";
+type View = "mine" | "dag" | "uke" | "maned";
+const VIEWS: View[] = ["mine", "dag", "uke", "maned"];
 
 const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
 const WD = ["man", "tir", "ons", "tor", "fre", "lør", "søn"];
@@ -31,7 +33,7 @@ function dayLabelLong(date: string) {
   return `${WD[isoWeekday(date) - 1]} ${Number(date.slice(8))}. ${MONTHS[Number(date.slice(5, 7)) - 1]}`;
 }
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: Who; vakt?: string; avdeling?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ dato?: string; visning?: View; vis?: string; vakt?: string; avdeling?: string; valgt?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
   const tz = ctx.org.timezone;
@@ -42,8 +44,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const { data: fs } = await ctx.supabase.from("shifts").select("id, starts_at").eq("id", sp.vakt).maybeSingle();
     if (fs) { sp.dato = localDate(new Date(fs.starts_at), tz); focusShift = fs.id; }
   }
-  const view: View = sp.visning === "dag" || sp.visning === "maned" ? sp.visning : "uke";
-  const who: Who = sp.vis === "alle" || sp.vis === "mine" ? sp.vis : ctx.canPlan || !ctx.employeeId ? "alle" : "mine";
+  // Visningen: fra adressen, ellers den brukeren valgte sist, ellers «Mine vakter» for ansatte og «Uke» for ledere
+  const remembered = (await cookies()).get("vp_vaktplan")?.value as View | undefined;
+  const pick = (v?: string): View | null => (v && VIEWS.includes(v as View) && (v !== "mine" || ctx.employeeId) ? (v as View) : null);
+  const view: View = pick(sp.visning) ?? (sp.vakt ? "uke" : null) ?? pick(remembered) ?? (ctx.employeeId && !ctx.canPlan ? "mine" : "uke");
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.dato ?? "") ? sp.dato! : now;
 
   let from: string;
@@ -51,6 +55,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   if (view === "dag") {
     from = anchor;
     days = 1;
+  } else if (view === "mine") {
+    from = anchor;
+    days = 35;
   } else if (view === "uke") {
     from = mondayOf(anchor);
     days = 7;
@@ -85,7 +92,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   type Abs = { employee_id: string; from_date: string; to_date: string; type_name: string };
   const allAbsences = (absRes.data ?? []) as Abs[];
 
-  const mine = who === "mine" && ctx.employeeId;
+  const mine = false;
   // Ansatte ser bare publiserte vakter; utkast vises for administrator
   const visible = allShifts.filter((s) => s.status === "published" || ctx.canPlan);
   const shifts = mine ? visible.filter((s) => s.employee_id === ctx.employeeId) : visible;
@@ -98,15 +105,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const name = (id: string | null) => (id ? names.get(id) ?? "Ukjent" : "Ledig");
 
   // Navigasjon
-  const step = view === "dag" ? 1 : view === "uke" ? 7 : 0;
+  const step = view === "dag" ? 1 : view === "uke" ? 7 : view === "mine" ? 35 : 0;
   const prev = step ? addDays(anchor, -step) : addDays(anchor.slice(0, 8) + "01", -1);
   const next = step ? addDays(anchor, step) : addDays(anchor.slice(0, 8) + "01", 32);
-  const href = (p: { d?: string; v?: View; w?: Who; a?: string | null }) =>
-    `/vaktplan?visning=${p.v ?? view}&dato=${p.d ?? anchor}&vis=${p.w ?? who}${(p.a === undefined ? dep : p.a) ? `&avdeling=${p.a === undefined ? dep : p.a}` : ""}`;
+  const href = (p: { d?: string; v?: View; a?: string | null }) =>
+    `/vaktplan?visning=${p.v ?? view}&dato=${p.d ?? anchor}${(p.a === undefined ? dep : p.a) ? `&avdeling=${p.a === undefined ? dep : p.a}` : ""}`;
   // Admin trykker på en vakt for å sette personen fraværende eller endre vakten
   const shiftLink = ctx.canPlan ? (s: ShiftRow) => `/vaktplan/vakt/${s.id}?tilbake=${encodeURIComponent(href({}))}` : undefined;
   const title =
-    view === "dag" ? dayLabelLong(anchor)
+    view === "dag" ? (anchor === now ? `I dag, ${dayLabelLong(anchor)}` : dayLabelLong(anchor))
+      : view === "mine" ? (anchor === now ? "Mine vakter" : `Mine vakter fra ${dayLabelLong(anchor)}`)
       : view === "uke" ? `Uke ${weekNumber(from)}`
       : `${MONTHS[Number(anchor.slice(5, 7)) - 1]} ${anchor.slice(0, 4)}`;
   const subtitle = view === "uke" ? `${dayLabelLong(from)} – ${dayLabelLong(to)}` : null;
@@ -129,29 +137,39 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <Link href={href({ d: next })} className="btn-ghost px-3" aria-label="Neste">›</Link>
             {anchor !== now && <Link href={href({ d: now })} className="text-sm font-medium text-brand">I dag</Link>}
           </div>
-          {ctx.canPlan && <Link href={`/vaktplan/rediger?visning=${view === "maned" ? "uke" : view}&dato=${anchor}${dep ? `&avdeling=${dep}` : ""}`} className="btn-primary">Rediger plan</Link>}
+          {ctx.canPlan && <Link href={`/vaktplan/rediger?visning=${view === "maned" || view === "mine" ? "uke" : view}&dato=${anchor}${dep ? `&avdeling=${dep}` : ""}`} className="btn-primary">Rediger plan</Link>}
         </div>
-        {deps.departments.length > 0 && who !== "mine" && (
+        {deps.departments.length > 0 && view !== "mine" && (
           <DepartmentPills departments={deps.departments} selected={dep} hrefFor={(id) => href({ a: id })} />
         )}
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented items={[["dag", "Dag"], ["uke", "Uke"], ["maned", "Måned"]]} active={view} link={(v) => href({ v: v as View })} />
-          {ctx.employeeId && (
-            <Segmented items={[["mine", "Bare mine"], ["alle", "Alle"]]} active={who} link={(w) => href({ w: w as Who })} />
-          )}
-          {ctx.employeeId && (
-            <span className="ml-auto text-sm text-muted">
-              Dine timer {view === "dag" ? "i dag" : view === "uke" ? "denne uka" : "denne måneden"}: <b className="text-ink">{formatHours(myMinutes)}</b>
+        <RememberView view={view} />
+        <nav aria-label="Visning" className="-mx-1 flex gap-1 overflow-x-auto border-b border-line px-1">
+          {([...(ctx.employeeId ? [["mine", "Mine vakter", ""]] : []), ["dag", "Hvem jobber", ""], ["uke", "Uke", "hidden md:flex"], ["maned", "Måned", ""]] as [View, string, string][]).map(([v, label, cls]) => (
+            <Link key={v} href={href({ v, d: v === "mine" || v === "dag" ? now : anchor })} aria-current={v === view ? "page" : undefined}
+              className={`${cls || "flex"} min-h-11 shrink-0 items-center border-b-[3px] px-3 text-sm font-semibold ${v === view ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>
+              {label}
+            </Link>
+          ))}
+          {ctx.employeeId && view !== "mine" && (
+            <span className="ml-auto hidden items-center text-sm text-muted md:flex">
+              Dine timer {view === "dag" ? "denne dagen" : view === "uke" ? "denne uka" : "denne måneden"}: <b className="ml-1 text-ink">{formatHours(myMinutes)}</b>
             </span>
           )}
-        </div>
+        </nav>
       </header>
+
+      {/* ---------------- MINE VAKTER ---------------- */}
+      {view === "mine" && ctx.employeeId && (
+        <AgendaView me={ctx.employeeId} from={from} days={days} now={now} tz={tz} shifts={visible} absences={allAbsences}
+          openShifts={openShifts} requested={requested} roleName={(s) => roleById.get(roleOf(s) ?? "")?.name ?? null} name={name}
+          calendarHref="/profil#kalender" />
+      )}
 
       {/* ---------------- DAG ---------------- */}
       {view === "dag" && (
         <DayView linkFor={shiftLink} date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
           cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.canPlan}
-          canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested} />
+          canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested} me={ctx.employeeId} isToday={anchor === now} />
       )}
 
       {/* ---------------- UKE ---------------- */}
@@ -304,32 +322,69 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             </div>
           </section>
 
-          {/* Mobil: bare dager med noe på */}
-          <div className="space-y-2 md:hidden">
-            {coverage.filter((c) => c.date.slice(0, 7) === anchor.slice(0, 7)).map((c) => {
-              const day = shifts.filter((s) => dateOf(s) === c.date).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-              const away = awayOn(c.date);
-              if (day.length === 0 && away.length === 0 && !c.holiday) return null;
-              return (
-                <Link key={c.date} href={href({ d: c.date, v: "dag" })} className={`card block py-3 ${c.date === now ? "ring-2 ring-brand/40" : ""}`}>
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-semibold capitalize">{dayLabelLong(c.date)}</span>
-                    {c.holiday && <span className="text-xs text-warn">{c.holiday}</span>}
+          {/* Mobil: måned med prikker, og dagen du trykker på under */}
+          {(() => {
+            const sel = sp.valgt && /^\d{4}-\d{2}-\d{2}$/.test(sp.valgt) ? sp.valgt : anchor.slice(0, 7) === now.slice(0, 7) ? now : anchor.slice(0, 8) + "01";
+            const meOn = (d: string) => ctx.employeeId ? shifts.some((s) => s.employee_id === ctx.employeeId && dateOf(s) === d) : shifts.some((s) => s.employee_id && dateOf(s) === d);
+            const offOn = (d: string) => Boolean(ctx.employeeId && absences.some((a) => a.employee_id === ctx.employeeId && a.from_date <= d && a.to_date >= d));
+            const openOn = (d: string) => openShifts.some((s) => dateOf(s) === d);
+            const myCount = coverage.filter((c) => c.date.slice(0, 7) === anchor.slice(0, 7) && meOn(c.date)).length;
+            const day = shifts.filter((s) => s.employee_id && dateOf(s) === sel)
+              .sort((a, b) => (a.employee_id === ctx.employeeId ? -1 : b.employee_id === ctx.employeeId ? 1 : a.starts_at.localeCompare(b.starts_at)));
+            const away = awayOn(sel);
+            const open = openShifts.filter((s) => dateOf(s) === sel);
+            return (
+              <div className="space-y-3 md:hidden">
+                <section className="card p-3">
+                  <p className="pb-2 text-center text-sm text-muted">{ctx.employeeId ? `${myCount} ${myCount === 1 ? "vakt" : "vakter"} på deg denne måneden` : "Dager med vakter er merket"}</p>
+                  <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase text-muted">
+                    {["M", "T", "O", "T", "F", "L", "S"].map((d, i) => <div key={i} className="py-1">{d}</div>)}
                   </div>
-                  <div className="mt-1 space-y-0.5 text-sm">
-                    {day.map((s) => (
-                      <div key={s.id} className="flex justify-between gap-2">
-                        <span className="truncate">{mine ? "Vakt" : shortName(name(s.employee_id))}</span>
-                        <span className="tabular-nums text-muted">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</span>
-                      </div>
-                    ))}
-                    {away.map((a) => <div key={a.employee_id} className="text-warn">{mine ? a.type_name : `${shortName(name(a.employee_id))}: ${a.type_name.toLowerCase()}`}</div>)}
+                  <div className="grid grid-cols-7 gap-y-1">
+                    {coverage.map((c) => {
+                      const inMonth = c.date.slice(0, 7) === anchor.slice(0, 7);
+                      if (!inMonth) return <div key={c.date} />;
+                      const isSel = c.date === sel;
+                      const dot = meOn(c.date) ? "bg-brand" : offOn(c.date) ? "bg-warn" : openOn(c.date) ? "bg-good" : "bg-transparent";
+                      return (
+                        <Link key={c.date} href={`${href({})}&valgt=${c.date}`} scroll={false} aria-label={dayLabelLong(c.date)} aria-current={isSel ? "date" : undefined}
+                          className="flex h-12 flex-col items-center justify-center gap-1">
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] ${isSel ? "bg-brand font-bold text-white" : c.date === now ? "font-bold text-brand ring-2 ring-brand" : c.date < now ? "text-muted" : ""}`}>
+                            {Number(c.date.slice(8))}
+                          </span>
+                          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+                        </Link>
+                      );
+                    })}
                   </div>
-                </Link>
-              );
-            })}
-            {shifts.length === 0 && absences.length === 0 && <p className="card text-sm text-muted">Ingenting denne måneden.</p>}
-          </div>
+                  <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 text-[11px] text-muted">
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" />{ctx.employeeId ? "Du jobber" : "Vakter"}</span>
+                    {ctx.employeeId && <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warn" />Fri/ferie</span>}
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-good" />Ledig vakt</span>
+                  </div>
+                </section>
+                <section className="space-y-2">
+                  <h2 className="h2 px-1 capitalize">{dayLabelLong(sel)}{c0(coverage, sel)?.holiday ? ` · ${c0(coverage, sel)!.holiday}` : ""}</h2>
+                  <div className="card divide-y divide-line p-0 text-sm">
+                    {day.map((s) => {
+                      const meRow = s.employee_id === ctx.employeeId;
+                      const role = roleById.get(roleOf(s) ?? "")?.name;
+                      return (
+                        <div key={s.id} className={`flex justify-between gap-3 px-3 py-2.5 ${meRow ? "bg-brand-soft" : ""}`}>
+                          <span className={meRow ? "font-bold text-brand" : ""}>{meRow ? "Du" : shortName(name(s.employee_id))}{role && <span className="font-normal text-muted"> · {role}</span>}</span>
+                          <span className="tabular-nums text-muted">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</span>
+                        </div>
+                      );
+                    })}
+                    {away.map((a) => <div key={a.employee_id} className="px-3 py-2.5 text-warn">{a.employee_id === ctx.employeeId ? "Du" : shortName(name(a.employee_id))}: {a.type_name.toLowerCase()}</div>)}
+                    {open.map((s) => <div key={s.id} className="px-3 py-2"><OpenShift s={s} tz={tz} canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested.has(s.id)} /></div>)}
+                    {day.length === 0 && away.length === 0 && open.length === 0 && <p className="px-3 py-2.5 text-muted">Ingen vakter denne dagen.</p>}
+                  </div>
+                  <Link href={href({ v: "dag", d: sel })} className="block px-1 text-sm font-semibold text-brand">Se dagen som tidslinje</Link>
+                </section>
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -351,12 +406,106 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
 // ---------------- Deler ----------------
 
-function Segmented({ items, active, link }: { items: [string, string][]; active: string; link: (k: string) => string }) {
+function c0<T extends { date: string }>(list: T[], date: string) {
+  return list.find((c) => c.date === date);
+}
+
+/** «Mine vakter»: egne vakter, fri og ledige vakter fremover, uke for uke, med hvem du jobber med og når. */
+function AgendaView({ me, from, days, now, tz, shifts, absences, openShifts, requested, roleName, name, calendarHref }: {
+  me: string; from: string; days: number; now: string; tz: string; shifts: ShiftRow[];
+  absences: { employee_id: string; from_date: string; to_date: string; type_name: string }[];
+  openShifts: ShiftRow[]; requested: Set<string | null>; roleName: (s: ShiftRow) => string | null; name: (id: string | null) => string; calendarHref: string;
+}) {
+  const dateOf = (s: ShiftRow) => localDate(new Date(s.starts_at), tz);
+  const t = (s: ShiftRow) => shortTime(new Date(s.starts_at), new Date(s.ends_at), tz);
+  const first = (id: string | null) => name(id).split(" ")[0];
+  const mineAll = shifts.filter((s) => s.employee_id === me && s.status === "published").sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const nowMs = Date.now();
+  const next = mineAll.find((s) => new Date(s.ends_at).getTime() > nowMs);
+  const withWhom = (s: ShiftRow) => {
+    const others = shifts.filter((o) => o.employee_id && o.employee_id !== me && o.status === "published" && dateOf(o) === dateOf(s))
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    return others.length ? `Med ${others.map((o) => `${first(o.employee_id)} ${t(o)}`).join(" · ")}` : "Alene på jobb";
+  };
+  const untilNext = (s: ShiftRow) => {
+    const ms = new Date(s.starts_at).getTime() - nowMs;
+    if (ms <= 0) return "pågår nå";
+    const h = Math.floor(ms / 3600000);
+    return h < 1 ? `om ${Math.max(1, Math.round(ms / 60000))} min` : h < 24 ? `om ${h} ${h === 1 ? "time" : "timer"}` : `om ${Math.round(h / 24)} ${Math.round(h / 24) === 1 ? "dag" : "dager"}`;
+  };
+
+  // Uker fra «from»
+  const weeks: { start: string; rows: { date: string; kind: "shift" | "off" | "open"; s?: ShiftRow; label?: string }[]; minutes: number }[] = [];
+  for (let d = from; d < addDays(from, days); d = addDays(d, 1)) {
+    const wStart = mondayOf(d);
+    let w = weeks.find((x) => x.start === wStart);
+    if (!w) { w = { start: wStart, rows: [], minutes: 0 }; weeks.push(w); }
+    for (const s of mineAll.filter((x) => dateOf(x) === d)) {
+      w.rows.push({ date: d, kind: "shift", s });
+      w.minutes += workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes);
+    }
+    const off = absences.find((a) => a.employee_id === me && a.from_date <= d && a.to_date >= d);
+    if (off) w.rows.push({ date: d, kind: "off", label: off.type_name });
+    for (const s of openShifts.filter((x) => dateOf(x) === d && new Date(x.starts_at).getTime() > nowMs)) w.rows.push({ date: d, kind: "open", s });
+  }
+  const weekTitle = (start: string) => start === mondayOf(now) ? `Denne uka · uke ${weekNumber(start)}`
+    : start === addDays(mondayOf(now), 7) ? `Neste uke · uke ${weekNumber(start)}` : `Uke ${weekNumber(start)}`;
+
   return (
-    <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
-      {items.map(([k, label]) => (
-        <Link key={k} href={link(k)} className={`flex min-h-9 items-center rounded-md px-3 font-medium ${k === active ? "bg-brand text-white" : "text-muted"}`}>{label}</Link>
+    <div className="space-y-4">
+      {next ? (
+        <section className="rounded-2xl bg-brand p-4 text-white">
+          <div className="text-sm opacity-85">Neste vakt · {untilNext(next)}</div>
+          <div className="mt-0.5 text-xl font-bold capitalize">{dateOf(next) === now ? "I dag" : dateOf(next) === addDays(now, 1) ? "I morgen" : dayLabelLong(dateOf(next))} {t(next)}</div>
+          <div className="mt-0.5 text-sm opacity-90">{roleName(next) ? `${roleName(next)} · ` : ""}{withWhom(next)}</div>
+        </section>
+      ) : (
+        <p className="card text-sm text-muted">Du har ingen vakter de neste ukene.</p>
+      )}
+      {weeks.filter((w) => w.rows.length).map((w) => (
+        <section key={w.start} className="space-y-1.5">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-sm font-bold">{weekTitle(w.start)}</h2>
+            <span className="text-xs text-muted">{w.minutes ? `${formatHours(w.minutes)} planlagt` : ""}</span>
+          </div>
+          <ul className="card divide-y divide-line p-0">
+            {w.rows.map((r, i) => {
+              const d = r.date;
+              const bar = r.kind === "shift" ? "border-brand" : r.kind === "off" ? "border-warn" : "border-good";
+              return (
+                <li key={`${d}-${i}`} className={`flex items-center gap-3 px-3 py-2.5 ${r.kind === "open" ? "bg-good-soft/50" : ""}`}>
+                  <div className="w-10 shrink-0 text-center">
+                    <div className="text-[11px] font-semibold uppercase text-muted">{WD[isoWeekday(d) - 1]}</div>
+                    <div className={`text-lg font-bold leading-tight ${d === now ? "text-brand" : ""}`}>{Number(d.slice(8))}</div>
+                  </div>
+                  <div className={`min-w-0 flex-1 border-l-4 pl-2.5 ${bar}`}>
+                    {r.kind === "shift" && r.s && (
+                      <>
+                        <div className="font-semibold tabular-nums">{t(r.s)}{roleName(r.s) && <span className="font-normal text-muted"> · {roleName(r.s)}</span>}</div>
+                        <div className="mt-0.5 text-xs text-muted">{withWhom(r.s)}</div>
+                      </>
+                    )}
+                    {r.kind === "off" && <div className="font-semibold text-warn">{r.label}</div>}
+                    {r.kind === "open" && r.s && (
+                      <>
+                        <div className="font-semibold tabular-nums">Ledig vakt {t(r.s)}{roleName(r.s) && <span className="font-normal text-muted"> · {roleName(r.s)}</span>}</div>
+                        <div className="mt-0.5 text-xs text-muted">Meld deg hvis du kan ta den</div>
+                      </>
+                    )}
+                  </div>
+                  {r.kind === "open" && r.s && (requested.has(r.s.id)
+                    ? <span className="badge bg-warn-soft text-warn">Påmeldt</span>
+                    : <form action={requestOpenShift}><input type="hidden" name="shift_id" value={r.s.id} /><button className="min-h-10 rounded-lg bg-brand px-3 text-sm font-semibold text-white">Jeg kan</button></form>)}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ))}
+      <Link href={calendarHref} className="card flex items-center justify-between hover:border-brand">
+        <span><b className="block">Legg vaktene i kalenderen din</b><span className="text-sm text-muted">Apple, Google eller Outlook. Oppdateres av seg selv.</span></span>
+        <span className="text-brand">›</span>
+      </Link>
     </div>
   );
 }
@@ -437,86 +586,86 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor, focu
   );
 }
 
-function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor, canClaim, requested }: {
-  linkFor?: (s: ShiftRow) => string; canClaim: boolean; requested: Set<string | null>;
+/** «Hvem jobber»: én dag som tidslinje (en stolpe per person), deg øverst, og samme dag som liste under. */
+function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor, canClaim, requested, me, isToday }: {
+  linkFor?: (s: ShiftRow) => string; canClaim: boolean; requested: Set<string | null>; me: string | null; isToday: boolean;
   date: string; shifts: ShiftRow[]; away: { employee_id: string; type_name: string }[];
   cov: { closed: boolean; holiday: string | null; gaps: { start: Date; end: Date; missing: number }[]; peakRequired: number };
   roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; isAdmin: boolean;
 }) {
   const { start: d0 } = dayBounds(date, tz);
-  // Tidslinje fra første til siste vakt, minst 08–16
-  const startsH = shifts.map((s) => (new Date(s.starts_at).getTime() - d0.getTime()) / 3600000);
-  const endsH = shifts.map((s) => (new Date(s.ends_at).getTime() - d0.getTime()) / 3600000);
-  const lo = Math.floor(Math.min(8, ...startsH));
-  const hi = Math.ceil(Math.max(16, ...endsH));
-  const pct = (h: number) => `${((h - lo) / (hi - lo)) * 100}%`;
-  const ticks = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).filter((h) => (hi - lo > 12 ? h % 2 === 0 : true));
-  const assigned = shifts.filter((s) => s.employee_id);
-  const open = shifts.filter((s) => !s.employee_id);
-  const groups = groupByRole(assigned, roleOf, roles);
+  const hOf = (iso: string) => (new Date(iso).getTime() - d0.getTime()) / 3600000;
+  const lo = Math.max(0, Math.floor(Math.min(8, ...shifts.map((s) => hOf(s.starts_at)))));
+  const hi = Math.ceil(Math.max(16, ...shifts.map((s) => hOf(s.ends_at))));
+  const pct = (h: number) => `${((Math.min(Math.max(h, lo), hi) - lo) / (hi - lo)) * 100}%`;
+  const step = hi - lo > 12 ? 4 : 2;
+  const ticks = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).filter((h) => (h - lo) % step === 0 && h < hi);
   const roleById = new Map(roles.map((r) => [r.id, r]));
+  const assigned = shifts.filter((s) => s.employee_id)
+    .sort((a, b) => (a.employee_id === me ? -1 : b.employee_id === me ? 1 : a.starts_at.localeCompare(b.starts_at)));
+  const open = shifts.filter((s) => !s.employee_id);
+  const nowH = isToday ? (Date.now() - d0.getTime()) / 3600000 : null;
+  const people = new Set(assigned.map((s) => s.employee_id)).size;
 
   return (
-    <section className="card space-y-4">
-      {(cov.holiday || cov.closed) && <p className="text-sm text-warn">{cov.holiday ?? "Stengt"}</p>}
+    <div className="space-y-3">
+      <p className="px-1 text-sm text-muted">
+        {people ? `${people} på jobb` : "Ingen på jobb"}{cov.holiday ? ` · ${cov.holiday}` : cov.closed ? " · stengt" : ""}
+      </p>
       {isAdmin && cov.gaps.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {cov.gaps.map((g, i) => <span key={i} className="badge bg-bad-soft text-bad">Mangler {g.missing} kl. {localTime(g.start, tz)}–{localTime(g.end, tz)}</span>)}
         </div>
       )}
-      {assigned.length === 0 && open.length === 0 && <p className="text-sm text-muted">Ingen vakter denne dagen.</p>}
-
       {assigned.length > 0 && (
-        <div className="relative ml-28 hidden h-5 text-[11px] text-muted sm:block">
-          {ticks.map((h) => <span key={h} className="absolute -translate-x-1/2 tabular-nums" style={{ left: pct(h) }}>{String(h % 24).padStart(2, "0")}</span>)}
-        </div>
-      )}
-      {groups.map((g) => (
-        <div key={g.role?.id ?? "andre"} className="space-y-1.5">
-          <RoleLabel role={g.role} />
-          {g.items.sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map((s) => {
-            const a = (new Date(s.starts_at).getTime() - d0.getTime()) / 3600000;
-            const b = (new Date(s.ends_at).getTime() - d0.getTime()) / 3600000;
-            const color = roleById.get(roleOf(s) ?? "")?.color ?? "#94a3b8";
-            return (
-              <Row key={s.id} href={linkFor?.(s)}>
-                <div className="w-28 shrink-0 truncate text-sm font-medium sm:w-24">{shortName(name(s.employee_id))}</div>
-                <div className="relative hidden h-7 flex-1 rounded bg-paper sm:block">
-                  <div className={`absolute inset-y-0 flex items-center rounded px-2 text-xs font-semibold text-white ${s.status === "draft" ? "opacity-60" : ""}`}
-                    style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})`, background: color }}>
-                    <span className="truncate tabular-nums">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</span>
+        <section className="card space-y-2 p-3">
+          <div className="relative ml-[5.5rem] h-4 text-[10px] text-muted">
+            {ticks.map((h) => <span key={h} className="absolute tabular-nums" style={{ left: pct(h) }}>{String(h % 24).padStart(2, "0")}</span>)}
+          </div>
+          <div className="relative space-y-1.5">
+            {assigned.map((s) => {
+              const meRow = s.employee_id === me;
+              const color = roleById.get(roleOf(s) ?? "")?.color;
+              const bar = (
+                <div className="flex items-center gap-2">
+                  <div className={`w-20 shrink-0 truncate text-sm ${meRow ? "font-bold text-brand" : "font-medium"}`}>{meRow ? "Du" : shortName(name(s.employee_id)).split(" ")[0]}</div>
+                  <div className="relative h-9 flex-1 rounded-md" style={{ background: "repeating-linear-gradient(90deg, #eef1f5 0 1px, transparent 1px 12.5%)" }}>
+                    <div className={`absolute inset-y-1 flex items-center overflow-hidden whitespace-nowrap rounded-md px-1.5 text-[11px] font-bold ${meRow ? "bg-brand text-white" : "bg-brand-soft text-brand"} ${s.status === "draft" ? "opacity-60" : ""}`}
+                      style={{ left: pct(hOf(s.starts_at)), width: `calc(${pct(hOf(s.ends_at))} - ${pct(hOf(s.starts_at))})`, boxShadow: color && !meRow ? `inset 3px 0 0 ${color}` : undefined }}>
+                      {shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}
+                    </div>
                   </div>
                 </div>
-                <div className="ml-auto text-right text-sm tabular-nums sm:w-16">
-                  <span className="sm:hidden">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)} · </span>
-                  {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
-                  {linkFor && <span className="ml-1 text-muted" aria-hidden>›</span>}
-                </div>
-              </Row>
-            );
-          })}
-        </div>
-      ))}
-      {open.length > 0 && (
-        <div className="space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-brand">Ledige vakter</span>
-          {open.map((s) => <OpenShift key={s.id} s={s} tz={tz} canClaim={canClaim} requested={requested.has(s.id)} />)}
-        </div>
-      )}
-      {away.length > 0 && (
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-warn">Fri / borte</span>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {away.map((a) => <span key={a.employee_id} className="badge bg-warn-soft text-warn">{shortName(name(a.employee_id))}: {a.type_name.toLowerCase()}</span>)}
+              );
+              return linkFor ? <Link key={s.id} href={linkFor(s)} className="block rounded-md hover:bg-paper" title="Endre eller sett fraværende">{bar}</Link> : <div key={s.id}>{bar}</div>;
+            })}
+            {nowH !== null && nowH > lo && nowH < hi && (
+              <div className="pointer-events-none absolute inset-y-0 left-[5.5rem] right-0" aria-hidden>
+                <div className="absolute inset-y-0 w-0.5 bg-bad" style={{ left: pct(nowH) }} />
+              </div>
+            )}
           </div>
-        </div>
+          {nowH !== null && nowH > lo && nowH < hi && <p className="text-[11px] text-muted"><span className="font-bold text-bad">|</span> nå, kl. {localTime(new Date(), tz)}</p>}
+        </section>
       )}
-    </section>
+
+      <section className="card divide-y divide-line p-0 text-sm">
+        {assigned.map((s) => {
+          const meRow = s.employee_id === me;
+          const role = roleById.get(roleOf(s) ?? "")?.name;
+          const row = (
+            <div className={`flex justify-between gap-3 px-3 py-2.5 ${meRow ? "bg-brand-soft" : ""}`}>
+              <span className={meRow ? "font-bold text-brand" : ""}>{meRow ? "Du" : shortName(name(s.employee_id))}{role && <span className="font-normal text-muted"> · {role}</span>}</span>
+              <span className="tabular-nums text-muted">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}{s.break_minutes ? ` · pause ${s.break_minutes} min` : ""}</span>
+            </div>
+          );
+          return linkFor ? <Link key={s.id} href={linkFor(s)} className="block hover:bg-paper">{row}</Link> : <div key={s.id}>{row}</div>;
+        })}
+        {away.map((a) => <div key={a.employee_id} className="px-3 py-2.5 text-warn">{a.employee_id === me ? "Du" : shortName(name(a.employee_id))}: {a.type_name.toLowerCase()}</div>)}
+        {open.map((s) => <div key={s.id} className="px-3 py-2"><OpenShift s={s} tz={tz} canClaim={canClaim} requested={requested.has(s.id)} /></div>)}
+        {assigned.length === 0 && away.length === 0 && open.length === 0 && <p className="px-3 py-2.5 text-muted">Ingen vakter denne dagen.</p>}
+      </section>
+    </div>
   );
 }
 
-function Row({ href, children }: { href?: string; children: React.ReactNode }) {
-  return href
-    ? <Link href={href} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-0.5 hover:bg-paper" title="Endre eller sett fraværende">{children}</Link>
-    : <div className="flex items-center gap-3">{children}</div>;
-}

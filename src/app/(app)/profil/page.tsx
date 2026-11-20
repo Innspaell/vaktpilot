@@ -10,6 +10,7 @@ import { NOTIFICATION_GROUPS } from "@/lib/notification-kinds";
 import { MfaSettings } from "@/components/MfaSettings";
 import { EmergencyContacts, type EmergencyContact } from "@/components/EmergencyContacts";
 import { setTodoDigest } from "../gjore/actions";
+import { CalendarSubscribe } from "@/components/CalendarSubscribe";
 
 async function resetCalendar() {
   "use server";
@@ -91,15 +92,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       {ctx.isLeader && <SupportContact intro="Trenger dere hjelp med Vaktpilot? Kontakt InnSpæll på" className="px-1 text-sm text-muted" />}
       {calendarUrl && (
         <section className="card">
-          <h2 className="h2">Vaktene i mobilkalenderen</h2>
+          <h2 id="kalender" className="h2 scroll-mt-4">Vaktene i din kalender</h2>
           <p className="mt-1 text-sm text-muted">Legg til kalenderen én gang. Nye og endrede vakter og godkjent fravær dukker opp av seg selv. Kalender-appen oppdaterer vanligvis hver time.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <a href={`webcal://${calendarUrl}`} className="btn-primary">Legg til på iPhone / Mac</a>
-            <a href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(`webcal://${calendarUrl}`)}`} target="_blank" rel="noreferrer" className="btn-ghost">Google Kalender</a>
-          </div>
+          <div className="mt-3"><CalendarSubscribe url={calendarUrl} /></div>
           <details className="mt-3 text-sm">
-            <summary className="cursor-pointer text-brand">Vis lenken (Outlook og andre)</summary>
-            <p className="mt-2 break-all rounded-lg bg-paper p-2 font-mono text-xs">https://{calendarUrl}</p>
+            <summary className="cursor-pointer text-brand">Mistet telefonen eller delt lenken?</summary>
             <p className="mt-1 text-xs text-muted">Lenken er personlig. Del den ikke. Har den kommet på avveie, lag en ny:</p>
             <form action={resetCalendar} className="mt-2"><button className="btn-ghost">Lag ny lenke</button></form>
           </details>

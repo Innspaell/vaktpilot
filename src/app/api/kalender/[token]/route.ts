@@ -7,9 +7,9 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 
 type Row = { uid: string; kind: string; title: string; starts_at: string | null; ends_at: string | null;
-  from_date: string | null; to_date: string | null; break_minutes: number; updated: string; org_name: string; tz: string };
+  from_date: string | null; to_date: string | null; break_minutes: number; updated: string; org_name: string; tz: string; note: string | null };
 
-const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
 const utc = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const dateOnly = (d: string) => d.replace(/-/g, "");
 function nextDay(d: string) {
@@ -20,7 +20,7 @@ function nextDay(d: string) {
 /** Linjer i iCal skal brytes etter 75 tegn. */
 const fold = (line: string) => line.match(/.{1,74}/g)?.join("\r\n ") ?? line;
 
-export async function GET(_: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const id = token.replace(/\.ics$/, "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Ikke funnet", { status: 404 });
@@ -28,7 +28,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ token: str
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false },
   });
-  const { data, error } = await supabase.rpc("calendar_feed", { p_token: id });
+  // Valg i lenken: k = kolleger, f = fri og ferie, l = ledige vakter (1/0). Uten valg: kolleger og fri.
+  const q = new URL(req.url).searchParams;
+  const on = (k: string, def: boolean) => (q.has(k) ? q.get(k) === "1" : def);
+  const { data, error } = await supabase.rpc("calendar_feed_v2", { p_token: id, p_colleagues: on("k", true), p_absence: on("f", true), p_open: on("l", false) });
   if (error) return new Response("Feil", { status: 500 });
   const rows = (data ?? []) as Row[];
   const orgName = rows[0]?.org_name ?? "Vaktpilot";
@@ -42,7 +45,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ token: str
     lines.push("BEGIN:VEVENT", `UID:${r.kind}-${r.uid}@vaktpilot`, `DTSTAMP:${now}`, `LAST-MODIFIED:${utc(r.updated)}`);
     if (r.kind === "shift" && r.starts_at && r.ends_at) {
       lines.push(`DTSTART:${utc(r.starts_at)}`, `DTEND:${utc(r.ends_at)}`, `SUMMARY:${esc(`Vakt: ${r.title}`)}`,
-        `DESCRIPTION:${esc(`${orgName}${r.break_minutes ? ` · pause ${r.break_minutes} min` : ""}`)}`, "TRANSP:OPAQUE");
+        `DESCRIPTION:${esc(`${orgName}${r.break_minutes ? ` · pause ${r.break_minutes} min` : ""}${r.note ? `\n${r.note}` : ""}`)}`, "TRANSP:OPAQUE");
+    } else if (r.kind === "open" && r.starts_at && r.ends_at) {
+      lines.push(`DTSTART:${utc(r.starts_at)}`, `DTEND:${utc(r.ends_at)}`, `SUMMARY:${esc(r.title)}`,
+        `DESCRIPTION:${esc(r.note ?? "")}`, "TRANSP:TRANSPARENT");
     } else if (r.from_date && r.to_date) {
       lines.push(`DTSTART;VALUE=DATE:${dateOnly(r.from_date)}`, `DTEND;VALUE=DATE:${nextDay(r.to_date)}`,
         `SUMMARY:${esc(r.title)}`, "TRANSP:TRANSPARENT");
