@@ -4,7 +4,11 @@ import { addDays, isoWeekday, localDate, localTime, workedMinutes, zonedToUtc } 
 export type Fit = "good" | "maybe" | "bad" | "none";
 
 export interface BoardShift { id: string; employeeId: string | null; start: Date; end: Date; breakMinutes: number; draft: boolean; roleColor: string | null; roleName: string | null }
-export interface BoardCell { date: string; shifts: { id: string; time: string; label: string; draft: boolean; color: string }[]; fit: Fit; note: string | null }
+export interface BoardCell {
+  date: string; shifts: { id: string; time: string; label: string; draft: boolean; color: string }[]; fit: Fit; note: string | null;
+  /** Timelønnet uten vakt på en helligdag (hverdag): kan markeres som betalt. Tallet er timene som er markert, ellers null. */
+  holidayPay?: { marked: number | null; hours: number } | null;
+}
 export interface BoardRow { id: string; name: string; hours: string; cells: BoardCell[] }
 export interface BoardDay { date: string; label: string; closed: boolean; holiday: string | null; gaps: string[]; full: boolean; noNeed: boolean; open: { id: string; time: string; label: string; color: string }[] }
 
@@ -17,7 +21,7 @@ export function buildBoard(input: {
   tz: string;
   now?: Date;
   coverage: { date: string; closed: boolean; holiday?: string | null; peakRequired: number; gaps: { start: Date; end: Date; missing: number }[] }[];
-  employees: { id: string; name: string; hoursPerWeek: number | null; onCall: boolean }[];
+  employees: { id: string; name: string; hoursPerWeek: number | null; onCall: boolean; hourly?: boolean; holidayPayments?: Map<string, number> }[];
   shifts: BoardShift[];
   absences: { employeeId: string; from: string; to: string; typeName: string }[];
   availability: { employeeId: string; kind: "available" | "unavailable" | "wants_extra"; date: string | null; weekday: number | null }[];
@@ -78,7 +82,10 @@ export function buildBoard(input: {
         else if (day.gaps.length || day.open.length) { fit = "good"; note = said === "available" || wantsExtra ? "Kan jobbe" : "Mangler folk"; }
         else if (said === "available") { fit = "good"; note = "Kan jobbe"; }
       }
-      return { date, shifts, fit, note };
+      const holidayPay = e.hourly && day.holiday && isoWeekday(date) <= 5 && !here.length
+        ? { marked: e.holidayPayments?.get(date) ?? null, hours: Math.round(((e.hoursPerWeek ?? 0) / 5 || 7.5) * 100) / 100 }
+        : null;
+      return { date, shifts, fit, note, holidayPay };
     });
     return { id: e.id, name: e.name, hours, cells };
   });

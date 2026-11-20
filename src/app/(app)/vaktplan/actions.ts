@@ -511,3 +511,23 @@ async function primaryRoleOf(ctx: Awaited<ReturnType<typeof requirePlanner>>, em
   const list = (data ?? []) as unknown as { work_role_id: string; work_roles: { sort_order: number } | null }[];
   return list.sort((a, b) => (a.work_roles?.sort_order ?? 999) - (b.work_roles?.sort_order ?? 999))[0]?.work_role_id ?? null;
 }
+
+/** Marker (eller fjern) betalt helligdag for en timelønnet uten vakt. Blir ikke en vakt i planen. */
+export async function setHolidayPayment(input: { employeeId: string; date: string; hours: number | null }): Promise<BoardResult> {
+  const ctx = await requirePlanner();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { error: "Ugyldig dato." };
+  if (input.hours === null) {
+    const { error } = await ctx.supabase.from("holiday_payments").delete().eq("org_id", ctx.org.id).eq("employee_id", input.employeeId).eq("date", input.date);
+    if (error) return { error: BOARD_ERR(error.code, error.message) };
+    refresh();
+    return { ok: "Betalt helligdag er fjernet." };
+  }
+  const hours = Math.round(Math.min(24, Math.max(0.25, input.hours)) * 100) / 100;
+  const { error } = await ctx.supabase.from("holiday_payments").upsert(
+    { org_id: ctx.org.id, employee_id: input.employeeId, date: input.date, hours, created_by: ctx.userId },
+    { onConflict: "employee_id,date" },
+  );
+  if (error) return { error: BOARD_ERR(error.code, error.message) };
+  refresh();
+  return { ok: `Markert som betalt helligdag (${hours.toLocaleString("nb-NO")} t). Kommer med i lønnsgrunnlaget, ikke i vaktplanen.` };
+}

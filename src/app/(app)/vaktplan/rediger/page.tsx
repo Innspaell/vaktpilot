@@ -99,13 +99,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   let boardTemplates: { id: string; name: string; start: string; end: string; breakMinutes: number; workRoleId: string | null }[] = [];
   if (ctx.canPlan && view === "uke") {
     const to = addDays(from, days - 1);
-    const [{ data: emps }, { data: terms }, { data: avail }, { data: tpl }, { data: roleLinks }] = await Promise.all([
+    const [{ data: emps }, { data: terms }, { data: avail }, { data: tpl }, { data: roleLinks }, { data: hps }] = await Promise.all([
       ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
-      ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call").eq("org_id", ctx.org.id)
+      ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call, pay_type").eq("org_id", ctx.org.id)
         .lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`),
       ctx.supabase.from("availability").select("employee_id, kind, date, weekday").eq("org_id", ctx.org.id),
       ctx.supabase.from("shift_templates").select("id, name, start_time, end_time, break_minutes, work_role_id").eq("org_id", ctx.org.id).order("start_time"),
       ctx.supabase.from("employee_work_roles").select("employee_id, work_role_id").eq("org_id", ctx.org.id),
+      ctx.supabase.from("holiday_payments").select("employee_id, date, hours").eq("org_id", ctx.org.id).gte("date", from).lte("date", to),
     ]);
     // Samme rekkefølge som i vaktplanen: rollenes rekkefølge, så etternavn
     const roleList = (rolesRes.data ?? []) as RosterRole[];
@@ -121,7 +122,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       employees: list.map((e) => {
         const t = (terms ?? []).filter((x) => x.employee_id === e.id).sort((a, b) => b.valid_from.localeCompare(a.valid_from))
           .find((x) => x.valid_from <= to);
-        return { id: e.id, name: e.full_name, hoursPerWeek: t ? Number(t.hours_per_week) : null, onCall: Boolean(t?.on_call) };
+        return { id: e.id, name: e.full_name, hoursPerWeek: t ? Number(t.hours_per_week) : null, onCall: Boolean(t?.on_call),
+          hourly: (t?.pay_type ?? "hourly") === "hourly",
+          holidayPayments: new Map((hps ?? []).filter((h) => h.employee_id === e.id).map((h) => [h.date as string, Number(h.hours)])) };
       }),
       shifts: shifts.map((s) => {
         const role = s.work_role_id ? roles.get(s.work_role_id) : null;

@@ -51,9 +51,11 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     .eq("org_id", ctx.org.id).eq("status", "approved").lte("from_date", to).gte("to_date", from);
   if (onlyEmployee) absQ = absQ.eq("employee_id", onlyEmployee);
 
+  let hpQ = ctx.supabase.from("holiday_payments").select("employee_id, date, hours").eq("org_id", ctx.org.id).gte("date", from).lte("date", to);
+  if (onlyEmployee) hpQ = hpQ.eq("employee_id", onlyEmployee);
   let evQ = ctx.supabase.from("pay_events").select("id, employee_id, date, key, count, note").eq("org_id", ctx.org.id).gte("date", from).lte("date", to);
   if (onlyEmployee) evQ = evQ.eq("employee_id", onlyEmployee);
-  const [{ data: emps }, { data: org }, { data: ents }, { data: abs }, rules, { data: evs }, { data: maps }, { data: lastExport }, { data: pastShifts }] = await Promise.all([
+  const [{ data: emps }, { data: org }, { data: ents }, { data: abs }, rules, { data: evs }, { data: maps }, { data: lastExport }, { data: pastShifts }, { data: hps }] = await Promise.all([
     empQ,
     ctx.supabase.from("organizations").select("full_time_hours_week").eq("id", ctx.org.id).single(),
     entQ,
@@ -65,6 +67,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
       .eq("org_id", ctx.org.id).eq("pay_periods.starts_on", from).eq("pay_periods.ends_on", to).eq("pay_periods.status", "exported")
       .not("result", "is", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     shQ,
+    hpQ,
   ]);
 
   const fullTime = Number(org?.full_time_hours_week ?? 37.5);
@@ -76,7 +79,8 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
       hoursPerWeek: Number(t?.hours_per_week ?? 0), fullTimeHours: fullTime, onCall: Boolean(t?.on_call),
       // Første dag med avtalt tid i perioden (f.eks. timebasis før fast avtale)
       agreedFrom: (terms ?? []).filter((x) => x.employee_id === e.id && Number(x.hours_per_week) > 0).map((x) => x.valid_from).sort()[0],
-      isShiftWorker: e.is_shift_worker, paidHolidays: t?.paid_holidays ?? true, startDate: e.start_date,
+      isShiftWorker: e.is_shift_worker, paidHolidays: t?.paid_holidays ?? false, startDate: e.start_date,
+      holidayPayments: new Map((hps ?? []).filter((h) => h.employee_id === e.id).map((h) => [h.date as string, Number(h.hours)])),
       averaging: t?.averaging_weeks && t.averaging_from ? { from: t.averaging_from, weeks: t.averaging_weeks } : null,
     };
   });

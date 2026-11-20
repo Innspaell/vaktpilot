@@ -1174,5 +1174,17 @@ reset role;
 select pg_temp.check((select todo_digest from memberships where org_id = :'org_a' and user_id = '00000000-0000-0000-0000-0000000000a3'), 'morgenliste slått på');
 select pg_temp.check((select count(*) from memberships where todo_digest) = 1, 'bare egen morgenliste endres');
 
+-- Betalt helligdag: leder markerer, ansatt kan ikke
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+do $$ begin
+  insert into holiday_payments (org_id, employee_id, date, hours) values (current_setting('t.org')::uuid, current_setting('t.per')::uuid, '2027-05-17', 7.5);
+  raise exception 'FEIL: ansatt markerte betalt helligdag';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into holiday_payments (org_id, employee_id, date, hours) values (:'org_a', :'per', '2027-05-17', 7.5);
+select pg_temp.check((select count(*) from holiday_payments) = 1, 'leder markerer betalt helligdag');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

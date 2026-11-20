@@ -135,6 +135,8 @@ export interface PayEmployee {
   agreedFrom?: string;
   isShiftWorker: boolean;
   paidHolidays: boolean;
+  /** Helligdager lederen har markert som betalt uten vakt: dato → timer */
+  holidayPayments?: Map<string, number>;
   startDate: string;
   /** Gjennomsnittsberegning av arbeidstid (aml. § 10-5): grensene gjelder i snitt over blokker på så mange uker fra en startdato. */
   averaging?: { from: string; weeks: number; dailyHours?: number } | null;
@@ -438,10 +440,10 @@ export function calculatePay(
 
   // Helligdagsgodtgjørelse: timelønnede som ikke jobber en helligdag på en hverdag
   const dayMinutes = (contractMin / 5);
-  if (employee.payType === "hourly" && employee.paidHolidays) {
+  if (employee.payType === "hourly" && (employee.paidHolidays || employee.holidayPayments?.size)) {
     let hpMin = 0;
     const hpDates: string[] = [];
-    for (let d = period.from; d <= period.to; d = addDays(d, 1)) {
+    for (let d = period.from; employee.paidHolidays && d <= period.to; d = addDays(d, 1)) {
       const h = holidayOn(d);
       if (!h || isoWeekday(d) > 5) continue;
       const hp = rulesAt(d).holidayPay;
@@ -453,9 +455,15 @@ export function calculatePay(
       hpMin += dayMinutes;
       hpDates.push(`${dayLabel(d)}: ${h.name}`);
     }
+    for (const [d, h] of employee.holidayPayments ?? []) {
+      if (d < period.from || d > period.to || hpDates.some((x) => x.startsWith(dayLabel(d)))) continue;
+      if (mine.some((e) => localDate(e.start, tz) === d)) continue;
+      hpMin += h * 60;
+      hpDates.push(`${dayLabel(d)}: ${holidayOn(d)?.name ?? "helligdag"} (markert av leder)`);
+    }
     if (hpMin > 0) lines.push({
       code: "holiday_pay", label: "Helligdagsgodtgjørelse", hours: round2(hpMin / 60), days: hpDates.length,
-      why: "Helligdag på en hverdag uten arbeid. Avtalt tid per dag (avtalt tid per uke delt på 5).", details: hpDates,
+      why: "Helligdag på en hverdag uten arbeid: avtalt tid per dag, eller timene lederen markerte.", details: hpDates,
     });
   }
 

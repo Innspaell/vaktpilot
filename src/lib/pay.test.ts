@@ -47,6 +47,14 @@ describe("lønnsgrunnlag", () => {
     expect(line(r, "extra")).toBe(0);
   });
 
+  it("betalt helligdag markert av leder gir godtgjørelse uten vakt, ellers ingenting", () => {
+    const base: PayEmployee = { ...kari, hoursPerWeek: 22.5, paidHolidays: false };
+    const period = { from: "2026-12-21", to: "2026-12-27" };
+    expect(line(calculatePay(base, [], [], period), "holiday_pay")).toBe(0);
+    const marked: PayEmployee = { ...base, holidayPayments: new Map([["2026-12-25", 4.5]]) };
+    expect(line(calculatePay(marked, [], [], period), "holiday_pay")).toBe(4.5);
+  });
+
   it("saldo regnes bare til og med i dag, og fra avtalen startet", () => {
     const e: PayEmployee = { ...kari, hoursPerWeek: 37.5, agreedFrom: "2026-11-09" };
     const b = timeBalance(e, [], [], { from: "2026-11-01", to: "2026-11-30" }, undefined, "2026-11-13");

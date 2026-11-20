@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { BoardDay, BoardRow, Fit } from "@/lib/plan-board";
-import { moveShiftTo, placeOnDay, removeFromBoard, undoBoard, type BoardResult } from "@/app/(app)/vaktplan/actions";
+import { moveShiftTo, placeOnDay, removeFromBoard, setHolidayPayment, undoBoard, type BoardResult } from "@/app/(app)/vaktplan/actions";
 
 export interface BoardTemplate { id: string; name: string; start: string; end: string; breakMinutes: number; workRoleId: string | null }
 
@@ -133,6 +133,19 @@ export function PlanBoard({ days, rows, templates, department, back }: {
                             className="absolute right-0.5 top-0.5 hidden h-5 w-5 items-center justify-center rounded text-muted hover:bg-bad-soft hover:text-bad group-hover:flex">×</button>
                         </div>
                       ))}
+                      {c.holidayPay && (c.holidayPay.marked !== null ? (
+                        <span className="flex items-center justify-between gap-1 rounded-md bg-good-soft px-1.5 py-1 text-[11px] font-semibold text-good">
+                          Betalt helligdag {c.holidayPay.marked.toLocaleString("nb-NO")} t
+                          <button type="button" aria-label="Fjern betalt helligdag" className="text-good/70 hover:text-bad"
+                            onClick={() => run(() => setHolidayPayment({ employeeId: r.id, date: c.date, hours: null }))}>×</button>
+                        </span>
+                      ) : (
+                        <button type="button" title="Timelønnede får bare lønn for helligdager de jobber. Marker her hvis vedkommende likevel skal ha betalt, uten at det blir en vakt."
+                          className="rounded-md border border-dashed border-line px-1.5 py-1 text-left text-[11px] text-muted hover:border-good hover:text-good"
+                          onClick={() => run(() => setHolidayPayment({ employeeId: r.id, date: c.date, hours: c.holidayPay!.hours }))}>
+                          + Betalt helligdag
+                        </button>
+                      ))}
                       {lit && c.note && <span className={`text-[11px] font-semibold ${FIT_TEXT[c.fit]}`}>{c.note}</span>}
                     </div>
                   );
@@ -163,6 +176,7 @@ export function PlanBoard({ days, rows, templates, department, back }: {
       </div>
       <p className="hidden text-xs text-muted md:block">
         Dra en ansatt inn på en dag, eller trykk på navnet og så på dagen. Dra en vakt for å flytte den; hold Ctrl (Alt på Mac) for å kopiere.
+        {days.some((d) => d.holiday) && <> Helligdager: timelønnede får bare lønn hvis de er satt opp, eller markert med «Betalt helligdag» (blir ikke en vakt).</>}
         {activeEmp && <> Fargene viser hvordan dagene passer for {firstName(activeEmp)}: grønn passer, gul bør du tenke over, rød har fravær eller er allerede på jobb.</>}
       </p>
 
