@@ -157,66 +157,78 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       {/* ---------------- UKE ---------------- */}
       {view === "uke" && (
         <>
-          {/* Tabell på PC: ansatte i rader, dager i kolonner */}
-          {!mine && (
-            <section className="card hidden overflow-x-auto p-0 md:block">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-line">
-                    <th className="w-40 px-3 py-2 text-left font-medium text-muted">Ansatt</th>
+          {/* Tabell på PC, samme oppsett som i Planlegge: ansatte i rader, dager i kolonner */}
+          {!mine && (() => {
+            const cols = { gridTemplateColumns: `200px repeat(${coverage.length}, minmax(0, 1fr))` };
+            // Alle med vakt eller fravær denne uka, pluss resten av kollegaene (uten avdelingsfilter)
+            const ids = new Set([...shifts.filter((s) => s.employee_id).map((s) => s.employee_id!), ...absences.map((a) => a.employee_id)]);
+            if (!dep) for (const id of names.keys()) ids.add(id);
+            const people = Array.from(ids).map((id) => ({ id, n: name(id) })).sort((a, b) => a.n.localeCompare(b.n, "nb"));
+            const hoursOf = (id: string) => shifts.filter((s) => s.employee_id === id)
+              .reduce((m, s) => m + workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes), 0);
+            return (
+              <section className="card hidden overflow-x-auto p-0 md:block">
+                <div className="min-w-[60rem]">
+                  <div className="grid border-b border-line bg-paper text-xs font-semibold text-muted" style={cols}>
+                    <div className="px-3 py-2">Ansatt</div>
                     {coverage.map((c) => (
-                      <th key={c.date} className={`px-2 py-2 text-left font-medium ${c.date === now ? "text-brand" : "text-muted"}`}>
-                        <div className="capitalize">{dayLabel(c.date)}</div>
-                        {c.holiday && <div className="truncate text-xs font-normal text-warn">{c.holiday}</div>}
-                        {c.closed && !c.holiday && <div className="text-xs font-normal">Stengt</div>}
-                      </th>
+                      <div key={c.date} className={`border-l border-line px-2 py-2 ${c.date === now ? "text-brand" : ""}`}>
+                        <span className="capitalize">{dayLabel(c.date)}</span>
+                        {c.holiday && <span className="block font-normal text-warn">{c.holiday}</span>}
+                      </div>
                     ))}
-                  </tr>
-                </thead>
-                {(() => {
-                  // Én rad per ansatt som har vakt eller fravær denne uka, gruppert etter hovedrolle
-                  const ids = Array.from(new Set([...shifts.filter((s) => s.employee_id).map((s) => s.employee_id!), ...absences.map((a) => a.employee_id)]));
-                  const people = ids.map((id) => ({ id, n: name(id) }));
-                  const groups = groupByRole(people, (p) => primary.get(p.id) ?? null, roles);
-                  return groups.map((g) => (
-                    <tbody key={g.role?.id ?? "andre"}>
-                      <tr><td colSpan={8} className="bg-paper px-3 py-1.5"><RoleLabel role={g.role} /></td></tr>
-                      {g.items.sort((a, b) => a.n.localeCompare(b.n, "nb")).map((p) => (
-                        <tr key={p.id} className={`border-b border-line ${p.id === ctx.employeeId ? "bg-good-soft/40" : ""}`}>
-                          <td className="px-3 py-2 font-medium">{shortName(p.n)}</td>
-                          {coverage.map((c) => {
-                            const day = shifts.filter((s) => s.employee_id === p.id && dateOf(s) === c.date);
-                            const off = absences.find((a) => a.employee_id === p.id && a.from_date <= c.date && a.to_date >= c.date);
-                            return (
-                              <td key={c.date} className="px-2 py-1.5 align-top">
-                                {off && <span className="badge bg-warn-soft text-warn">{off.type_name}</span>}
-                                {day.map((s) => <ShiftChip key={s.id} s={s} tz={tz} role={roleById.get(roleOf(s) ?? "")} href={shiftLink?.(s)} />)}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  ));
-                })()}
-                {openShifts.length > 0 && (
-                  <tbody>
-                    <tr className="border-t border-line">
-                      <td className="px-3 py-2 font-medium text-brand">Ledige vakter</td>
+                  </div>
+                  {ctx.canPlan && (
+                    <div className="grid border-b border-line text-xs" style={cols}>
+                      <div className="px-3 py-2 font-semibold text-muted">Mangler</div>
                       {coverage.map((c) => (
-                        <td key={c.date} className="px-2 py-1.5 align-top">
+                        <div key={c.date} className="flex flex-col gap-1 border-l border-line p-1.5">
+                          {c.closed ? <span className="text-muted">Stengt</span>
+                            : c.gaps.length ? c.gaps.map((g, i) => <span key={i} className="badge bg-bad-soft text-bad">{g.missing} · {localTime(g.start, tz)}–{localTime(g.end, tz)}</span>)
+                            : c.peakRequired > 0 ? <span className="font-semibold text-good">Fullt</span>
+                            : <span className="text-muted">Ingen behov</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {people.map((p) => (
+                    <div key={p.id} className={`grid border-b border-line ${p.id === ctx.employeeId ? "bg-brand-soft/40" : ""}`} style={cols}>
+                      <div className="px-3 py-2.5">
+                        <div className="text-sm font-semibold">{p.n}{p.id === ctx.employeeId && <span className="ml-1.5 text-xs font-normal text-brand">deg</span>}</div>
+                        <div className="text-xs text-muted">{formatHours(hoursOf(p.id))} denne uka</div>
+                      </div>
+                      {coverage.map((c) => {
+                        const day = shifts.filter((s) => s.employee_id === p.id && dateOf(s) === c.date);
+                        const off = absences.find((a) => a.employee_id === p.id && a.from_date <= c.date && a.to_date >= c.date);
+                        return (
+                          <div key={c.date} className={`flex min-h-16 flex-col gap-1 border-l border-line p-1.5 text-xs ${c.date === now ? "bg-paper/60" : ""}`}>
+                            {off && <span className="badge bg-warn-soft text-warn">{off.type_name}</span>}
+                            {day.map((s) => <ShiftChip key={s.id} s={s} tz={tz} role={roleById.get(roleOf(s) ?? "")} href={shiftLink?.(s)} />)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  {openShifts.length > 0 && (
+                    <div className="grid" style={cols}>
+                      <div className="px-3 py-2.5">
+                        <div className="text-sm font-semibold">Ledige vakter</div>
+                        {!ctx.canPlan && ctx.employeeId && <div className="text-xs text-muted">Meld deg på det du kan ta</div>}
+                      </div>
+                      {coverage.map((c) => (
+                        <div key={c.date} className="flex min-h-12 flex-col gap-1 border-l border-line bg-brand-soft/40 p-1.5">
                           {openShifts.filter((s) => dateOf(s) === c.date).map((s) => (
                             <OpenShift key={s.id} s={s} tz={tz} canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested.has(s.id)} compact />
                           ))}
-                        </td>
+                        </div>
                       ))}
-                    </tr>
-                  </tbody>
-                )}
-              </table>
-              {shifts.length === 0 && absences.length === 0 && <p className="p-4 text-sm text-muted">Ingen vakter denne uka.</p>}
-            </section>
-          )}
+                    </div>
+                  )}
+                </div>
+                {people.length === 0 && <p className="p-4 text-sm text-muted">Ingen vakter denne uka.</p>}
+              </section>
+            );
+          })()}
 
           {/* Liste per dag: mobil, og «bare mine» */}
           <div className={`space-y-3 ${mine ? "" : "md:hidden"}`}>
@@ -359,11 +371,11 @@ function RoleLabel({ role }: { role: RosterRole | null }) {
 }
 
 function ShiftChip({ s, tz, role, href }: { s: ShiftRow; tz: string; role?: RosterRole; href?: string }) {
-  const cls = `mb-1 block rounded-md border-l-4 px-2 py-1 ${s.status === "draft" ? "border-dashed bg-white ring-1 ring-line" : "bg-paper"} ${href ? "hover:ring-2 hover:ring-brand/40" : ""}`;
+  const cls = `block rounded-md border-l-4 px-2 py-1 text-xs leading-tight ${s.status === "draft" ? "border-dashed bg-white ring-1 ring-line" : "bg-paper"} ${href ? "hover:ring-2 hover:ring-brand/40" : ""}`;
   const body = (
     <>
       <div className="font-semibold tabular-nums">{shortTime(new Date(s.starts_at), new Date(s.ends_at), tz)}</div>
-      <div className="text-xs text-muted">{formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}{s.status === "draft" ? " · utkast" : ""}</div>
+      <div className="text-xs text-muted">{role?.name ?? formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}{s.status === "draft" ? " · utkast" : ""}</div>
     </>
   );
   return href
