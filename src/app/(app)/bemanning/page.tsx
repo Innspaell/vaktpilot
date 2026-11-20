@@ -139,7 +139,7 @@ export default async function StaffingPage() {
           <ul className="mt-3 divide-y divide-line text-sm">
             {(overrides ?? []).map((o) => (
               <li key={o.id} className="flex items-center justify-between py-2">
-                <span className="capitalize">{formatDateLong(o.date)}: {o.closed ? "Stengt" : <span className="tabular-nums">{hm(o.start_time)}–{hm(o.end_time)}, {o.required} {o.work_role_id ? roleName.get(o.work_role_id) : "ansatte"}</span>}{depBadge(o.department_id)}</span>
+                <span className="inline-block first-letter:uppercase">{formatDateLong(o.date)}: {o.closed ? "Stengt" : <span className="tabular-nums">{hm(o.start_time)}–{hm(o.end_time)}, {o.required} {o.work_role_id ? roleName.get(o.work_role_id) : "ansatte"}</span>}{depBadge(o.department_id)}</span>
                 <form action={deleteOverride}><input type="hidden" name="id" value={o.id} /><button className="px-2 text-muted hover:text-bad" aria-label="Slett">×</button></form>
               </li>
             ))}
@@ -165,7 +165,7 @@ export default async function StaffingPage() {
             const open = openKeys.has(h.key);
             return (
               <li key={h.date} className="flex items-center justify-between gap-2 py-2">
-                <span><span className="capitalize">{formatDateLong(h.date)}</span> <span className="text-muted">· {h.name}</span></span>
+                <span><span className="inline-block first-letter:uppercase">{formatDateLong(h.date)}</span> <span className="text-muted">· {h.name}</span></span>
                 <form action={setHolidayOpen}>
                   <input type="hidden" name="key" value={h.key} />
                   <input type="hidden" name="open" value={open ? "0" : "1"} />

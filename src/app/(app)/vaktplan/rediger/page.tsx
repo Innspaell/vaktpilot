@@ -143,7 +143,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Link href={href(prev)} className="btn-ghost px-3" aria-label="Forrige">‹</Link>
-          <h1 className="h1 min-w-0 capitalize">{title}</h1>
+          <h1 className="h1 min-w-0 first-letter:uppercase">{title}</h1>
           <Link href={href(next)} className="btn-ghost px-3" aria-label="Neste">›</Link>
         </div>
         <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
@@ -308,11 +308,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               <section key={c.date} className={`card ${c.date === today(ctx) ? "ring-2 ring-brand/30" : ""}`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   {ctx.canPlan ? (
-                    <Link href={`/vaktplan/rediger?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="h2 capitalize hover:text-brand" title="Legg inn vakt denne dagen">
+                    <Link href={`/vaktplan/rediger?visning=${view}&dato=${anchor}&ny=${c.date}#ny-vakt`} className="inline-block h2 first-letter:uppercase hover:text-brand" title="Legg inn vakt denne dagen">
                       {formatDateLong(c.date)}
                     </Link>
                   ) : (
-                    <h2 className="h2 capitalize">{formatDateLong(c.date)}</h2>
+                    <h2 className="h2 first-letter:uppercase">{formatDateLong(c.date)}</h2>
                   )}
                   <CoverageChip c={c} tz={tz} />
                 </div>

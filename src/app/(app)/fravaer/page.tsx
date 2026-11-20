@@ -173,7 +173,7 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
           <ul className="mt-2 divide-y divide-line text-sm">
             {upcoming.map((a, i) => (
               <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span><b>{name.get(a.employee_id)}</b> · {a.absence_types?.name}: <span className="capitalize">{formatDateLong(a.from_date)}</span>{a.to_date !== a.from_date && <> – <span className="capitalize">{formatDateLong(a.to_date)}</span></>}</span>
+                <span><b>{name.get(a.employee_id)}</b> · {a.absence_types?.name}: <span>{formatDateLong(a.from_date)}</span>{a.to_date !== a.from_date && <> – <span>{formatDateLong(a.to_date)}</span></>}</span>
                 <span className={`badge ${a.status === "approved" ? "bg-good-soft text-good" : "bg-warn-soft text-warn"}`}>{a.status === "approved" ? "Godkjent" : "Venter"}</span>
               </li>
             ))}

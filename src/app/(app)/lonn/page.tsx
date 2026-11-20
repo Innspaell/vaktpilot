@@ -51,7 +51,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Link href={monthLink(-1)} className="btn-ghost px-3" aria-label="Forrige måned">‹</Link>
-          <h1 className="h1 capitalize">Lønn {label}</h1>
+          <h1 className="h1 first-letter:uppercase">Lønn {label}</h1>
           <Link href={monthLink(1)} className="btn-ghost px-3" aria-label="Neste måned">›</Link>
         </div>
         {locked ? <span className="badge bg-paper px-3 py-1 text-muted ring-1 ring-line">Låst og eksportert</span> : null}
@@ -153,9 +153,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                   </table>
                 )}
                 {b.expectedHours > 0 ? (
-                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-paper p-2 text-center text-xs">
+                  <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-paper p-2 text-center text-xs [&>div]:flex [&>div]:flex-col [&>div]:justify-between">
                     <div><div className="text-muted">Avtalt hittil</div><div className="text-base font-semibold tabular-nums">{num(b.expectedHours)} t</div></div>
-                    <div><div className="text-muted">Jobbet + betalt fravær</div><div className="text-base font-semibold tabular-nums">{num(b.workedHours + b.paidAbsenceHours)} t</div></div>
+                    <div><div className="text-muted">Jobbet + fravær</div><div className="text-base font-semibold tabular-nums">{num(b.workedHours + b.paidAbsenceHours)} t</div></div>
                     <div><div className="text-muted">Saldo</div>
                       <div className={`text-base font-semibold tabular-nums ${b.diffHours < -0.01 ? "text-warn" : b.diffHours > 0.01 ? "text-brand" : "text-good"}`}>
                         {b.diffHours > 0 ? "+" : ""}{num(b.diffHours)} t

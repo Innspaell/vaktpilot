@@ -176,7 +176,7 @@ export default async function PlatformPage() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="h1">Plattform</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href="/plattform/lonnsregler" className="btn-ghost">Lønnsregler og tariffer</Link>
           <Link href="/plattform/fakturaer" className="btn-ghost">
             Fakturaer{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-warn px-1.5 text-xs font-bold text-white">{(invoicesWaiting ?? 0) + (invoicesOverdue ?? 0)}</span>}
@@ -294,7 +294,7 @@ export default async function PlatformPage() {
       </section>
 
       <section className="card overflow-x-auto p-0">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[960px] text-sm [&_th]:whitespace-nowrap">
           <thead>
             <tr className="border-b border-line text-left text-xs text-muted">
               <th className="px-4 py-2 font-medium">Bedrift</th>
@@ -305,7 +305,7 @@ export default async function PlatformPage() {
               <th className="px-2 py-2 text-right font-medium">Vakter 30 d</th>
               <th className="px-2 py-2 text-right font-medium">Timer 30 d</th>
               <th className="px-2 py-2 font-medium">Sist aktiv</th>
-              <th className="px-2 py-2 font-medium">Databehandleravtale</th>
+              <th className="px-2 py-2 font-medium" title="Databehandleravtale">Avtale</th>
               <th className="px-2 py-2 text-right font-medium">Pris / mnd</th>
               <th className="px-4 py-2" />
             </tr>
@@ -338,7 +338,7 @@ export default async function PlatformPage() {
                 <td className="px-2 py-2 text-right tabular-nums">{r.logged_in}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{r.shifts_30d}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{r.entries_30d}</td>
-                <td className="px-2 py-2 text-xs">{r.last_activity ? fmt.format(new Date(r.last_activity)) : "–"}</td>
+                <td className="whitespace-nowrap px-2 py-2 text-xs">{r.last_activity ? fmt.format(new Date(r.last_activity)) : "–"}</td>
                 <td className="px-2 py-2 text-xs">
                   {r.dpa_version === DPA_VERSION ? <span className="badge bg-good-soft text-good">Godtatt</span>
                     : r.dpa_version ? <span className="badge bg-warn-soft text-warn">Gammel versjon</span>
@@ -366,7 +366,7 @@ export default async function PlatformPage() {
                   })()}
                 </td>
                 <td className="px-4 py-2">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col items-end gap-1 whitespace-nowrap">
                     {memberOf.has(r.org_id) ? (
                       <span className="text-xs text-muted">Du er med</span>
                     ) : (

@@ -24,7 +24,7 @@ export async function SwapSection({ ctx, preselect }: { ctx: Ctx; preselect?: st
   ]);
   const swaps = (swapsData ?? []) as unknown as Swap[];
   const when = (s: Swap["shifts"]) =>
-    s ? <><span className="capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span> <span className="tabular-nums">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span></> : null;
+    s ? <><span className="inline-block first-letter:uppercase">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span> <span className="tabular-nums">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span></> : null;
   const pending = swaps.filter((w) => w.status === "pending");
   const incoming = pending.filter((w) => w.to_employee_id && w.to_employee_id === ctx.employeeId && !w.to_accepted);
   const mine = swaps.filter((w) => w.from_employee_id === ctx.employeeId || w.to_employee_id === ctx.employeeId);

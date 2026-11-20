@@ -119,7 +119,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <tbody className="divide-y divide-line">
             {r.buckets.map((b) => (
               <tr key={b.key}>
-                <td className="px-4 py-2 capitalize">{b.label}</td>
+                <td className="px-4 py-2 first-letter:uppercase">{b.label}</td>
                 <Td>{num(b.planned)}</Td><Td>{num(b.registered)}</Td>
                 <Td className={Math.abs(b.registered - b.planned) > 0.01 ? "text-warn" : "text-muted"}>{signed(b.registered - b.planned)}</Td>
                 {r.employees.map((e) => {
@@ -141,7 +141,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <ul className="mt-3 divide-y divide-line text-sm">
             {r.coverage.short.map((d) => (
               <li key={d.date} className="flex items-center justify-between py-2">
-                <Link href={`/vaktplan?visning=dag&dato=${d.date}`} className="capitalize text-brand">{formatDateLong(d.date)}</Link>
+                <Link href={`/vaktplan?visning=dag&dato=${d.date}`} className="inline-block first-letter:uppercase text-brand">{formatDateLong(d.date)}</Link>
                 <span className="tabular-nums text-warn">behov {d.required}, planlagt {d.planned} · mangler {num(d.missingHours)} persontimer</span>
               </li>
             ))}

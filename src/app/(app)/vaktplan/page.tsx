@@ -135,8 +135,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           <div className="flex items-center gap-2">
             <Link href={href({ d: prev })} className="btn-ghost px-3" aria-label="Forrige">‹</Link>
             <div>
-              <h1 className="h1 capitalize leading-tight">{title}</h1>
-              {subtitle && <div className="text-sm capitalize text-muted">{subtitle}</div>}
+              <h1 className="h1 first-letter:uppercase leading-tight">{title}</h1>
+              {subtitle && <div className="text-sm first-letter:uppercase text-muted">{subtitle}</div>}
             </div>
             <Link href={href({ d: next })} className="btn-ghost px-3" aria-label="Neste">›</Link>
             {anchor !== now && <Link href={href({ d: now })} className="text-sm font-medium text-brand">I dag</Link>}
@@ -195,7 +195,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     <div className="px-3 py-2">Ansatt</div>
                     {coverage.map((c) => (
                       <div key={c.date} className={`border-l border-line px-2 py-2 ${c.date === now ? "text-brand" : ""}`}>
-                        <span className="capitalize">{dayLabel(c.date)}</span>
+                        <span className="inline-block first-letter:uppercase">{dayLabel(c.date)}</span>
                         {c.holiday && <span className="block font-normal text-warn">{c.holiday}</span>}
                       </div>
                     ))}
@@ -262,7 +262,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               if (mine && day.length === 0 && away.length === 0 && open.length === 0) {
                 return (
                   <div key={c.date} className="flex items-center justify-between px-1 text-sm text-muted">
-                    <span className="capitalize">{dayLabelLong(c.date)}</span>
+                    <span className="inline-block first-letter:uppercase">{dayLabelLong(c.date)}</span>
                     <span>{c.holiday ?? (c.closed ? "Stengt" : "Fri")}</span>
                   </div>
                 );
@@ -270,7 +270,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               return (
                 <section key={c.date} className={`card ${isToday ? "ring-2 ring-brand/40" : ""}`}>
                   <div className="flex items-baseline justify-between gap-2">
-                    <h2 className="h2 capitalize">{dayLabelLong(c.date)}{isToday && <span className="ml-2 text-xs font-semibold uppercase text-brand">i dag</span>}</h2>
+                    <h2 className="h2 first-letter:uppercase">{dayLabelLong(c.date)}{isToday && <span className="ml-2 text-xs font-semibold uppercase text-brand">i dag</span>}</h2>
                     {c.holiday ? <span className="text-xs text-warn">{c.holiday}</span> : c.closed ? <span className="text-xs text-muted">Stengt</span> : null}
                   </div>
                   <GroupedList shifts={day} roles={roles} roleOf={roleOf} name={name} tz={tz} highlight={ctx.employeeId} linkFor={shiftLink} focus={focusShift} />
@@ -368,7 +368,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   </div>
                 </section>
                 <section className="space-y-2">
-                  <h2 className="h2 px-1 capitalize">{dayLabelLong(sel)}{c0(coverage, sel)?.holiday ? ` · ${c0(coverage, sel)!.holiday}` : ""}</h2>
+                  <h2 className="h2 px-1 first-letter:uppercase">{dayLabelLong(sel)}{c0(coverage, sel)?.holiday ? ` · ${c0(coverage, sel)!.holiday}` : ""}</h2>
                   <div className="card divide-y divide-line p-0 text-sm">
                     {day.map((s) => {
                       const meRow = s.employee_id === ctx.employeeId;
@@ -460,7 +460,7 @@ function AgendaView({ byPerson, me, from, days, now, tz, shifts, absences, openS
       {next ? (
         <section className="rounded-2xl bg-brand p-4 text-white">
           <div className="text-sm opacity-85">Neste vakt · {untilNext(next)}</div>
-          <div className="mt-0.5 text-xl font-bold capitalize">{dateOf(next) === now ? "I dag" : dateOf(next) === addDays(now, 1) ? "I morgen" : dayLabelLong(dateOf(next))} {t(next)}</div>
+          <div className="mt-0.5 text-xl font-bold first-letter:uppercase">{dateOf(next) === now ? "I dag" : dateOf(next) === addDays(now, 1) ? "I morgen" : dayLabelLong(dateOf(next))} {t(next)}</div>
           <div className="mt-0.5 text-sm opacity-90">{roleName(next) ? `${roleName(next)} · ` : ""}{withWhom(next)}</div>
         </section>
       ) : (

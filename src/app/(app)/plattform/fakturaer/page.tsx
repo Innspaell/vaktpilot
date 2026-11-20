@@ -57,7 +57,7 @@ export default async function InvoicesPage() {
           <p className="font-semibold text-warn">Fiken er ikke koblet til ennå</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li className={fikenConfigured() ? "text-muted line-through" : ""}>Bestill API-modulen i Fiken (Innstillinger › Moduler, 99 kr/mnd), og lag en personlig API-nøkkel under Rediger konto › Sikkerhet › Personlige API-nøkler.</li>
-            <li className={fikenConfigured() ? "text-muted line-through" : ""}>Legg nøkkelen inn i Vercel som miljøvariabelen <code>FIKEN_API_TOKEN</code> (Production), og deploy på nytt. Ikke lim den inn i chatten.</li>
+            <li className={fikenConfigured() ? "text-muted line-through" : ""}>Legg nøkkelen inn i Vercel som miljøvariabelen <code>FIKEN_API_TOKEN</code> (Production), og deploy på nytt. Nøkkelen er hemmelig: ikke send den på e-post eller i meldinger.</li>
             <li className={settings?.fiken_company ? "text-muted line-through" : ""}>Skriv inn firma-ID (står i adressen når du er inne i Fiken: fiken.no/foretak/<b>firma-id</b>/…) og bankkontoen fakturaene skal betales til.</li>
             <li>Trykk «Test tilkoblingen».</li>
           </ol>
@@ -82,7 +82,7 @@ export default async function InvoicesPage() {
             <Field label="Sperring etter påminnelse (dager)"><input name="block" type="number" min={1} max={90} defaultValue={settings?.block_days ?? 30} className="input" /></Field>
           </div>
         </ActionForm>
-        <ActionForm action={testFikenConnection} submitLabel="Test tilkoblingen" className="flex flex-wrap items-center gap-3"><span /></ActionForm>
+        <ActionForm action={testFikenConnection} submitLabel="Test tilkoblingen" secondary className="mt-3 border-t border-line pt-3"><span className="sr-only">Sjekker at Vaktpilot når Fiken med nøkkelen og firma-ID-en</span></ActionForm>
       </section>
 
       {blocked.length > 0 && (

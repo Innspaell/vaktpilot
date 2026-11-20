@@ -9,6 +9,9 @@ import { TermsDateField } from "@/components/TermsDateField";
 import { VacationOverview } from "@/components/VacationOverview";
 import { loginStatus, TONE_CLASS, type LoginStatusRow } from "@/lib/login-status";
 
+const nb = (n: unknown) => Number(n ?? 0).toLocaleString("nb-NO");
+const dateNo = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
 export default async function EmployeePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ny?: string }> }) {
   const { id } = await params;
   const { ny } = await searchParams;
@@ -59,7 +62,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <Field label="Sluttdato" hint="Tilgangen stenges fra denne datoen.">
             <input name="end_date" type="date" defaultValue={e.end_date ?? ""} className="input" />
           </Field>
-          <Field label="Stillingsprosent" hint={current ? `Gjelder avtalen fra ${current.valid_from}. Endring fra en senere dato: bruk «Ny avtale» under.` : undefined}>
+          <Field label="Stillingsprosent" hint={current ? `Gjelder avtalen fra ${dateNo(current.valid_from)}. Endring fra en senere dato: bruk «Ny avtale» under.` : undefined}>
             <input name="position_pct" type="number" min={0} max={100} step="0.5" defaultValue={Number(current?.position_pct ?? 100)} className="input" />
           </Field>
           <Field label="Timer per uke" hint="Tomt = regnes ut fra stillingsprosent og heltid.">
@@ -117,7 +120,7 @@ export default async function EmployeePage({ params, searchParams }: { params: P
         <h2 className="h2">Avtale</h2>
         {current ? (
           <p className="mt-1 text-sm text-muted">
-            Gjelder fra {current.valid_from}: {current.on_call ? "tilkalling, ingen avtalt tid" : `${Number(current.position_pct)} % · ${Number(current.hours_per_week)} t/uke`} ·{" "}
+            Gjelder fra {dateNo(current.valid_from)}: {current.on_call ? "tilkalling, ingen avtalt tid" : `${nb(current.position_pct)} % · ${nb(current.hours_per_week)} t/uke`} ·{" "}
             {current.pay_type === "fixed" ? "fastlønn" : "timelønn"} · {current.paid_holidays ? "betalte helligdager" : "ikke betalte helligdager"} ·{" "}
             {Number(current.days_per_week ?? 5)} arbeidsdager i uka
             {current.pay_rule_set_id ? ` · egen tariff: ${(ruleSets ?? []).find((r) => r.id === current.pay_rule_set_id)?.name ?? "ukjent"}` : ""}
@@ -262,7 +265,7 @@ async function ManagerView({ ctx, id }: { ctx: AppContext & { org: NonNullable<A
     ["Startdato", d(e.start_date)],
     ...(e.end_date ? [["Sluttdato", d(e.end_date)] as [string, React.ReactNode]] : []),
     ["Roller", roles || "–"],
-    ["Stilling", term ? (term.on_call ? "Tilkalling, ingen avtalt arbeidstid" : `${Number(term.position_pct)} % · ${Number(term.hours_per_week)} t/uke`) + ` · ${term.pay_type === "fixed" ? "fastlønn" : "timelønn"}` : "–"],
+    ["Stilling", term ? (term.on_call ? "Tilkalling, ingen avtalt arbeidstid" : `${nb(term.position_pct)} % · ${nb(term.hours_per_week)} t/uke`) + ` · ${term.pay_type === "fixed" ? "fastlønn" : "timelønn"}` : "–"],
   ];
   return (
     <div className="space-y-4">

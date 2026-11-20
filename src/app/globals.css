@@ -29,6 +29,8 @@ body {
   .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 bg-brand text-white hover:brightness-110; }
   .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 border border-line bg-white text-ink hover:bg-paper; }
   .input { @apply w-full rounded-lg border border-line bg-white px-3 py-2.5 text-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/20; }
+  input[type="file"] { @apply max-w-full text-sm text-muted; }
+  input[type="file"]::file-selector-button { @apply mr-3 cursor-pointer rounded-lg border border-line bg-white px-3 py-2 text-sm font-semibold text-ink; }
   .label { @apply mb-1 block text-sm font-medium text-muted; }
   .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold; }
   .h1 { @apply text-2xl font-bold tracking-tight; }

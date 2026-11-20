@@ -64,7 +64,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const when = (r: Req) => {
     const s = new Date(r.shifts?.starts_at ?? r.requested_start!);
     const e = new Date(r.shifts?.ends_at ?? r.requested_end!);
-    return <><span className="capitalize">{formatDateLong(localDate(s, tz))}</span> <span className="tabular-nums">{localTime(s, tz)}–{localTime(e, tz)}</span></>;
+    return <><span className="inline-block first-letter:uppercase">{formatDateLong(localDate(s, tz))}</span> <span className="tabular-nums">{localTime(s, tz)}–{localTime(e, tz)}</span></>;
   };
 
   return (

@@ -77,7 +77,7 @@ export default async function Home() {
     return (
       <div className="space-y-4">
         <header>
-          <h1 className="h1 capitalize">{formatDateLong(date)}</h1>
+          <h1 className="h1 first-letter:uppercase">{formatDateLong(date)}</h1>
           {todayCov.holiday && <p className="mt-1 text-warn">{todayCov.holiday}</p>}
         </header>
 
@@ -99,7 +99,7 @@ export default async function Home() {
           <Link href="/lonn" className="card hover:border-brand">
             <div className="text-sm text-muted">Neste lønnskjøring</div>
             <div className="mt-1 text-2xl font-bold tabular-nums">{payIn === 0 ? "i dag" : `om ${payIn} ${payIn === 1 ? "dag" : "dager"}`}</div>
-            <div className="text-sm text-muted capitalize">{formatDateLong(nextPay)}</div>
+            <div className="text-sm text-muted first-letter:uppercase">{formatDateLong(nextPay)}</div>
           </Link>
         </div>
 
@@ -206,7 +206,7 @@ export default async function Home() {
         <h2 className="h2">Neste vakt</h2>
         {next ? (
           <>
-            <p className="mt-1 text-xl font-semibold capitalize">{formatDateLong(localDate(new Date(next.starts_at), tz))}</p>
+            <p className="mt-1 text-xl font-semibold first-letter:uppercase">{formatDateLong(localDate(new Date(next.starts_at), tz))}</p>
             <p className="tabular-nums text-muted">{time(next)}</p>
             {coworkers.length > 0 && <p className="mt-2 text-sm text-muted">Sammen med {coworkers.join(", ")}</p>}
           </>
@@ -226,7 +226,7 @@ export default async function Home() {
           {mine.length === 0 ? <p className="mt-2 text-sm text-muted">Ingen vakter.</p> : (
             <ul className="mt-2 space-y-1 text-sm">
               {mine.map((s) => (
-                <li key={s.id} className="flex justify-between"><span className="capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span><span className="tabular-nums text-muted">{time(s)}</span></li>
+                <li key={s.id} className="flex justify-between"><span className="inline-block first-letter:uppercase">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span><span className="tabular-nums text-muted">{time(s)}</span></li>
               ))}
             </ul>
           )}
@@ -259,7 +259,7 @@ function OpenShifts({ shifts, tz, claim }: { shifts: ShiftRow[]; tz: string; cla
       {shifts.slice(0, 5).map((s) => (
         <li key={s.id} className="flex items-center justify-between gap-2">
           <span>
-            <span className="block capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
+            <span className="block first-letter:uppercase">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
             <span className="tabular-nums text-muted">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span>
           </span>
           {claim && (claim.requested.has(s.id)

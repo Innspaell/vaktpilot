@@ -59,14 +59,14 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
       {rows.length === 0 ? (
         <p className="px-4 py-3 text-sm text-muted">Ingen timer eller vakter denne måneden ennå.</p>
       ) : (
-        <table className="mt-2 w-full min-w-[32rem] text-sm">
+        <table className="mt-2 w-full text-xs sm:text-sm">
           <thead className="bg-paper text-left text-xs text-muted">
             <tr>
-              <th className="px-4 py-2">Ansatt</th>
-              <th className="px-3 py-2 text-right">Jobbet hittil</th>
-              <th className="px-3 py-2 text-right">Planlagt resten</th>
-              <th className="px-3 py-2 text-right">Til sammen</th>
-              <th className="px-4 py-2 text-right">Avtalt</th>
+              <th className="py-2 pl-4 pr-2">Ansatt</th>
+              <th className="px-2 py-2 text-right sm:px-3">Jobbet<span className="hidden sm:inline"> hittil</span></th>
+              <th className="px-2 py-2 text-right sm:px-3">Planlagt<span className="hidden sm:inline"> resten</span></th>
+              <th className="px-2 py-2 text-right sm:px-3"><span className="sm:hidden">Sum</span><span className="hidden sm:inline">Til sammen</span></th>
+              <th className="py-2 pl-2 pr-4 text-right">Avtalt</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line tabular-nums">
@@ -75,14 +75,14 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
               const diff = r.agreed === null ? null : total - r.agreed;
               return (
                 <tr key={r.id}>
-                  <td className="px-4 py-2 font-medium"><Link href={`/timer?ansatt=${r.id}`} className="hover:text-brand">{r.name}</Link></td>
-                  <td className="px-3 py-2 text-right">{num(r.done)}</td>
-                  <td className="px-3 py-2 text-right">{num(r.plannedRest)}</td>
-                  <td className="px-3 py-2 text-right font-semibold">{num(total)}</td>
-                  <td className="px-4 py-2 text-right text-muted">
-                    {r.agreed === null ? "ingen fast tid" : (
+                  <td className="py-2 pl-4 pr-2 font-medium"><Link href={`/timer?ansatt=${r.id}`} className="hover:text-brand">{r.name}</Link></td>
+                  <td className="px-2 py-2 text-right sm:px-3">{num(r.done)}</td>
+                  <td className="px-2 py-2 text-right sm:px-3">{num(r.plannedRest)}</td>
+                  <td className="px-2 py-2 text-right sm:px-3 font-semibold">{num(total)}</td>
+                  <td className="py-2 pl-2 pr-4 text-right text-muted">
+                    {r.agreed === null ? "timebasis" : (
                       <>{num(r.agreed)}{diff !== null && Math.abs(diff) >= 0.5 && (
-                        <span className={`ml-1.5 ${diff < 0 ? "text-warn" : "text-brand"}`}>({diff > 0 ? "+" : ""}{num(diff)})</span>
+                        <span className={`block sm:ml-1.5 sm:inline ${diff < 0 ? "text-warn" : "text-brand"}`}>({diff > 0 ? "+" : ""}{num(diff)})</span>
                       )}</>
                     )}
                   </td>
@@ -92,10 +92,10 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
           </tbody>
           <tfoot className="border-t border-line font-semibold tabular-nums">
             <tr>
-              <td className="px-4 py-2">Sum</td>
-              <td className="px-3 py-2 text-right">{num(sum.done)}</td>
-              <td className="px-3 py-2 text-right">{num(sum.rest)}</td>
-              <td className="px-3 py-2 text-right">{num(sum.done + sum.rest)}</td>
+              <td className="py-2 pl-4 pr-2">Sum</td>
+              <td className="px-2 py-2 text-right sm:px-3">{num(sum.done)}</td>
+              <td className="px-2 py-2 text-right sm:px-3">{num(sum.rest)}</td>
+              <td className="px-2 py-2 text-right sm:px-3">{num(sum.done + sum.rest)}</td>
               <td />
             </tr>
           </tfoot>

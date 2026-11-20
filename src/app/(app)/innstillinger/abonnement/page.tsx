@@ -127,7 +127,7 @@ export default async function SubscriptionPage() {
             <tbody className="divide-y divide-line">
               {history.map((m) => (
                 <tr key={m.month}>
-                  <td className="px-4 py-2 capitalize">{monthLabel(m.month)}</td>
+                  <td className="px-4 py-2 first-letter:uppercase">{monthLabel(m.month)}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{m.active_count}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{kr(m.amount)}{m.trial ? <span className="block text-xs text-muted">prøveperiode</span> : m.billed_from ? <span className="block text-xs text-muted">fra {longDate(m.billed_from)}</span> : Number(m.annual_charge) > 0 ? <span className="block text-xs text-muted">årspris</span> : m.annual_covered ? <span className="block text-xs text-muted">betalt for året</span> : null}</td>
                 </tr>

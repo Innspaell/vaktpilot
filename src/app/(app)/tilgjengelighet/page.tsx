@@ -81,7 +81,7 @@ export default async function AvailabilityPage() {
           <ul className="mt-3 divide-y divide-line text-sm">
             {dates.map((d) => (
               <li key={d.id} className="flex items-center justify-between py-2">
-                <span><span className="capitalize">{formatDateLong(d.date!)}</span>: <b className={d.kind === "unavailable" ? "text-bad" : "text-good"}>{d.kind === "unavailable" ? "kan ikke" : "kan gjerne"}</b>{d.note && <span className="text-muted"> · {d.note}</span>}</span>
+                <span><span className="inline-block first-letter:uppercase">{formatDateLong(d.date!)}</span>: <b className={d.kind === "unavailable" ? "text-bad" : "text-good"}>{d.kind === "unavailable" ? "kan ikke" : "kan gjerne"}</b>{d.note && <span className="text-muted"> · {d.note}</span>}</span>
                 <form action={removeAvailability}><input type="hidden" name="id" value={d.id} /><button className="px-2 text-muted hover:text-bad" aria-label="Fjern">×</button></form>
               </li>
             ))}

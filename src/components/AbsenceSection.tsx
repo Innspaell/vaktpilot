@@ -134,7 +134,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
                 <div className="flex flex-wrap items-start justify-between gap-2 text-sm">
                   <div>
                     {ctx.canPlan && <div className="font-medium">{names.get(r.employee_id)}</div>}
-                    <div><b>{r.absence_types?.name}</b>: <span className="capitalize">{range(r)}</span></div>
+                    <div><b>{r.absence_types?.name}</b>: <span>{range(r)}</span></div>
                     <div className="text-muted">{workdaysBetween(r.from_date, r.to_date)} arbeidsdager</div>
                     {r.comment && <div className="text-muted">«{r.comment}»</div>}
                   </div>
@@ -177,7 +177,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
           <ul className="mt-2 divide-y divide-line text-sm">
             {upcoming.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-                <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
+                <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span>{range(r)}</span></span>
                 <span className="badge bg-good-soft text-good">Godkjent</span>
               </li>
             ))}
@@ -193,7 +193,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
               const [label, cls] = STATUS[r.status];
               return (
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span className="capitalize">{range(r)}</span></span>
+                  <span>{ctx.canPlan && <b>{names.get(r.employee_id)} · </b>}{r.absence_types?.name}: <span>{range(r)}</span></span>
                   <span className={`badge ${cls}`}>{label}</span>
                 </li>
               );

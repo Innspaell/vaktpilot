@@ -9,18 +9,22 @@ export function ActionForm({
   children,
   submitLabel = "Lagre",
   className = "space-y-4",
+  secondary = false,
 }: {
   action: (state: ActionState, fd: FormData) => Promise<ActionState>;
   children: React.ReactNode;
   submitLabel?: string;
   className?: string;
+  /** Vis knappen som sekundærknapp (f.eks. «Test tilkoblingen») */
+  secondary?: boolean;
 }) {
   const [state, formAction] = useActionState(action, undefined);
   return (
     <form action={formAction} className={className}>
       {children}
-      <div className="flex items-center gap-3">
-        <Submit label={submitLabel} />
+      {/* Egen rad i rutenett, nederst i rader: knappen står alltid likt under feltene */}
+      <div className="col-span-full flex flex-wrap items-center gap-3 self-end">
+        <Submit label={submitLabel} secondary={secondary} />
         {state?.error && <p className="text-sm text-bad">{state.error}</p>}
         {state?.ok && <p className="text-sm text-good">{state.ok}</p>}
       </div>
@@ -28,11 +32,11 @@ export function ActionForm({
   );
 }
 
-function Submit({ label }: { label: string }) {
+function Submit({ label, secondary }: { label: string; secondary?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button className="btn-primary" disabled={pending}>
-      {pending ? "Lagrer …" : label}
+    <button className={secondary ? "btn-ghost" : "btn-primary"} disabled={pending}>
+      {pending ? (label === "Lagre" ? "Lagrer …" : "Vent litt …") : label}
     </button>
   );
 }

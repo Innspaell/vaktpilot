@@ -23,9 +23,9 @@ export async function Board({ ctx, compact }: { ctx: Ctx; compact?: boolean }) {
   const posts = (data ?? []) as Post[];
   if (compact && posts.length === 0) {
     return (
-      <Link href="/tavle" className="card flex items-center justify-between text-sm hover:border-brand">
+      <Link href="/tavle" className="card flex items-center justify-between gap-3 text-sm hover:border-brand">
         <span><b>Oppslagstavle</b> <span className="text-muted">· ingen beskjeder ennå</span></span>
-        <span className="font-semibold text-brand">Skriv en beskjed</span>
+        <span className="shrink-0 font-semibold text-brand">Skriv en beskjed</span>
       </Link>
     );
   }

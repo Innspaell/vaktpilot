@@ -122,7 +122,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                     <label className="flex items-start gap-3">
                       <input type="checkbox" name="shift_ids" value={s.id} defaultChecked className="mt-1 h-4 w-4" />
                       <span>
-                        <span className="font-medium">{names.get(s.employee_id!) ?? "Ukjent"}</span> · <span className="capitalize">{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
+                        <span className="font-medium">{names.get(s.employee_id!) ?? "Ukjent"}</span> · <span>{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
                         <span className="block tabular-nums text-muted">
                           Planlagt {timeRange(s.starts_at, s.ends_at)}{s.break_minutes > 0 && ` · pause ${s.break_minutes} min`} · {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
                         </span>
@@ -135,7 +135,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                     <label className="flex items-start gap-3">
                       <input type="checkbox" name="ids" value={r.id} defaultChecked className="mt-1 h-4 w-4" />
                       <span>
-                        <span className="font-medium">{names.get(r.employee_id) ?? "Ukjent"}</span> · <span className="capitalize">{formatDateLong(localDate(new Date(r.starts_at), tz))}</span>
+                        <span className="font-medium">{names.get(r.employee_id) ?? "Ukjent"}</span> · <span>{formatDateLong(localDate(new Date(r.starts_at), tz))}</span>
                         <span className="block tabular-nums text-muted">
                           {r.source === "clock" ? "Stemplet" : "Registrert"} {timeRange(r.starts_at, r.ends_at)}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min`} · {formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at!), r.break_minutes))}
                         </span>
@@ -246,7 +246,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                 <li key={s.id} className="rounded-lg border border-line p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <div className="font-medium capitalize">{date === today ? "I dag" : formatDateLong(date)}</div>
+                      <div className="font-medium first-letter:uppercase">{date === today ? "I dag" : formatDateLong(date)}</div>
                       <div className="text-sm tabular-nums text-muted">
                         {timeRange(s.starts_at, s.ends_at)} · pause {s.break_minutes} min · {formatHours(workedMinutes(st, new Date(s.ends_at), s.break_minutes))}
                       </div>
@@ -322,7 +322,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                 <li key={e.id} className="px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <div className="font-medium capitalize">{formatDateLong(date)}</div>
+                      <div className="font-medium first-letter:uppercase">{formatDateLong(date)}</div>
                       <div className="tabular-nums text-muted">
                         {timeRange(e.starts_at, e.ends_at)}{e.break_minutes > 0 && ` · pause ${e.break_minutes} min`}
                         {e.shifts && <PlanDiff e={e} tz={tz} />}
@@ -378,7 +378,7 @@ function AdminRow({ r, name, tz, today }: { r: Entry; name: string; tz: string; 
             ? <input type="checkbox" name="ids" value={r.id} form="godkjenn" defaultChecked className="mt-1 h-4 w-4" />
             : <span className="w-4" />}
           <span>
-            <span className="font-medium">{name}</span> · <span className="capitalize">{formatDateLong(date)}</span>
+            <span className="font-medium">{name}</span> · <span>{formatDateLong(date)}</span>
             <span className="block tabular-nums text-muted">
               {t(r.starts_at)}–{r.ends_at ? t(r.ends_at) : "pågår"}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min`}
               {r.shifts && <PlanDiff e={r} tz={tz} />}

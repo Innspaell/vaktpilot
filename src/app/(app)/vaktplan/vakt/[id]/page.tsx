@@ -46,7 +46,7 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="h1">{s.employee_id ? names.get(s.employee_id) ?? "Ukjent" : "Ledig vakt"}</h1>
-            <p className="mt-1 capitalize text-muted">{formatDateLong(date)}</p>
+            <p className="mt-1 first-letter:uppercase text-muted">{formatDateLong(date)}</p>
           </div>
           {s.status === "draft" && <span className="badge bg-paper text-muted ring-1 ring-line">utkast</span>}
         </div>

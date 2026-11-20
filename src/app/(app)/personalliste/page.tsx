@@ -108,7 +108,7 @@ export default async function PersonnelListPage({ searchParams }: { searchParams
             {(h.address || h.city) && <div className="text-sm text-muted">{[h.address, [h.postal_code, h.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")}</div>}
           </div>
           <div className="text-right">
-            <div className="text-lg font-bold capitalize">Personalliste {formatDateLong(date)} {date.slice(0, 4)}</div>
+            <div className="text-lg font-bold first-letter:uppercase">Personalliste {formatDateLong(date)} {date.slice(0, 4)}</div>
             <div className="text-sm text-muted">
               {people} {people === 1 ? "person" : "personer"}{date === today ? ` · ${inside} inne nå` : ""}
             </div>
