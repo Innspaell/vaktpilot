@@ -12,17 +12,21 @@ export const VENDOR = {
 export const DPA_VERSION = "2026-11";
 
 export const SUBPROCESSORS = [
-  { name: "Supabase Inc.", purpose: "Database, innlogging og fillagring", location: "EU (Stockholm, Sverige)", basis: "EUs standard personvernbestemmelser (SCC)" },
-  { name: "Vercel Inc.", purpose: "Drift av nettsiden og serverfunksjoner", location: "EU (Stockholm) for serverfunksjoner; globalt nettverk for statiske filer", basis: "EUs standard personvernbestemmelser (SCC) og EU–US Data Privacy Framework" },
-  { name: "Resend Inc.", purpose: "Utsending av innloggingskoder og varsler på e-post", location: "EU (Irland)", basis: "EUs standard personvernbestemmelser (SCC)" },
+  { name: "Supabase Inc.", purpose: "Database, innlogging og fillagring", location: "Valgt region: EU (Stockholm, Sverige). Supabase kan i enkelte tilfeller behandle opplysninger utenfor EØS, for eksempel ved drift og support.", basis: "EUs standard personvernbestemmelser (SCC)" },
+  { name: "Vercel Inc.", purpose: "Drift av nettsiden og serverfunksjoner", location: "Valgt region for serverfunksjoner: EU (Stockholm). Vercels avtale åpner for behandling i USA og andre land, blant annet i det globale nettverket for statiske filer.", basis: "EUs standard personvernbestemmelser (SCC) og EU–US Data Privacy Framework" },
+  { name: "Plus Five Five, Inc. (Resend)", purpose: "Utsending av innloggingskoder og varsler på e-post", location: "Valgt region for utsending: EU (Irland). Selskapet holder til i USA, og opplysninger kan behandles der.", basis: "EUs standard personvernbestemmelser (SCC) og EU–US Data Privacy Framework" },
 ];
 
+/** Fiken brukes bare til InnSpæll sin fakturering av bedriften, ikke til opplysninger om ansatte. */
+export const BILLING_NOTE = "Fiken AS (Norge) brukes til InnSpæll sin fakturering av bedriften. Dit sendes bare bedriftens navn, organisasjonsnummer og fakturaadresse eller faktura-e-post. Ingen opplysninger om ansatte sendes til Fiken.";
+
 export const RETENTION = [
-  ["Innlogging og tilgang", "Stenges dagen etter sluttdato"],
-  ["Kontaktinfo, tilgjengelighet og varsler", "Slettes 3 måneder etter sluttdato"],
-  ["Vakter uten registrerte timer", "Beholdes som bemanningshistorikk; navnet anonymiseres etter oppbevaringstiden"],
-  ["Timer, godkjenninger, lønnsgrunnlag og endringslogg", "5 år etter utgangen av regnskapsåret (bokføringsloven), deretter anonymisert"],
-  ["Ferie og fravær (bare type og dato, aldri diagnose)", "5 år etter utgangen av regnskapsåret, deretter anonymisert"],
+  ["Innlogging og tilgang for ansatte", "Stenges dagen etter sluttdato."],
+  ["Kontaktinfo, nærmeste pårørende, ønsker om arbeidstid og varsler", "Slettes 3 måneder etter sluttdato."],
+  ["Timer, godkjenninger og lønnsgrunnlag", "Oppbevares fordi de er dokumentasjon for lønn, som er bokført (bokføringsloven § 13): 5 år etter utgangen av regnskapsåret. Arbeidsgiveren kan velge lengre tid, ikke kortere. Deretter fjernes navn og ansattnummer."],
+  ["Endringslogg (hvem endret hva og når)", "Samme som timer og lønnsgrunnlag, fordi den viser hvordan lønnsgrunnlaget ble til."],
+  ["Ferie og fravær (type og dato, aldri diagnose)", "Samme som timer og lønnsgrunnlag, fordi fraværet inngår i lønn, feriepenger og refusjon av sykepenger. Deretter fjernes navn og ansattnummer."],
+  ["Vakter uten registrerte timer", "Navn og ansattnummer fjernes samtidig som for timer (5 år etter utgangen av regnskapsåret sluttdatoen falt i). Selve vakten beholdes uten navn som historikk over bemanningen."],
 ] as const;
 
 export const DPA_SECTIONS: { title: string; body: string[] }[] = [

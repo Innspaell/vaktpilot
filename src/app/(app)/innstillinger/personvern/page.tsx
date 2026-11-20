@@ -3,6 +3,15 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/context";
 import { DPA_SECTIONS, DPA_VERSION, RETENTION, VENDOR } from "@/lib/legal";
 
+async function savePrivacyContact(fd: FormData) {
+  "use server";
+  const ctx = await requireAdmin();
+  const v = String(fd.get("privacy_contact") ?? "").trim().slice(0, 300);
+  await ctx.supabase.from("organizations").update({ privacy_contact: v || null }).eq("id", ctx.org.id);
+  revalidatePath("/innstillinger/personvern");
+  revalidatePath("/profil");
+}
+
 async function acceptDpa() {
   "use server";
   const ctx = await requireAdmin();
@@ -22,12 +31,25 @@ export default async function PrivacySettingsPage() {
   const { data: acc } = await ctx.supabase.from("dpa_acceptances").select("version, accepted_name, accepted_email, accepted_at")
     .eq("org_id", ctx.org.id).order("accepted_at", { ascending: false });
   const current = (acc ?? []).find((a) => a.version === DPA_VERSION);
+  const { data: orgRow } = await ctx.supabase.from("organizations").select("privacy_contact").eq("id", ctx.org.id).maybeSingle();
   const fmt = new Intl.DateTimeFormat("nb-NO", { dateStyle: "long", timeStyle: "short", timeZone: ctx.org.timezone });
 
   return (
     <div className="space-y-4">
       <Link href="/innstillinger" className="text-sm font-medium text-brand">← Innstillinger</Link>
       <h1 className="h1">Personvern</h1>
+
+      <section className="card">
+        <h2 className="h2">Kontakt for personvern</h2>
+        <p className="mt-1 text-sm text-muted">
+          Vises for de ansatte under Profil → Personvern, sammen med bedriftens navn og org.nr. Skriv hvem de ansatte kan kontakte om opplysningene sine,
+          og eventuelt personvernombud. Tomt = «lederen din eller administrator».
+        </p>
+        <form action={savePrivacyContact} className="mt-3 flex flex-wrap items-end gap-2">
+          <input name="privacy_contact" defaultValue={orgRow?.privacy_contact ?? ""} maxLength={300} placeholder="F.eks. Daglig leder Ola Nordmann, ola@firma.no" className="input min-w-0 flex-1" />
+          <button className="btn-primary">Lagre</button>
+        </form>
+      </section>
 
       <section className="card">
         <h2 className="h2">Databehandleravtale</h2>

@@ -33,6 +33,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   let emailGroups: string[] = [];
   let emailOn = true;
   let digestOn = false;
+  // Arbeidsgiverens kontakt for personvern (tåler at feltet ikke finnes ennå)
+  const { data: privacy } = ctx.org
+    ? await ctx.supabase.from("organizations").select("org_number, privacy_contact").eq("id", ctx.org.id).maybeSingle()
+    : { data: null };
   if (ctx.org && ctx.userId) {
     const [{ data: o }, { data: m }] = await Promise.all([
       ctx.supabase.from("organizations").select("email_prefs").eq("id", ctx.org.id).single(),
@@ -176,6 +180,12 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       </details>
       <section className="card text-sm">
         <h2 className="h2">Personvern</h2>
+        {ctx.org && (
+          <p className="mt-1 text-muted">
+            Behandlingsansvarlig for opplysningene dine er arbeidsgiveren din, <b className="text-ink">{ctx.org.name}</b>{privacy?.org_number ? ` (org.nr. ${privacy.org_number})` : ""}.
+            {" "}{privacy?.privacy_contact ? <>Kontakt for personvern: <b className="text-ink">{privacy.privacy_contact}</b>.</> : <>Spørsmål om personvern går til lederen din eller administrator.</>}
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-3">
           <a href="/api/eksport/meg" className="btn-ghost">Last ned mine data</a>
           <Link href="/personvern" className="btn-ghost">Personvernerklæring</Link>
