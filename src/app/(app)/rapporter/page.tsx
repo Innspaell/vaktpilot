@@ -24,6 +24,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const q = (p: Record<string, string>) => `/rapporter?${new URLSearchParams({ fra: from, til: to, per: grouping, ...p })}`;
   const presets: [string, string, string][] = [
     ["Denne måneden", today.slice(0, 8) + "01", addDays(addDays(today.slice(0, 8) + "01", 32).slice(0, 8) + "01", -1)],
+    ["Neste måned", addDays(today.slice(0, 8) + "01", 32).slice(0, 8) + "01", addDays(addDays(today.slice(0, 8) + "01", 63).slice(0, 8) + "01", -1)],
     ["Forrige måned", addDays(today.slice(0, 8) + "01", -1).slice(0, 8) + "01", addDays(today.slice(0, 8) + "01", -1)],
     ["Hittil i år", today.slice(0, 5) + "01-01", today],
   ];
