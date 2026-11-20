@@ -165,8 +165,11 @@ export default async function EmployeePage({ params, searchParams }: { params: P
             <input type="checkbox" name="on_call" defaultChecked={Boolean(current?.on_call)} className="mt-0.5 h-4 w-4" />
             <span>Tilkallingsvikar eller ekstrahjelp uten avtalt arbeidstid<span className="block text-xs text-muted">Ingen timer må fylles. Stillingsprosent og timer settes til 0, og timer opp til heltid regnes som ordinære.</span></span>
           </label>
-            <label className="flex items-center gap-2 self-end pb-3 text-sm">
-              <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? true} className="h-4 w-4" /> Betalte helligdager
+            <label className="flex items-start gap-2 self-end pb-3 text-sm md:col-span-3">
+              <input type="checkbox" name="paid_holidays" defaultChecked={current?.paid_holidays ?? false} className="mt-0.5 h-4 w-4" />
+              <span>Helligdagsgodtgjørelse (timelønn)
+                <span className="block text-xs text-muted">Betalt for helligdager på hverdager selv om den ansatte ikke jobber, slik noen tariffavtaler krever. Jobber den ansatte på en helligdag, får vedkommende helligdagstillegg uansett.</span>
+              </span>
             </label>
           </ActionForm>
         </details>

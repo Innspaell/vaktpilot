@@ -56,7 +56,7 @@ export async function insertEmployee(ctx: AdminCtx, fd: FormData): Promise<{ id?
     valid_from: startDate,
     ...termsHours(fd, fullTime, undefined),
     pay_type: text(fd, "pay_type") === "fixed" ? "fixed" : "hourly",
-    paid_holidays: true,
+    paid_holidays: false,
     vacation_days: Number(org?.vacation_days_year ?? 25),
   });
   if (termsError) return { error: termsError.message };
