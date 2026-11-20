@@ -4,6 +4,7 @@ import type { AppContext } from "./context";
 import { colleagues, coverageForDays, shiftsBetween } from "./data";
 import { addDays, dayBounds, formatDateLong, localDate, localTime, workedMinutes } from "./time";
 import { loadDepartments, managesEmployee } from "./departments";
+import { loginStatus, type LoginStatusRow } from "./login-status";
 import { loadEmployerPeriods } from "./employer-period-data";
 import { checkPlannedShifts, checkWorkTime } from "./worktime-check";
 
@@ -297,9 +298,25 @@ export const loadTodo = cache(async (ctx: Ctx): Promise<{ items: TodoItem[]; wai
     const noKin = active.filter((e) => e.user_id && !withKin.has(e.id));
     if (noKin.length) items.push({ key: "kin", level: "grey", title: `${noKin.length} ${noKin.length === 1 ? "ansatt mangler" : "ansatte mangler"} nærmeste pårørende`,
       detail: `${nameList(noKin.map((e) => first(e.id)))} · de får varsel i appen til det er lagt inn`, primary: { kind: "link", label: "Se ansatte", href: "/ansatte" } });
-    const noLogin = active.filter((e) => !e.user_id);
-    if (noLogin.length) items.push({ key: "login", level: "grey", title: `${noLogin.length} ${noLogin.length === 1 ? "ansatt har" : "ansatte har"} ikke innlogging`,
-      detail: nameList(noLogin.map((e) => first(e.id))), primary: { kind: "link", label: "Se ansatte", href: "/ansatte" } });
+    // Innlogging: skill mellom ingen innlogging, invitert og innlogging som ikke er brukt ennå
+    const { data: loginRows } = await sb.rpc("employees_login_status", { p_org: org });
+    const login = new Map(((loginRows ?? []) as LoginStatusRow[]).map((r) => [r.employee_id, r]));
+    const groups = new Map<string, string[]>();
+    for (const e of active) {
+      const st = loginStatus(e, login.get(e.id));
+      if (st.tone === "good") continue;
+      groups.set(st.short, [...(groups.get(st.short) ?? []), e.id]);
+    }
+    const LOGIN_TITLE: Record<string, [string, string]> = {
+      "Invitert": ["har fått invitasjon, men ikke tatt den i bruk", "har fått invitasjon, men ikke tatt den i bruk"],
+      "Ikke logget inn": ["har innlogging, men har ikke logget inn ennå", "har innlogging, men har ikke logget inn ennå"],
+      "Invitasjon utløpt": ["har en invitasjon som er utløpt", "har invitasjoner som er utløpt"],
+    };
+    for (const [short, ids] of groups) {
+      const [one, many] = LOGIN_TITLE[short] ?? ["har ikke innlogging", "har ikke innlogging"];
+      items.push({ key: `login-${short}`, level: "grey", title: `${ids.length} ${ids.length === 1 ? `ansatt ${one}` : `ansatte ${many}`}`,
+        detail: nameList(ids.map((id) => first(id))), primary: { kind: "link", label: "Se ansatte", href: "/ansatte" } });
+    }
   }
 
   // ---------------- Egne saker ----------------
