@@ -5,6 +5,7 @@ import { colleagues } from "@/lib/data";
 import { formatDateLong, formatHours, localDate, localTime, workedMinutes } from "@/lib/time";
 import { AssignForm } from "@/components/AssignForm";
 import { AbsentForm } from "@/components/AbsentForm";
+import { ShiftRoleSelect } from "@/components/ShiftRoleSelect";
 import { assignShift, removeShiftAndBack } from "../../actions";
 
 export default async function ShiftPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tilbake?: string }> }) {
@@ -21,7 +22,7 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
   if (!s || s.status === "cancelled") notFound();
 
   const date = localDate(new Date(s.starts_at), tz);
-  const [names, { data: types }, { data: absence }, { data: entry }] = await Promise.all([
+  const [names, { data: types }, { data: absence }, { data: entry }, { data: roleList }] = await Promise.all([
     colleagues(ctx),
     ctx.supabase.from("absence_types").select("id, name, key, is_sick").eq("org_id", ctx.org.id).order("name"),
     s.employee_id
@@ -29,8 +30,8 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
           .eq("employee_id", s.employee_id).in("status", ["approved", "pending"]).lte("from_date", date).gte("to_date", date).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     ctx.supabase.from("time_entries").select("id, status").eq("shift_id", s.id).maybeSingle(),
+    ctx.supabase.from("work_roles").select("id, name, color").eq("org_id", ctx.org.id).order("sort_order").order("name"),
   ]);
-  const role = s.work_roles as unknown as { name: string; color: string } | null;
   const people = Array.from(names, ([pid, name]) => ({ id: pid, name }));
   const abs = absence as unknown as { status: string; absence_types: { name: string } | null } | null;
   // Vanligste årsaker først
@@ -52,7 +53,6 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="text-lg font-semibold tabular-nums">{localTime(new Date(s.starts_at), tz)}–{localTime(new Date(s.ends_at), tz)}</span>
           <span className="text-muted">{formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))} · pause {s.break_minutes} min</span>
-          {role && <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: role.color }} />{role.name}</span>}
         </div>
         {abs && (
           <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
@@ -75,7 +75,13 @@ export default async function ShiftPage({ params, searchParams }: { params: Prom
 
       <section className="card space-y-3">
         <h2 className="h2">Endre vakten</h2>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {(roleList ?? []).length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted">Rolle (oppgave)</span>
+            <ShiftRoleSelect shiftId={s.id} current={s.work_role_id} roles={roleList ?? []} />
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
           <span className="text-sm text-muted">Bytt ansatt</span>
           <AssignForm action={assignShift} shiftId={s.id} current={s.employee_id} people={people} />
         </div>

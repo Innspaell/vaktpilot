@@ -100,6 +100,8 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
 
   const rows = [];
   const warningLines: string[] = [];
+  // Uten valgt rolle: den ansattes hovedrolle
+  const roleId = text(fd, "work_role_id") ?? (employeeId ? await primaryRoleOf(ctx, employeeId) : null);
   for (const d of dates) {
     const { s, e } = interval(d, start, end, ctx.org.timezone);
     if (employeeId && warningLines.length < 4) {
@@ -109,7 +111,7 @@ export async function createShift(_: ActionState, fd: FormData): Promise<ActionS
     rows.push({
       org_id: ctx.org.id,
       employee_id: employeeId,
-      work_role_id: text(fd, "work_role_id"),
+      work_role_id: roleId,
       department_id: departmentId,
       starts_at: s.toISOString(),
       ends_at: e.toISOString(),
@@ -376,7 +378,7 @@ export async function placeOnDay(input: {
     const { s, e } = interval(date, input.start, input.end, tz);
     const brk = Math.max(0, Math.round(input.breakMinutes ?? 0));
     const { data, error } = await ctx.supabase.from("shifts").insert({
-      org_id: ctx.org.id, employee_id: employeeId, work_role_id: input.workRoleId ?? null, department_id: dept,
+      org_id: ctx.org.id, employee_id: employeeId, work_role_id: input.workRoleId ?? await primaryRoleOf(ctx, employeeId), department_id: dept,
       starts_at: s.toISOString(), ends_at: e.toISOString(), break_minutes: brk, status: "draft",
     }).select("id").single();
     if (error || !data) return { error: BOARD_ERR(error?.code, error?.message) };
@@ -406,7 +408,7 @@ export async function placeOnDay(input: {
     const gap = gaps.find((g) => g.workRoleId && roles.has(g.workRoleId)) ?? gaps.find((g) => !g.workRoleId) ?? gaps[0];
     const brk = (gap.end.getTime() - gap.start.getTime()) / 3600000 > 5.5 ? 30 : 0;
     const { data, error } = await ctx.supabase.from("shifts").insert({
-      org_id: ctx.org.id, employee_id: employeeId, work_role_id: gap.workRoleId, department_id: gap.departmentId ?? dept,
+      org_id: ctx.org.id, employee_id: employeeId, work_role_id: gap.workRoleId ?? await primaryRoleOf(ctx, employeeId), department_id: gap.departmentId ?? dept,
       starts_at: gap.start.toISOString(), ends_at: gap.end.toISOString(), break_minutes: brk, status: "draft",
     }).select("id").single();
     if (error || !data) return { error: BOARD_ERR(error?.code, error?.message) };
@@ -488,4 +490,24 @@ export async function removeFromBoard(shiftId: string): Promise<BoardResult> {
   else await ctx.supabase.from("shifts").update({ status: "cancelled" }).eq("id", shiftId).eq("org_id", ctx.org.id);
   refresh();
   return { ok: "Vakten er fjernet." };
+}
+
+/** Endre rolle (oppgave) på en vakt. Brukes direkte fra nedtrekkslisten, uten lagreknapp. */
+export async function setShiftRole(shiftId: string, roleId: string | null): Promise<{ ok?: boolean; error?: string }> {
+  const ctx = await requirePlanner();
+  if (roleId) {
+    const { data: r } = await ctx.supabase.from("work_roles").select("id").eq("id", roleId).eq("org_id", ctx.org.id).maybeSingle();
+    if (!r) return { error: "Fant ikke rollen." };
+  }
+  const { error } = await ctx.supabase.from("shifts").update({ work_role_id: roleId }).eq("id", shiftId).eq("org_id", ctx.org.id);
+  if (error) return { error: BOARD_ERR(error.code, error.message) };
+  refresh();
+  return { ok: true };
+}
+
+/** Den ansattes hovedrolle: rollen som står først under Innstillinger → Roller. */
+async function primaryRoleOf(ctx: Awaited<ReturnType<typeof requirePlanner>>, employeeId: string): Promise<string | null> {
+  const { data } = await ctx.supabase.from("employee_work_roles").select("work_role_id, work_roles(sort_order)").eq("employee_id", employeeId);
+  const list = (data ?? []) as unknown as { work_role_id: string; work_roles: { sort_order: number } | null }[];
+  return list.sort((a, b) => (a.work_roles?.sort_order ?? 999) - (b.work_roles?.sort_order ?? 999))[0]?.work_role_id ?? null;
 }
