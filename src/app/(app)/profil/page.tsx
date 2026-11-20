@@ -93,7 +93,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       {calendarUrl && (
         <section className="card">
           <h2 id="kalender" className="h2 scroll-mt-4">Vaktene i din kalender</h2>
-          <p className="mt-1 text-sm text-muted">Legg til kalenderen én gang. Nye og endrede vakter og godkjent fravær dukker opp av seg selv. Kalender-appen oppdaterer vanligvis hver time.</p>
+          <p className="mt-1 text-sm text-muted">Dine egne vakter og godkjent fri og ferie, i kalenderen på telefonen. Legg den til én gang, så kommer nye og endrede vakter av seg selv, vanligvis innen en time.</p>
           <div className="mt-3"><CalendarSubscribe url={calendarUrl} /></div>
           <details className="mt-3 text-sm">
             <summary className="cursor-pointer text-brand">Mistet telefonen eller delt lenken?</summary>

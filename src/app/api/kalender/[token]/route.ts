@@ -20,7 +20,7 @@ function nextDay(d: string) {
 /** Linjer i iCal skal brytes etter 75 tegn. */
 const fold = (line: string) => line.match(/.{1,74}/g)?.join("\r\n ") ?? line;
 
-export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(_: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const id = token.replace(/\.ics$/, "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Ikke funnet", { status: 404 });
@@ -28,10 +28,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false },
   });
-  // Valg i lenken: k = kolleger, f = fri og ferie, l = ledige vakter (1/0). Uten valg: kolleger og fri.
-  const q = new URL(req.url).searchParams;
-  const on = (k: string, def: boolean) => (q.has(k) ? q.get(k) === "1" : def);
-  const { data, error } = await supabase.rpc("calendar_feed_v2", { p_token: id, p_colleagues: on("k", true), p_absence: on("f", true), p_open: on("l", false) });
+  // Bare egne vakter og eget fravær (fri, ferie) – ikke kolleger eller ledige vakter
+  const { data, error } = await supabase.rpc("calendar_feed_v2", { p_token: id, p_colleagues: false, p_absence: true, p_open: false });
   if (error) return new Response("Feil", { status: 500 });
   const rows = (data ?? []) as Row[];
   const orgName = rows[0]?.org_name ?? "Vaktpilot";

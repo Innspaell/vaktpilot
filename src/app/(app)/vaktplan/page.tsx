@@ -503,7 +503,7 @@ function AgendaView({ me, from, days, now, tz, shifts, absences, openShifts, req
         </section>
       ))}
       <Link href={calendarHref} className="card flex items-center justify-between hover:border-brand">
-        <span><b className="block">Legg vaktene i kalenderen din</b><span className="text-sm text-muted">Apple, Google eller Outlook. Oppdateres av seg selv.</span></span>
+        <span><b className="block">Legg vaktene i kalenderen din</b><span className="text-sm text-muted">Dine vakter, fri og ferie i Apple, Google eller Outlook.</span></span>
         <span className="text-brand">›</span>
       </Link>
     </div>
