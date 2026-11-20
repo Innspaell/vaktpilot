@@ -3,9 +3,12 @@ import { requirePlanner } from "@/lib/context";
 import { addDays, formatDateLong, localDate } from "@/lib/time";
 import { vacationYearOf } from "@/lib/vacation";
 import { loadVacation } from "@/lib/vacation-data";
+import { loadEmployerPeriods } from "@/lib/employer-period-data";
+import { managesEmployee, loadDepartments } from "@/lib/departments";
 import { absenceWorkdays, employedWorkdays, selfCertification, sickLeavePercent, type StatAbsence, type StatEmployee } from "@/lib/absence-stats";
 
 const MON = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
+const nbd = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 1 });
 const pct = (n: number) => `${n.toLocaleString("nb-NO", { maximumFractionDigits: 1 })} %`;
 
 export default async function AbsenceOverviewPage({ searchParams }: { searchParams: Promise<{ aar?: string }> }) {
@@ -20,14 +23,14 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
   const [{ data: emps }, { data: terms }, { data: abs }, { data: org }] = await Promise.all([
     ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
     ctx.supabase.from("employment_terms").select("employee_id, position_pct, vacation_days, valid_to").eq("org_id", ctx.org.id).is("valid_to", null),
-    ctx.supabase.from("absence_requests").select("employee_id, from_date, to_date, partial_hours, status, absence_types(key, name)")
+    ctx.supabase.from("absence_requests").select("employee_id, from_date, to_date, partial_hours, percent, status, absence_types(key, name)")
       .eq("org_id", ctx.org.id).in("status", ["approved", "pending"]).gte("to_date", since12 < from ? since12 : from),
     ctx.supabase.from("organizations").select("vacation_year_start_month").eq("id", ctx.org.id).single(),
   ]);
-  type A = { employee_id: string; from_date: string; to_date: string; partial_hours: number | null; status: string; absence_types: { key: string; name: string } | null };
+  type A = { employee_id: string; from_date: string; to_date: string; partial_hours: number | null; percent: number | null; status: string; absence_types: { key: string; name: string } | null };
   const rawAbs = (abs ?? []) as unknown as A[];
   const approved: StatAbsence[] = rawAbs.filter((a) => a.status === "approved").map((a) => ({
-    employeeId: a.employee_id, from: a.from_date, to: a.to_date, typeKey: a.absence_types?.key ?? "annet", partialHours: a.partial_hours,
+    employeeId: a.employee_id, from: a.from_date, to: a.to_date, typeKey: a.absence_types?.key ?? "annet", partialHours: a.partial_hours, percent: a.percent,
   }));
   const employees: StatEmployee[] = (emps ?? [])
     .filter((e) => e.full_name !== "Tidligere ansatt" || (e.end_date ?? "") >= from)
@@ -52,6 +55,9 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
   const vac = await loadVacation(ctx, [vy]);
   const upcoming = rawAbs.filter((a) => a.from_date > today && a.from_date <= addDays(today, 45)).sort((a, b) => a.from_date.localeCompare(b.from_date));
   const name = new Map(employees.map((e) => [e.id, e.name]));
+  const [agpAll, deps] = await Promise.all([loadEmployerPeriods(ctx), loadDepartments(ctx)]);
+  const agp = [...agpAll].filter(([id]) => managesEmployee(ctx.isAdmin, deps, id))
+    .sort((a, b) => (name.get(a[0]) ?? "").localeCompare(name.get(b[0]) ?? "", "nb"));
 
   // Det som venter på svar fra leder
   const head = { count: "exact" as const, head: true };
@@ -102,6 +108,29 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
         <Kpi label="Legemeldt" value={pct(docPct)} />
       </section>
 
+      {agp.length > 0 && (
+        <section id="arbeidsgiverperiode" className="card scroll-mt-20">
+          <h2 className="h2">Arbeidsgiverperioden</h2>
+          <p className="mt-1 text-sm text-muted">Bedriften betaler de første 16 kalenderdagene med sykefravær. Fravær med mindre enn 16 dager imellom regnes sammen. Deretter betaler NAV sykepenger, og dere kan kreve refusjon. Retten til sykepenger fra NAV forutsetter at den ansatte har jobbet minst fire uker.</p>
+          <ul className="mt-3 divide-y divide-line text-sm">
+            {agp.map(([id, st]) => (
+              <li key={id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span><span className="font-medium">{name.get(id) ?? "Ukjent"}</span> <span className="text-muted">· syk fra {formatDateLong(st.period.start)}</span></span>
+                {st.kind === "running" ? (
+                  <span className={st.period.days >= 12 ? "text-warn" : "text-muted"}>
+                    Dag <b className="tabular-nums">{st.period.days}</b> av 16 · NAV overtar {formatDateLong(st.navFrom)} hvis fraværet fortsetter
+                  </span>
+                ) : (
+                  <span className="text-brand">
+                    Brukt opp {formatDateLong(st.period.completedOn!)} · NAV betaler fra {formatDateLong(st.navFrom)}{st.period.navDays > 0 ? ` (${st.period.navDays} ${st.period.navDays === 1 ? "dag" : "dager"} hittil)` : ""}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="card">
         <h2 className="h2">Sykefravær per måned</h2>
         <div className="mt-4 flex h-40 items-end gap-1.5" role="img" aria-label="Sykefravær per måned">
@@ -149,12 +178,12 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
                   <td className={`px-2 py-2 text-right tabular-nums ${warn ? "font-semibold text-bad" : ""}`} title={warn ? "Nær eller over grensen for egenmelding" : undefined}>
                     {sc.periods} {sc.periods === 1 ? "gang" : "ganger"} · {sc.days} d{warn ? " ⚠" : ""}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["sykmelding"], from, to)} d</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["sykt_barn"], from, to)} d</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{nbd(absenceWorkdays(approved, e.id, ["sykmelding"], from, to))} d</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{nbd(absenceWorkdays(approved, e.id, ["sykt_barn"], from, to))} d</td>
                   <td className={`px-2 py-2 text-right tabular-nums ${v && v.remaining < 0 ? "text-bad" : ""}`}>
                     {v ? <Link href={`/ansatte/${e.id}`} className="hover:text-brand">{(v.taken + v.booked).toLocaleString("nb-NO")} / {v.remaining.toLocaleString("nb-NO")}</Link> : "–"}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{absenceWorkdays(approved, e.id, ["velferd", "permisjon", "annet", "avspasering"], from, to)} d</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{nbd(absenceWorkdays(approved, e.id, ["velferd", "permisjon", "annet", "avspasering"], from, to))} d</td>
                 </tr>
               );
             })}
@@ -173,7 +202,7 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
           <ul className="mt-2 divide-y divide-line text-sm">
             {upcoming.map((a, i) => (
               <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span><b>{name.get(a.employee_id)}</b> · {a.absence_types?.name}: <span>{formatDateLong(a.from_date)}</span>{a.to_date !== a.from_date && <> – <span>{formatDateLong(a.to_date)}</span></>}</span>
+                <span><b>{name.get(a.employee_id)}</b> · {a.absence_types?.name}: <span>{formatDateLong(a.from_date)}</span>{a.to_date !== a.from_date && <> – <span>{formatDateLong(a.to_date)}</span></>}{a.percent ? ` (${a.percent} %)` : ""}</span>
                 <span className={`badge ${a.status === "approved" ? "bg-good-soft text-good" : "bg-warn-soft text-warn"}`}>{a.status === "approved" ? "Godkjent" : "Venter"}</span>
               </li>
             ))}

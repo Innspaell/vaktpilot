@@ -47,7 +47,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     .eq("org_id", ctx.org.id).eq("status", "published").not("employee_id", "is", null)
     .gte("starts_at", start).lt("starts_at", end).lte("ends_at", new Date().toISOString());
   if (onlyEmployee) shQ = shQ.eq("employee_id", onlyEmployee);
-  let absQ = ctx.supabase.from("absence_requests").select("employee_id, from_date, to_date, partial_hours, absence_types(key, name, paid, counts_as_work)")
+  let absQ = ctx.supabase.from("absence_requests").select("employee_id, from_date, to_date, partial_hours, percent, absence_types(key, name, paid, counts_as_work)")
     .eq("org_id", ctx.org.id).eq("status", "approved").lte("from_date", to).gte("to_date", from);
   if (onlyEmployee) absQ = absQ.eq("employee_id", onlyEmployee);
 
@@ -116,10 +116,10 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const pendingIds = new Set([...pending.map((r) => r.employee_id), ...unconfirmedInPeriod.map((s) => s.employee_id!)]);
   const events: PayEvent[] = (evs ?? []).map((v) => ({ employeeId: v.employee_id, date: v.date, key: v.key, count: v.count }));
 
-  type A = { employee_id: string; from_date: string; to_date: string; partial_hours: number | null;
+  type A = { employee_id: string; from_date: string; to_date: string; partial_hours: number | null; percent: number | null;
     absence_types: { key: string; name: string; paid: boolean; counts_as_work: boolean } | null };
   const absences: PayAbsence[] = ((abs ?? []) as unknown as A[]).map((a) => ({
-    employeeId: a.employee_id, from: a.from_date, to: a.to_date, partialHours: a.partial_hours ? Number(a.partial_hours) : null,
+    employeeId: a.employee_id, from: a.from_date, to: a.to_date, partialHours: a.partial_hours ? Number(a.partial_hours) : null, percent: a.percent,
     typeKey: a.absence_types?.key ?? "annet", typeName: a.absence_types?.name ?? "Fravær",
     paid: a.absence_types?.paid ?? false, countsAsWork: a.absence_types?.counts_as_work ?? false,
   }));

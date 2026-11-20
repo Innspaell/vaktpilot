@@ -23,7 +23,7 @@ export function buildBoard(input: {
   coverage: { date: string; closed: boolean; holiday?: string | null; peakRequired: number; gaps: { start: Date; end: Date; missing: number }[] }[];
   employees: { id: string; name: string; hoursPerWeek: number | null; onCall: boolean; hourly?: boolean; holidayPayments?: Map<string, number> }[];
   shifts: BoardShift[];
-  absences: { employeeId: string; from: string; to: string; typeName: string }[];
+  absences: { employeeId: string; from: string; to: string; typeName: string; percent?: number | null }[];
   availability: { employeeId: string; kind: "available" | "unavailable" | "wants_extra"; date: string | null; weekday: number | null }[];
   minRestHours?: number;
 }): { days: BoardDay[]; rows: BoardRow[] } {
@@ -64,7 +64,7 @@ export function buildBoard(input: {
       const wantsExtra = av.some((a) => a.kind === "wants_extra");
       let fit: Fit = "none";
       let note: string | null = null;
-      if (away) { fit = "bad"; note = away.typeName; }
+      if (away && !away.percent) { fit = "bad"; note = away.typeName; }
       else if (here.length) { fit = "bad"; note = "På jobb"; }
       else if (said === "unavailable") { fit = "bad"; note = "Kan ikke"; }
       else if (day.closed) { fit = "none"; note = "Stengt"; }
@@ -82,6 +82,8 @@ export function buildBoard(input: {
         else if (day.gaps.length || day.open.length) { fit = "good"; note = said === "available" || wantsExtra ? "Kan jobbe" : "Mangler folk"; }
         else if (said === "available") { fit = "good"; note = "Kan jobbe"; }
       }
+      // Gradert fravær: kan jobbe delvis, lederen avgjør
+      if (away?.percent && fit !== "bad" && fit !== "none") { fit = "maybe"; note = away.typeName; }
       const holidayPay = e.hourly && day.holiday && isoWeekday(date) <= 5 && !here.length
         ? { marked: e.holidayPayments?.get(date) ?? null, hours: Math.round(((e.hoursPerWeek ?? 0) / 5 || 7.5) * 100) / 100 }
         : null;

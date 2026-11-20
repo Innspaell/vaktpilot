@@ -161,6 +161,8 @@ export interface PayAbsence {
   paid: boolean;
   countsAsWork: boolean;
   partialHours: number | null;
+  /** Gradert fravær (f.eks. 50 % sykmeldt) over hele dager. Tomt = 100 %. */
+  percent?: number | null;
 }
 
 /** Registrert hendelse som gir et fast beløp, f.eks. en utlevering. */
@@ -515,18 +517,21 @@ export function calculatePay(
   }
 
   // Fravær per type: dager (man–fre uten helligdager) og timer
-  const byType = new Map<string, { name: string; days: number; minutes: number }>();
+  const byType = new Map<string, { name: string; days: number; minutes: number; graded?: boolean }>();
   for (const a of absences.filter((x) => x.employeeId === employee.id)) {
     for (let d = a.from > period.from ? a.from : period.from; d <= (a.to < period.to ? a.to : period.to); d = addDays(d, 1)) {
       if (isoWeekday(d) > 5 || holidayOn(d)) continue;
       const t = byType.get(a.typeKey) ?? { name: a.typeName, days: 0, minutes: 0 };
+      const share = a.percent ? a.percent / 100 : 1;
       t.days += a.partialHours ? 0 : 1;
-      t.minutes += a.partialHours ? a.partialHours * 60 : a.paid ? dayMinutes : 0;
+      t.minutes += a.partialHours ? a.partialHours * 60 : a.paid ? dayMinutes * share : 0;
+      if (a.percent) t.graded = true;
       byType.set(a.typeKey, t);
     }
   }
   for (const [key, t] of byType) {
-    lines.push({ code: `absence_${key}`, label: t.name, hours: round2(t.minutes / 60), days: t.days, why: "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager)." });
+    lines.push({ code: `absence_${key}`, label: t.graded ? `${t.name} (gradert)` : t.name, hours: round2(t.minutes / 60), days: t.days,
+      why: t.graded ? "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager). Gradert fravær gir timer etter graden." : "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager)." });
   }
 
   return { employee, lines, workedHours: round2(worked / 60) };
@@ -567,7 +572,7 @@ export function timeBalance(
   for (const a of absences.filter((x) => x.employeeId === employee.id && x.countsAsWork)) {
     for (let d = a.from > from ? a.from : from; d <= (a.to < until ? a.to : until); d = addDays(d, 1)) {
       if (isoWeekday(d) > 5 || holidayOn(d)) continue;
-      absence += a.partialHours ? a.partialHours * 60 : dayMin;
+      absence += a.partialHours ? a.partialHours * 60 : dayMin * (a.percent ? a.percent / 100 : 1);
     }
   }
   return {

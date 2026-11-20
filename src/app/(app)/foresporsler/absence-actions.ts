@@ -25,6 +25,14 @@ function period(fd: FormData) {
   // Deler av dagen: fra og til klokkeslett (f.eks. legetime). Timene regnes ut av dem.
   const ft = text(fd, "from_time");
   const tt = text(fd, "to_time");
+  // Gradert fravær (f.eks. 50 % sykmeldt) gjelder hele dager i perioden
+  const pctRaw = text(fd, "percent");
+  const percent = pctRaw ? Math.round(Number(pctRaw.replace(",", "."))) : null;
+  if (percent !== null) {
+    if (!(percent >= 1 && percent <= 100)) return { error: "Graden må være mellom 1 og 100 %." };
+    if (ft || tt) return { error: "Gradert fravær gjelder hele dager. Fjern klokkeslettene, eller la graden stå tom." };
+    if (percent < 100) return { from, to, partial: null, fromTime: null, toTime: null, percent };
+  }
   if (ft || tt) {
     if (!ft || !tt) return { error: "Fyll inn både fra og til klokkeslett, eller la begge stå tomme for hele dager." };
     if (from !== to) return { error: "Klokkeslett gjelder bare én dato. Sett samme fra- og til-dato." };
@@ -32,9 +40,9 @@ function period(fd: FormData) {
     const [h2, m2] = tt.split(":").map(Number);
     const hours = Math.round(((h2 * 60 + m2) - (h1 * 60 + m1)) / 60 * 100) / 100;
     if (!(hours > 0)) return { error: "Til-klokkeslett må være etter fra-klokkeslett." };
-    return { from, to, partial: hours, fromTime: ft, toTime: tt };
+    return { from, to, partial: hours, fromTime: ft, toTime: tt, percent: null };
   }
-  return { from, to, partial: null, fromTime: null, toTime: null };
+  return { from, to, partial: null, fromTime: null, toTime: null, percent: null };
 }
 
 /** Ansatt søker om fri, eller registrerer sykefravær. */
@@ -86,14 +94,16 @@ export async function registerAbsence(_: ActionState, fd: FormData): Promise<Act
 
   const { error } = await ctx.supabase.from("absence_requests").insert({
     org_id: ctx.org.id, employee_id: employeeId, absence_type_id: typeId,
-    from_date: p.from, to_date: p.to, partial_hours: p.partial, from_time: p.fromTime, to_time: p.toTime, comment: text(fd, "comment"),
+    from_date: p.from, to_date: p.to, partial_hours: p.partial, from_time: p.fromTime, to_time: p.toTime, percent: p.percent, comment: text(fd, "comment"),
     status: "approved", decided_by: ctx.userId, decided_at: new Date().toISOString(), created_by_admin: true,
   });
   if (error) return { error: error.message };
 
   let released = 0;
-  if (fd.get("release_shifts") === "on") released = await releaseShifts(ctx, employeeId, p.from, p.to);
+  // Gradert: den ansatte jobber fortsatt delvis, så vaktene står til lederen har tilpasset dem
+  if (fd.get("release_shifts") === "on" && !p.percent) released = await releaseShifts(ctx, employeeId, p.from, p.to);
   refresh();
+  if (p.percent) return { ok: `Registrert som ${p.percent} % fravær. Vaktene i perioden er ikke endret: tilpass dem i planen.` };
   return { ok: released ? `Registrert. ${released} ${released === 1 ? "vakt er" : "vakter er"} gjort ledige.` : "Registrert." };
 }
 

@@ -16,11 +16,12 @@ const STATUS: Record<string, [string, string]> = {
 };
 
 type Row = {
-  id: string; employee_id: string; from_date: string; to_date: string; partial_hours: number | null; from_time: string | null; to_time: string | null;
+  id: string; employee_id: string; from_date: string; to_date: string; partial_hours: number | null; percent?: number | null; from_time: string | null; to_time: string | null;
   status: string; comment: string | null; absence_types: { name: string; key: string; is_sick: boolean } | null;
 };
 
-function range(r: { from_date: string; to_date: string; partial_hours: number | null; from_time?: string | null; to_time?: string | null }) {
+function range(r: { from_date: string; to_date: string; partial_hours: number | null; percent?: number | null; from_time?: string | null; to_time?: string | null }) {
+  if (r.percent) return `${r.from_date === r.to_date ? formatDateLong(r.from_date) : `${formatDateLong(r.from_date)} – ${formatDateLong(r.to_date)}`}, ${r.percent} %`;
   if (r.from_time && r.to_time) return `${formatDateLong(r.from_date)}, kl. ${r.from_time.slice(0, 5)}–${r.to_time.slice(0, 5)}`;
   if (r.from_date === r.to_date) {
     return `${formatDateLong(r.from_date)}${r.partial_hours ? `, ${String(r.partial_hours).replace(".", ",")} t` : ""}`;
@@ -32,7 +33,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
   const today = localDate(new Date(), ctx.org.timezone);
   let q = ctx.supabase
     .from("absence_requests")
-    .select("id, employee_id, from_date, to_date, partial_hours, from_time, to_time, status, comment, absence_types(name, key, is_sick)")
+    .select("id, employee_id, from_date, to_date, partial_hours, percent, from_time, to_time, status, comment, absence_types(name, key, is_sick)")
     .eq("org_id", ctx.org.id)
     .order("from_date", { ascending: false })
     .limit(60);
@@ -118,8 +119,11 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
               <Field label="Fra kl." hint="Deler av dagen."><input name="from_time" type="time" className="input" /></Field>
               <Field label="Til kl." hint="Tomt = hele dager."><input name="to_time" type="time" className="input" /></Field>
             </div>
-            <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-3">
-              <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene i perioden ledige
+            <Field label="Grad (%)" hint="Gradert sykmelding, f.eks. 50. Tomt = 100 %.">
+              <input name="percent" type="number" min={1} max={100} step={1} inputMode="numeric" className="input" />
+            </Field>
+            <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-2">
+              <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene i perioden ledige (ikke ved gradert fravær)
             </label>
           </ActionForm>
         </section>

@@ -3,7 +3,7 @@ import { addDays, isoWeekday } from "./time";
 import { holidayOn } from "./holidays";
 
 export interface StatEmployee { id: string; name: string; positionPct: number; startDate: string; endDate: string | null }
-export interface StatAbsence { employeeId: string; from: string; to: string; typeKey: string; partialHours: number | null }
+export interface StatAbsence { employeeId: string; from: string; to: string; typeKey: string; partialHours: number | null; percent?: number | null }
 
 const isWorkday = (d: string) => isoWeekday(d) <= 5 && !holidayOn(d);
 
@@ -16,14 +16,18 @@ export function employedWorkdays(e: StatEmployee, from: string, to: string) {
   return n;
 }
 
-/** Arbeidsdager med fravær av gitte typer i perioden. Deler av dag telles ikke som hel dag. */
+/**
+ * Tapte dagsverk med fravær av gitte typer i perioden. Deler av dag telles ikke som hel dag,
+ * og gradert fravær teller med graden (50 % sykmeldt = et halvt dagsverk).
+ */
 export function absenceWorkdays(list: StatAbsence[], employeeId: string, keys: string[], from: string, to: string) {
-  const days = new Set<string>();
+  const days = new Map<string, number>();
   for (const a of list) {
     if (a.employeeId !== employeeId || !keys.includes(a.typeKey) || a.partialHours) continue;
-    for (let d = a.from > from ? a.from : from; d <= (a.to < to ? a.to : to); d = addDays(d, 1)) if (isWorkday(d)) days.add(d);
+    const w = a.percent ? a.percent / 100 : 1;
+    for (let d = a.from > from ? a.from : from; d <= (a.to < to ? a.to : to); d = addDays(d, 1)) if (isWorkday(d)) days.set(d, Math.max(days.get(d) ?? 0, w));
   }
-  return days.size;
+  return Math.round([...days.values()].reduce((s, x) => s + x, 0) * 100) / 100;
 }
 
 /**

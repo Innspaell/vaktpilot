@@ -1221,5 +1221,21 @@ select pg_temp.check((select resolved_by from entry_notes) = '00000000-0000-0000
 select pg_temp.check((select count(*) from notifications where kind = 'entry_note_answer' and user_id = '00000000-0000-0000-0000-0000000000a3') = 1, 'den ansatte får svaret');
 select pg_temp.check((select count(*) from notifications where kind = 'entry_note' and read_at is null) = 0, 'lederens varsel lukkes når merknaden er behandlet');
 
+
+-- Gradert fravær: graden vises for leder, ikke for kolleger, og kan ikke kombineres med klokkeslett
+reset role;
+insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date, percent, status)
+  select :'org_a', :'per', id, '2027-04-05', '2027-04-16', 50, 'approved' from absence_types where org_id = :'org_a' and key = 'syk';
+do $$ begin
+  insert into absence_requests (org_id, employee_id, absence_type_id, from_date, to_date, percent, from_time, to_time, partial_hours, status)
+    select current_setting('t.org')::uuid, current_setting('t.per')::uuid, id, '2027-04-20', '2027-04-20', 50, '10:00', '12:00', 2, 'approved' from absence_types where key = 'syk' limit 1;
+  raise exception 'FEIL: grad med klokkeslett';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+select pg_temp.check((select percent from org_absences(:'org_a', '2027-04-05', '2027-04-05') where employee_id = :'per') = 50, 'leder ser graden');
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+select pg_temp.check((select percent is null and type_name = 'Delvis borte' from org_absences(:'org_a', '2027-04-05', '2027-04-05') where employee_id = :'per'), 'kollega ser ikke graden');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

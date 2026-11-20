@@ -69,7 +69,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? ctx.supabase.from("employment_terms").select("employee_id, position_pct").eq("org_id", ctx.org.id).is("valid_to", null)
       : Promise.resolve({ data: [] as { employee_id: string; position_pct: number }[] }),
   ]);
-  const absences = (absencesRes.data ?? []) as { employee_id: string; from_date: string; to_date: string; type_name: string }[];
+  const absences = (absencesRes.data ?? []) as { employee_id: string; from_date: string; to_date: string; type_name: string; percent: number | null }[];
   const pct = new Map((pctRes.data ?? []).map((t) => [t.employee_id, Number(t.position_pct)]));
   const newShiftDate = /^\d{4}-\d{2}-\d{2}$/.test(sp.ny ?? "") ? sp.ny! : null;
   const shifts = dep ? allShifts.filter((s) => shiftInDepartment(s, dep, deps)) : allShifts;
@@ -131,7 +131,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         return { id: s.id, employeeId: s.employee_id, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: s.break_minutes,
           draft: s.status === "draft", roleColor: role?.color ?? null, roleName: role?.name ?? null };
       }),
-      absences: absences.map((a) => ({ employeeId: a.employee_id, from: a.from_date, to: a.to_date, typeName: a.type_name })),
+      absences: absences.map((a) => ({ employeeId: a.employee_id, from: a.from_date, to: a.to_date, typeName: a.type_name, percent: a.percent })),
       availability: (avail ?? []).map((a) => ({ employeeId: a.employee_id as string, kind: a.kind as "available" | "unavailable" | "wants_extra", date: a.date as string | null, weekday: a.weekday as number | null })),
     });
     boardTemplates = (tpl ?? []).map((t) => ({ id: t.id, name: t.name, start: String(t.start_time).slice(0, 5), end: String(t.end_time).slice(0, 5), breakMinutes: t.break_minutes, workRoleId: t.work_role_id }));

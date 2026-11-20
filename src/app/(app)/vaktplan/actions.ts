@@ -38,7 +38,7 @@ async function warningsFor(ctx: Ctx, employeeId: string, s: Date, e: Date, break
     ctx.supabase.from("shifts").select("id, starts_at, ends_at, break_minutes")
       .eq("employee_id", employeeId).neq("status", "cancelled").gt("ends_at", from).lt("starts_at", to),
     ctx.supabase.from("absence_requests").select("from_date, to_date")
-      .eq("employee_id", employeeId).eq("status", "approved")
+      .eq("employee_id", employeeId).eq("status", "approved").is("percent", null)
       .lte("from_date", localDate(e, ctx.org.timezone)).gte("to_date", localDate(s, ctx.org.timezone)),
   ]);
   const absenceDates: string[] = [];

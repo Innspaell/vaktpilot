@@ -4,6 +4,8 @@ import type { AppContext } from "./context";
 import { colleagues, coverageForDays, shiftsBetween } from "./data";
 import { addDays, dayBounds, formatDateLong, localDate, localTime, workedMinutes } from "./time";
 import { loadDepartments, managesEmployee } from "./departments";
+import { loadEmployerPeriods } from "./employer-period-data";
+import { checkPlannedShifts, checkWorkTime } from "./worktime-check";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
 
@@ -84,6 +86,53 @@ export const loadTodo = cache(async (ctx: Ctx): Promise<{ items: TodoItem[]; wai
       ctx.isAdmin ? sb.from("pay_periods").select("starts_on, ends_on, status").eq("org_id", org).eq("status", "exported") : Promise.resolve({ data: [] }),
     ]);
     const { data: notes } = await sb.from("entry_notes").select("id, employee_id, date, body, created_at").eq("org_id", org).eq("status", "open").order("created_at");
+
+    // Arbeidsgiverperioden: varsel når den nærmer seg slutten, og når NAV har tatt over
+    const [agp, plannedBreaches, workedBreaches] = await Promise.all([
+      loadEmployerPeriods(ctx),
+      checkPlannedShifts(ctx, today, addDays(today, 28)),
+      checkWorkTime(ctx, addDays(today, -14), addDays(today, -1)),
+    ]);
+    for (const [emp, st] of agp) {
+      if (!mine(emp)) continue;
+      if (st.kind === "running" && st.period.days >= 12) {
+        items.push({
+          key: `agp-${emp}-${st.period.start}`, level: "amber",
+          title: `Arbeidsgiverperioden for ${first(emp)}: dag ${st.period.days} av 16`,
+          detail: `Syk fra ${formatDateLong(st.period.start)}. Fortsetter fraværet, betaler NAV sykepenger fra ${formatDateLong(st.navFrom)}. Etter egenmeldingsdagene trengs sykmelding fra lege.`,
+          primary: { kind: "link", label: "Se fravær", href: "/fravaer#arbeidsgiverperiode" },
+        });
+      } else if (st.kind === "completed" && st.period.completedOn! <= today) {
+        items.push({
+          key: `agp-${emp}-${st.period.start}`, level: "blue",
+          title: `Krev refusjon fra NAV for ${first(emp)}`,
+          detail: `Arbeidsgiverperioden ble brukt opp ${formatDateLong(st.period.completedOn!)}. NAV betaler sykepenger fra ${formatDateLong(st.navFrom)}: send inntektsmelding, og trekk refusjonen i lønnen hvis dere betaler full lønn under sykdom.`,
+          primary: { kind: "link", label: "Se fravær", href: "/fravaer#arbeidsgiverperiode" },
+        });
+      }
+    }
+
+    // Brudd på arbeidstidsreglene: i planen fram i tid (kan rettes), og i registrerte timer siste to uker
+    for (const [emp, ws] of plannedBreaches) {
+      if (!mine(emp)) continue;
+      const w = ws[0];
+      items.push({
+        key: `brudd-plan-${emp}`, level: w.date <= addDays(today, 7) ? "red" : "amber",
+        title: `Planen bryter arbeidstidsreglene for ${first(emp)}`,
+        detail: ws.length > 1 ? `${w.text} (og ${ws.length - 1} til)` : w.text,
+        primary: { kind: "link", label: "Åpne planen", href: `/vaktplan/rediger?visning=uke&dato=${w.date}` },
+      });
+    }
+    for (const [emp, ws] of workedBreaches) {
+      const br = ws.filter((w) => w.severity === "brudd");
+      if (!br.length || !mine(emp)) continue;
+      items.push({
+        key: `brudd-timer-${emp}`, level: "grey",
+        title: `${first(emp)} har jobbet utover arbeidstidsreglene`,
+        detail: br.length > 1 ? `${br[0].text} (og ${br.length - 1} til)` : br[0].text,
+        primary: { kind: "link", label: "Se rapporten", href: "/rapporter#arbeidstid-og-fravaer" },
+      });
+    }
 
     // Merknader fra ansatte: lederen tar stilling
     const myNotes = (notes ?? []).filter((n) => mine(n.employee_id));
