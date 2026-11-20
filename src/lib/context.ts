@@ -15,6 +15,8 @@ export interface AppContext {
   org: { id: string; name: string; role: Role; timezone: string; logoUrl: string | null; availabilityEnabled: boolean; clockEnabled: boolean;
     /** Bedriften fører personalliste. staffView: alle ansatte kan vise den (for kontroll). */
     personnelList: boolean; personnelListStaffView: boolean;
+    /** Pausen regnes som arbeidstid og trekkes ikke fra */
+    paidBreaks: boolean;
     /** Sperret for ubetalt faktura: lederne har bare ansatt-tilgang. */
     blocked: boolean } | null;
   /** Eier eller administrator i bedriften, også når bedriften er sperret (abonnement og fakturaer). */
@@ -40,7 +42,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
   if (!user) redirect("/login");
 
   const [{ data: memberships }, { data: platform }, { data: aal }, { data: mfaRequired }] = await Promise.all([
-    supabase.from("memberships").select("role, organizations(id, name, timezone, logo_url, availability_enabled, clock_enabled, blocked_at, personnel_list, personnel_list_staff_view)").eq("user_id", user.id),
+    supabase.from("memberships").select("role, organizations(id, name, timezone, logo_url, availability_enabled, clock_enabled, blocked_at, personnel_list, personnel_list_staff_view, paid_breaks)").eq("user_id", user.id),
     supabase.rpc("is_platform_admin"),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     supabase.rpc("mfa_required"),
@@ -48,7 +50,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
   // Tofaktor: ledere og InnSpæll må ha det; andre som har skrudd det på, må bekrefte koden ved innlogging
   if (aal?.currentLevel !== "aal2" && (aal?.nextLevel === "aal2" || mfaRequired)) redirect("/tofaktor");
 
-  type Row = { role: Role; organizations: { id: string; name: string; timezone: string; logo_url: string | null; availability_enabled: boolean | null; clock_enabled: boolean | null; blocked_at: string | null; personnel_list?: boolean | null; personnel_list_staff_view?: boolean | null } | null };
+  type Row = { role: Role; organizations: { id: string; name: string; timezone: string; logo_url: string | null; availability_enabled: boolean | null; clock_enabled: boolean | null; blocked_at: string | null; personnel_list?: boolean | null; personnel_list_staff_view?: boolean | null; paid_breaks?: boolean | null } | null };
   const rows = ((memberships ?? []) as unknown as Row[]).filter((m) => m.organizations);
   const orgs = rows.map((m) => ({ id: m.organizations!.id, name: m.organizations!.name, role: m.role }));
 
@@ -65,6 +67,7 @@ export const getContext = cache(async (): Promise<AppContext> => {
         clockEnabled: chosen.organizations!.clock_enabled !== false,
         personnelList: Boolean(chosen.organizations!.personnel_list),
         personnelListStaffView: chosen.organizations!.personnel_list_staff_view !== false,
+        paidBreaks: Boolean(chosen.organizations!.paid_breaks),
         blocked: Boolean(chosen.organizations!.blocked_at),
       }
     : null;

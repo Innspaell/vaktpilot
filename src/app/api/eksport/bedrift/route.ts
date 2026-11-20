@@ -6,7 +6,7 @@ const TABLES = [
   "employees", "employment_terms", "work_roles", "employee_work_roles", "staffing_templates", "staffing_overrides",
   "shift_templates", "shifts", "shift_requests", "shift_swaps", "availability", "clock_events", "time_entries",
   "absence_types", "absence_requests", "holiday_rules", "pay_periods", "payroll_exports", "rotations", "rotation_shifts",
-  "board_posts", "dpa_acceptances", "audit_log",
+  "board_posts", "dpa_acceptances", "audit_log", "departments", "emergency_contacts", "holiday_payments", "entry_notes",
 ];
 
 /** Alle bedriftens data (administrator). ?dpa=1 gir bare databehandleravtalen med godkjenning. */

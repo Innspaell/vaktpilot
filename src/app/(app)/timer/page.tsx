@@ -12,6 +12,7 @@ import { loadDepartments, managesEmployee } from "@/lib/departments";
 import { ActionForm, Field } from "@/components/Form";
 import { loadPayroll } from "@/lib/payroll-data";
 import { loadCompTime } from "@/lib/report-data";
+import { LeaderNotes, NOTE_SELECT, NoteForm, NoteList, type EntryNote } from "@/components/EntryNotes";
 
 const STATUS: Record<string, [string, string]> = {
   draft: ["Utkast", "bg-paper text-muted"],
@@ -31,6 +32,7 @@ const SELECT = "id, employee_id, shift_id, starts_at, ends_at, break_minutes, st
 export default async function TimePage({ searchParams }: { searchParams: Promise<{ vis?: string; fra?: string; til?: string; ansatt?: string; godkjente?: string }> }) {
   const sp = await searchParams;
   const ctx = await requireOrg();
+  const pb = ctx.org.paidBreaks;
   const tz = ctx.org.timezone;
   const today = localDate(new Date(), tz);
   const tab = ctx.canPlan && (sp.vis === "alle" || !ctx.employeeId) ? "alle" : "mine";
@@ -58,7 +60,10 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
       .gte("starts_at", dayBounds(from, tz).start.toISOString()).lt("starts_at", dayBounds(addDays(to, 1), tz).start.toISOString())
       .lte("starts_at", new Date().toISOString()).order("starts_at");
     if (sp.ansatt) sq = sq.eq("employee_id", sp.ansatt);
-    const [{ data }, names, { data: pastShifts }, deps] = await Promise.all([q, colleagues(ctx), sq, loadDepartments(ctx)]);
+    const [{ data }, names, { data: pastShifts }, deps, { data: noteData }] = await Promise.all([q, colleagues(ctx), sq, loadDepartments(ctx),
+      ctx.supabase.from("entry_notes").select(NOTE_SELECT).eq("org_id", ctx.org.id).or(`status.eq.open,date.gte.${from}`).order("created_at")]);
+    const allNotes = (noteData ?? []) as EntryNote[];
+    const openNotes = allNotes.filter((n) => n.status === "open" && managesEmployee(ctx.isAdmin, deps, n.employee_id));
     const rows = (data ?? []) as unknown as Entry[];
     // Ikke bekreftet av den ansatte: utkast (f.eks. stemplet uten innsending) og passerte vakter uten timer
     const drafts = rows.filter((r) => r.status === "draft" && r.ends_at);
@@ -72,7 +77,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
     const listed = showApproved ? rows : rows.filter((r) => r.status !== "approved" && r.status !== "locked");
     const toggleHref = `/timer?${new URLSearchParams({ vis: "alle", fra: from, til: to, ...(sp.ansatt ? { ansatt: sp.ansatt } : {}), ...(showApproved ? {} : { godkjente: "1" }) })}`;
     const totals = new Map<string, number>();
-    for (const r of rows) if (r.ends_at) totals.set(r.employee_id, (totals.get(r.employee_id) ?? 0) + workedMinutes(new Date(r.starts_at), new Date(r.ends_at), r.break_minutes));
+    for (const r of rows) if (r.ends_at) totals.set(r.employee_id, (totals.get(r.employee_id) ?? 0) + workedMinutes(new Date(r.starts_at), new Date(r.ends_at), pb ? 0 : r.break_minutes));
 
     return (
       <div className="space-y-4">
@@ -91,6 +96,8 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
           {sp.godkjente === "1" && <input type="hidden" name="godkjente" value="1" />}
           <div className="self-end"><button className="btn-ghost w-full">Vis</button></div>
         </form>
+
+        <LeaderNotes notes={openNotes} names={names} />
 
         {totals.size > 0 && (
           <section className="card">
@@ -113,7 +120,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
           <section className="card p-0">
             <div className="px-4 pt-4">
               <h2 className="h2">Ikke bekreftet av den ansatte</h2>
-              <p className="mt-1 text-sm text-muted">Vakter som er gjennomført uten at den ansatte har bekreftet timene. Godkjenner du dem, blir timene lik det som var planlagt (eller det som ble stemplet).</p>
+              <p className="mt-1 text-sm text-muted">Vakter som er gjennomført uten at den ansatte har bekreftet timene. Godkjenner du dem, blir timene lik det som var planlagt (eller det som ble stemplet), merket som ført av leder. Den ansatte får beskjed og kan melde fra hvis noe er feil.</p>
             </div>
             <form id="godkjenn-ubekreftet" action={approvePlannedShifts}>
               <ul className="mt-2 divide-y divide-line text-sm">
@@ -124,7 +131,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                       <span>
                         <span className="font-medium">{names.get(s.employee_id!) ?? "Ukjent"}</span> · <span>{formatDateLong(localDate(new Date(s.starts_at), tz))}</span>
                         <span className="block tabular-nums text-muted">
-                          Planlagt {timeRange(s.starts_at, s.ends_at)}{s.break_minutes > 0 && ` · pause ${s.break_minutes} min`} · {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes))}
+                          Planlagt {timeRange(s.starts_at, s.ends_at)}{s.break_minutes > 0 && ` · pause ${s.break_minutes} min${pb ? " (betalt)" : ""}`} · {formatHours(workedMinutes(new Date(s.starts_at), new Date(s.ends_at), pb ? 0 : s.break_minutes))}
                         </span>
                       </span>
                     </label>
@@ -137,7 +144,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                       <span>
                         <span className="font-medium">{names.get(r.employee_id) ?? "Ukjent"}</span> · <span>{formatDateLong(localDate(new Date(r.starts_at), tz))}</span>
                         <span className="block tabular-nums text-muted">
-                          {r.source === "clock" ? "Stemplet" : "Registrert"} {timeRange(r.starts_at, r.ends_at)}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min`} · {formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at!), r.break_minutes))}
+                          {r.source === "clock" ? "Stemplet" : "Registrert"} {timeRange(r.starts_at, r.ends_at)}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min${pb ? " (betalt)" : ""}`} · {formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at!), pb ? 0 : r.break_minutes))}
                         </span>
                       </span>
                     </label>
@@ -147,7 +154,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
             </form>
             <div className="px-4 pb-4 pt-2">
               <ConfirmSubmit form="godkjenn-ubekreftet" label="Godkjenn valgte"
-                warning="Den ansatte har ikke bekreftet timene for disse dagene. Vil du godkjenne likevel?" />
+                warning="Den ansatte har ikke bekreftet timene for disse dagene. Timene merkes som ført av leder, og den ansatte får beskjed og kan melde fra hvis noe er feil. Vil du godkjenne likevel?" />
             </div>
           </section>
         )}
@@ -170,7 +177,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
           )}
           {listed.length === 0 ? <p className="p-4 text-sm text-muted">{rows.length === 0 ? "Ingen timer i perioden." : "Alt i perioden er godkjent."}</p> : (
             <ul className="mt-2 divide-y divide-line">
-              {listed.map((r) => <AdminRow key={r.id} r={r} name={names.get(r.employee_id) ?? "Ukjent"} tz={tz} today={today} />)}
+              {listed.map((r) => <AdminRow pb={pb} notes={allNotes.filter((n) => n.time_entry_id === r.id)} key={r.id} r={r} name={names.get(r.employee_id) ?? "Ukjent"} tz={tz} today={today} />)}
             </ul>
           )}
         </section>
@@ -184,14 +191,16 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   }
 
   const since = addDays(today, -14);
-  const [clock, { data: entriesData }, { data: shiftsData }] = await Promise.all([
+  const [clock, { data: entriesData }, { data: shiftsData }, { data: myNoteData }] = await Promise.all([
     clockState(ctx),
     ctx.supabase.from("time_entries").select(SELECT).eq("employee_id", ctx.employeeId).order("starts_at", { ascending: false }).limit(40),
     ctx.supabase.from("shifts").select("id, starts_at, ends_at, break_minutes").eq("employee_id", ctx.employeeId).eq("status", "published")
       .gte("starts_at", dayBounds(since, tz).start.toISOString()).lt("starts_at", dayBounds(addDays(today, 1), tz).start.toISOString())
       .order("starts_at"),
+    ctx.supabase.from("entry_notes").select(NOTE_SELECT).eq("employee_id", ctx.employeeId).gte("date", addDays(today, -120)).order("created_at"),
   ]);
   const entries = (entriesData ?? []) as unknown as Entry[];
+  const myNotes = (myNoteData ?? []) as EntryNote[];
   const [monthPay, yearPay, comp] = await Promise.all([
     loadPayroll(ctx, today.slice(0, 8) + "01", today, ctx.employeeId),
     loadPayroll(ctx, today.slice(0, 5) + "01-01", today, ctx.employeeId),
@@ -206,7 +215,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
   const monthStart = today.slice(0, 8) + "01";
   const monthMinutes = entries
     .filter((e) => e.ends_at && localDate(new Date(e.starts_at), tz) >= monthStart)
-    .reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
+    .reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), pb ? 0 : e.break_minutes), 0);
 
   return (
     <div className="space-y-4">
@@ -248,7 +257,7 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                     <div>
                       <div className="font-medium first-letter:uppercase">{date === today ? "I dag" : formatDateLong(date)}</div>
                       <div className="text-sm tabular-nums text-muted">
-                        {timeRange(s.starts_at, s.ends_at)} · pause {s.break_minutes} min · {formatHours(workedMinutes(st, new Date(s.ends_at), s.break_minutes))}
+                        {timeRange(s.starts_at, s.ends_at)} · pause {s.break_minutes} min{pb ? " (betalt)" : ""} · {formatHours(workedMinutes(st, new Date(s.ends_at), pb ? 0 : s.break_minutes))}
                       </div>
                     </div>
                     <form action={confirmShift}>
@@ -324,13 +333,14 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                     <div>
                       <div className="font-medium first-letter:uppercase">{formatDateLong(date)}</div>
                       <div className="tabular-nums text-muted">
-                        {timeRange(e.starts_at, e.ends_at)}{e.break_minutes > 0 && ` · pause ${e.break_minutes} min`}
+                        {timeRange(e.starts_at, e.ends_at)}{e.break_minutes > 0 && ` · pause ${e.break_minutes} min${pb ? " (betalt)" : ""}`}
                         {e.shifts && <PlanDiff e={e} tz={tz} />}
                       </div>
                       {e.comment && <div className="text-muted">«{e.comment}»</div>}
+                      {e.source === "admin" && <div className="text-xs text-muted">Ført av lederen din. Meld fra hvis noe ikke stemmer.</div>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {e.ends_at && <span className="tabular-nums font-medium">{formatHours(workedMinutes(new Date(e.starts_at), new Date(e.ends_at), e.break_minutes))}</span>}
+                      {e.ends_at && <span className="tabular-nums font-medium">{formatHours(workedMinutes(new Date(e.starts_at), new Date(e.ends_at), pb ? 0 : e.break_minutes))}</span>}
                       <span className={`badge ${cls}`}>{label}</span>
                     </div>
                   </div>
@@ -342,6 +352,12 @@ export default async function TimePage({ searchParams }: { searchParams: Promise
                         <form action={deleteEntry}><input type="hidden" name="id" value={e.id} /><ConfirmButton label="Slett registreringen" confirmLabel="Ja, slett" /></form>
                       </div>
                     </details>
+                  )}
+                  <NoteList notes={myNotes.filter((n) => n.time_entry_id === e.id)} />
+                  {e.ends_at && (
+                    <NoteForm date={date} entryId={e.id}
+                      label={e.source === "admin" ? "Stemmer ikke? Meld fra" : editable ? "Legg til informasjon til lederen" : "Meld fra om feil"}
+                      hint={e.source === "admin" ? "Hva stemmer ikke? F.eks. «Jeg gikk 17:30, ikke 16:00»." : "F.eks. «Hadde ikke pause, måtte betjene kunder»."} />
                   )}
                 </li>
               );
@@ -366,7 +382,7 @@ function PlanDiff({ e, tz }: { e: Entry; tz: string }) {
   );
 }
 
-function AdminRow({ r, name, tz, today }: { r: Entry; name: string; tz: string; today: string }) {
+function AdminRow({ r, name, tz, today, pb, notes }: { r: Entry; name: string; tz: string; today: string; pb: boolean; notes: EntryNote[] }) {
   const [label, cls] = STATUS[r.status];
   const date = localDate(new Date(r.starts_at), tz);
   const t = (iso: string) => localTime(new Date(iso), tz);
@@ -380,15 +396,15 @@ function AdminRow({ r, name, tz, today }: { r: Entry; name: string; tz: string; 
           <span>
             <span className="font-medium">{name}</span> · <span>{formatDateLong(date)}</span>
             <span className="block tabular-nums text-muted">
-              {t(r.starts_at)}–{r.ends_at ? t(r.ends_at) : "pågår"}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min`}
+              {t(r.starts_at)}–{r.ends_at ? t(r.ends_at) : "pågår"}{r.break_minutes > 0 && ` · pause ${r.break_minutes} min${pb ? " (betalt)" : ""}`}
               {r.shifts && <PlanDiff e={r} tz={tz} />}
-              {r.source === "clock" && " · stemplet"}
+              {r.source === "clock" && " · stemplet"}{r.source === "admin" && " · ført av leder"}
             </span>
             {r.comment && <span className="block text-muted">«{r.comment}»</span>}
           </span>
         </label>
         <div className="flex items-center gap-2">
-          {r.ends_at && <span className="tabular-nums font-medium">{formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at), r.break_minutes))}</span>}
+          {r.ends_at && <span className="tabular-nums font-medium">{formatHours(workedMinutes(new Date(r.starts_at), new Date(r.ends_at), pb ? 0 : r.break_minutes))}</span>}
           <span className={`badge ${cls}`}>{label}</span>
         </div>
       </div>
@@ -400,6 +416,7 @@ function AdminRow({ r, name, tz, today }: { r: Entry; name: string; tz: string; 
           </div>
         </details>
       )}
+      <div className="ml-7"><NoteList notes={notes} leader /></div>
     </li>
   );
 }

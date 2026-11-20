@@ -1,7 +1,7 @@
 import "server-only";
 import type { AppContext } from "./context";
 import { addDays, dayBounds, isoWeekday, localDate } from "./time";
-import { calculatePay, timeBalance, type EmployeePay, type PayAbsence, type PayEmployee, type PayEntry, type PayEvent } from "./pay";
+import { calculatePay, timeBalance, type EntryOvertime, type EmployeePay, type PayAbsence, type PayEmployee, type PayEntry, type PayEvent } from "./pay";
 import { loadPayRules } from "./pay-rules-data";
 
 type Ctx = AppContext & { org: NonNullable<AppContext["org"]> };
@@ -39,7 +39,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     .eq("org_id", ctx.org.id).lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`).order("full_name");
   if (onlyEmployee) empQ = empQ.eq("id", onlyEmployee);
   let entQ = ctx.supabase.from("time_entries")
-    .select("employee_id, shift_id, starts_at, ends_at, break_minutes, status, shifts!time_entries_shift_id_fkey(called_overtime, starts_at, ends_at)")
+    .select("id, employee_id, shift_id, starts_at, ends_at, break_minutes, status, source, comment, shifts!time_entries_shift_id_fkey(called_overtime, starts_at, ends_at)")
     .eq("org_id", ctx.org.id).gte("starts_at", start).lt("starts_at", end).not("ends_at", "is", null);
   if (onlyEmployee) entQ = entQ.eq("employee_id", onlyEmployee);
   // Gjennomførte vakter uten timer (den ansatte har ikke bekreftet): med i den foreløpige beregningen
@@ -85,11 +85,14 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     };
   });
 
-  type Row = { employee_id: string; shift_id: string | null; starts_at: string; ends_at: string; break_minutes: number; status: string;
+  // Pausen trekkes ikke fra når bedriften har valgt at den regnes som arbeidstid
+  const brk = (m: number) => (ctx.org.paidBreaks ? 0 : m);
+  type Row = { id: string; employee_id: string; shift_id: string | null; starts_at: string; ends_at: string; break_minutes: number; status: string;
+    source: string; comment: string | null;
     shifts: { called_overtime: boolean; starts_at: string; ends_at: string } | null };
   const rows = (ents ?? []) as unknown as Row[];
   const toEntry = (r: Row): PayEntry => ({
-    employeeId: r.employee_id, start: new Date(r.starts_at), end: new Date(r.ends_at), breakMinutes: r.break_minutes,
+    employeeId: r.employee_id, start: new Date(r.starts_at), end: new Date(r.ends_at), breakMinutes: brk(r.break_minutes),
     calledOvertime: r.shifts?.called_overtime ?? false,
     plannedStart: r.shifts ? new Date(r.shifts.starts_at) : null, plannedEnd: r.shifts ? new Date(r.shifts.ends_at) : null,
   });
@@ -105,7 +108,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const withPending = [
     ...rows.map(toEntry),
     ...unconfirmed.map((s): PayEntry => ({
-      employeeId: s.employee_id!, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: s.break_minutes,
+      employeeId: s.employee_id!, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: brk(s.break_minutes),
       calledOvertime: s.called_overtime ?? false, plannedStart: new Date(s.starts_at), plannedEnd: new Date(s.ends_at),
     })),
   ];
@@ -142,5 +145,13 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     lockedCount: periodRows.filter((r) => r.status === "locked").length,
     totalCount: periodRows.length,
     entries: periodRows,
+    /** Klokkeslett for mertid og overtid per registrering (alle registrerte timer, også ikke godkjente) */
+    entryClocks: () => {
+      const map = new Map<string, EntryOvertime>();
+      const regs = rows.map(toEntry);
+      for (const e of employees) calculatePay(e, regs, absences, period, rules.resolve, tz, events, (x, c) => map.set(`${x.employeeId}|${x.start.toISOString()}`, c));
+      return map;
+    },
+    paidBreaks: ctx.org.paidBreaks,
   };
 }

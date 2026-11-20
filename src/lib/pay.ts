@@ -206,6 +206,50 @@ const fmtH = (min: number) => `${round2(min / 60).toLocaleString("nb-NO")} t`;
 
 const inWindow = (hour: number, from: number, to: number) => (from <= to ? hour >= from && hour < to : hour >= from || hour < to);
 
+/** Om et tidspunkt ligger innenfor ordinær arbeidstid etter reglene. */
+function insideWindow(date: string, hour: number, rules: PayRules) {
+  const win = holidayOn(date) !== null && rules.sundayHoliday100 ? null : rules.ordinaryWindow[isoWeekday(date)];
+  return win !== null && win !== undefined && hour >= win[0] && hour < win[1];
+}
+
+/** Klokkeslett for mertid og overtid i én registrering (til kontrollarket). */
+export interface EntryOvertime { extra: [Date, Date][]; overtime: [Date, Date][] }
+
+/**
+ * Finn når på dagen mertid og overtid falt. Tid utenfor ordinær arbeidstid er overtid der den ligger;
+ * tid over grensene (dag, uke, avtalt tid) regnes fra slutten av økta.
+ */
+function overtimeClock(start: Date, end: Date, rules: PayRules, tz: string, outsideIsOvertime: boolean, f: number, extraMin: number, limitOtMin: number): EntryOvertime {
+  const step = 5 * 60000;
+  const steps: { t: number; len: number; inside: boolean }[] = [];
+  for (let t = start.getTime(); t < end.getTime(); t += step) {
+    const p = localParts(new Date(t), tz);
+    const date = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+    steps.push({ t, len: Math.min(step, end.getTime() - t), inside: !outsideIsOvertime || insideWindow(date, p.hour + p.minute / 60, rules) });
+  }
+  const kind: ("ord" | "extra" | "ot")[] = steps.map((x) => (x.inside ? "ord" : "ot"));
+  if (f > 0) {
+    // Fra slutten: først overtid over grensene, så mertid
+    let ot = limitOtMin / f, ex = extraMin / f;
+    for (let i = steps.length - 1; i >= 0 && (ot > 0.5 || ex > 0.5); i--) {
+      if (!steps[i].inside) continue;
+      const m = steps[i].len / 60000;
+      if (ot > 0.5) { kind[i] = "ot"; ot -= m; } else { kind[i] = "extra"; ex -= m; }
+    }
+  }
+  const ranges = (k: "extra" | "ot") => {
+    const out: [Date, Date][] = [];
+    steps.forEach((x, i) => {
+      if (kind[i] !== k) return;
+      const last = out[out.length - 1];
+      if (last && last[1].getTime() === x.t) last[1] = new Date(x.t + x.len);
+      else out.push([new Date(x.t), new Date(x.t + x.len)]);
+    });
+    return out;
+  };
+  return { extra: ranges("extra"), overtime: ranges("ot") };
+}
+
 /** Del en arbeidsøkt i minutter: ordinær tid eller utenfor (lav/100 % sats), og minutter per tillegg. */
 function classifyMinutes(start: Date, end: Date, rules: PayRules, tz: string, outsideIsOvertime: boolean) {
   const out = { inside: 0, outsideLow: 0, outside100: 0, supp: new Map<string, number>(), reason100: new Set<string>() };
@@ -219,8 +263,7 @@ function classifyMinutes(start: Date, end: Date, rules: PayRules, tz: string, ou
     const hour = p.hour + p.minute / 60;
     const wd = isoWeekday(date);
     const isHoliday = holidayOn(date) !== null;
-    const win = isHoliday && rules.sundayHoliday100 ? null : rules.ordinaryWindow[wd];
-    const inside = win !== null && win !== undefined && hour >= win[0] && hour < win[1];
+    const inside = insideWindow(date, hour, rules);
 
     if (inside) out.inside += mins;
     else {
@@ -273,6 +316,7 @@ export function calculatePay(
   rulesOrResolver: PayRules | RuleResolver = ARBEIDSMILJOLOVEN,
   tz = DEFAULT_TZ,
   events: PayEvent[] = [],
+  onEntry?: (entry: PayEntry, clock: EntryOvertime) => void,
 ): EmployeePay {
   const rulesAt = (date: string) => (typeof rulesOrResolver === "function" ? rulesOrResolver(date, employee.id) : rulesOrResolver);
   // Timer før perioden kan være med (samme uke/blokk) for å telle grensene riktig, men gir ikke linjer.
@@ -351,10 +395,12 @@ export function calculatePay(
       const dailyLimit = employee.averaging && employee.averaging.weeks > 1 && date >= employee.averaging.from
         ? (employee.averaging.dailyHours ?? Math.max(rules.dailyOvertimeAfterHours ?? 10, 10))
         : rules.dailyOvertimeAfterHours;
+      let overDaily = 0;
       if (dailyLimit !== null) {
         const used = dayUsed.get(date) ?? 0;
         const room = Math.max(0, dailyLimit * 60 - used);
         const over = Math.max(0, inside - room);
+        overDaily = over;
         if (over > 0) lowReasons.push(`over ${dailyLimit} t samme dag`);
         inside -= over;
         outLow += over;
@@ -381,6 +427,7 @@ export function calculatePay(
         rest -= toFull;
       }
       if (rest > 0) lowReasons.push(weeks > 1 ? `over ${round2(fullTimeMin / 60 / weeks)} t/uke i snitt over ${weeks} uker` : `over ${round2(fullTimeMin / 60)} t i uka`);
+      if (onEntry && count) onEntry(e, overtimeClock(e.start, e.end, rules, tz, outsideIsOvertime, f, toFull, rest + overDaily));
       if (!count) continue;
       const per = weeks > 1 ? ` i snitt over ${weeks} uker` : " per uke";
       add("ordinary", "Ordinære timer", date, toContract, { why: employee.onCall || contractMin <= 0

@@ -42,8 +42,8 @@ export async function loadReport(ctx: Ctx, from: string, to: string, grouping: G
   const report = buildReport({
     from, to, tz: ctx.org.timezone, grouping,
     employees: payroll.pay.map((p) => ({ id: p.employee.id, name: p.employee.name })),
-    shifts: published.map((s) => ({ employeeId: s.employee_id, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: s.break_minutes })),
-    entries: payroll.entries.map((e) => ({ employeeId: e.employee_id, start: new Date(e.starts_at), end: new Date(e.ends_at), breakMinutes: e.break_minutes, status: e.status })),
+    shifts: published.map((s) => ({ employeeId: s.employee_id, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: ctx.org.paidBreaks ? 0 : s.break_minutes })),
+    entries: payroll.entries.map((e) => ({ employeeId: e.employee_id, start: new Date(e.starts_at), end: new Date(e.ends_at), breakMinutes: ctx.org.paidBreaks ? 0 : e.break_minutes, status: e.status })),
     pay: payroll.pay,
     balances: payroll.balances,
   });

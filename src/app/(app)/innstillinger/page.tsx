@@ -86,6 +86,10 @@ export default async function SettingsPage() {
               <input type="checkbox" name="auto_submit_clock_entries" defaultChecked={org?.auto_submit_clock_entries} className="mt-0.5 h-4 w-4" />
               <span>Send inn stemplede timer automatisk<span className="block text-xs text-muted">Gjelder bare når stempling er på.</span></span>
             </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="paid_breaks" defaultChecked={org?.paid_breaks ?? false} className="mt-0.5 h-4 w-4" />
+              <span>Pausen regnes som arbeidstid<span className="block text-xs text-muted">Kryss av hvis de ansatte ikke fritt kan forlate arbeidsplassen i pausen, eller det ikke finnes et eget pause- eller spiserom (arbeidsmiljøloven § 10-9). Da trekkes pausen ikke fra i timer, lønnsgrunnlag og rapporter.</span></span>
+            </label>
           </fieldset>
           <fieldset className="space-y-2 rounded-lg border border-line p-3 md:col-span-2">
             <legend className="px-1 text-sm font-semibold">Sykefravær</legend>

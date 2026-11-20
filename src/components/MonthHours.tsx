@@ -43,8 +43,8 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
         from: t.valid_from, to: t.valid_to, hoursPerWeek: Number(t.hours_per_week), onCall: Boolean(t.on_call),
       })),
     })),
-    entries: (entries ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at!), breakMinutes: x.break_minutes })),
-    shifts: (shifts ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at), breakMinutes: x.break_minutes })),
+    entries: (entries ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at!), breakMinutes: ctx.org.paidBreaks ? 0 : x.break_minutes })),
+    shifts: (shifts ?? []).map((x) => ({ employeeId: x.employee_id, start: new Date(x.starts_at), end: new Date(x.ends_at), breakMinutes: ctx.org.paidBreaks ? 0 : x.break_minutes })),
   }).filter((r) => r.done > 0 || r.plannedRest > 0 || (r.agreed ?? 0) > 0);
   const sum = rows.reduce((s, r) => ({ done: s.done + r.done, rest: s.rest + r.plannedRest }), { done: 0, rest: 0 });
   const month = MONTHS[Number(monthFrom.slice(5, 7)) - 1];

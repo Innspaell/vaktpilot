@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     { name: "Per ansatt", rows: perEmployee, widths: [24, 11, 12, 11, 15, 10, 10, 18, 14, 12, 12, 9, 18] },
     { name: grouping === "uke" ? "Per uke" : "Per måned", rows: perBucket, widths: [20, 11, 24, 12, 13, 9] },
     payrollSheet(r.payroll.pay, r.payroll.period),
-    entriesSheet(r.payroll.entries, names, org.timezone),
+    entriesSheet(r.payroll.entries, names, org.timezone, { clocks: r.payroll.entryClocks(), paidBreaks: r.payroll.paidBreaks }),
     { name: "Bemanning", rows: coverage, widths: [16, 13, 15, 22] },
     { name: "Avspasering", rows: comp, widths: [24, 12, 12, 10] },
   ]);

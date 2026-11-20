@@ -23,7 +23,7 @@ export const BILLING_NOTE = "Fiken AS (Norge) brukes til InnSpæll sin faktureri
 export const RETENTION = [
   ["Innlogging og tilgang for ansatte", "Stenges dagen etter sluttdato."],
   ["Kontaktinfo, nærmeste pårørende, ønsker om arbeidstid og varsler", "Slettes 3 måneder etter sluttdato."],
-  ["Timer, godkjenninger og lønnsgrunnlag", "Oppbevares fordi de er dokumentasjon for lønn, som er bokført (bokføringsloven § 13): 5 år etter utgangen av regnskapsåret. Arbeidsgiveren kan velge lengre tid, ikke kortere. Deretter fjernes navn og ansattnummer."],
+  ["Timer, merknader til timer, godkjenninger og lønnsgrunnlag", "Oppbevares fordi de er dokumentasjon for lønn, som er bokført (bokføringsloven § 13): 5 år etter utgangen av regnskapsåret. Arbeidsgiveren kan velge lengre tid, ikke kortere. Deretter fjernes navn og ansattnummer."],
   ["Endringslogg (hvem endret hva og når)", "Samme som timer og lønnsgrunnlag, fordi den viser hvordan lønnsgrunnlaget ble til."],
   ["Ferie og fravær (type og dato, aldri diagnose)", "Samme som timer og lønnsgrunnlag, fordi fraværet inngår i lønn, feriepenger og refusjon av sykepenger. Deretter fjernes navn og ansattnummer."],
   ["Vakter uten registrerte timer", "Navn og ansattnummer fjernes samtidig som for timer (5 år etter utgangen av regnskapsåret sluttdatoen falt i). Selve vakten beholdes uten navn som historikk over bemanningen."],

@@ -1,5 +1,5 @@
 import "server-only";
-import { wageTypeFor, type EmployeePay } from "./pay";
+import { wageTypeFor, type EmployeePay, type EntryOvertime } from "./pay";
 import type { Cell, Sheet } from "./xlsx";
 import { localDate, localTime } from "./time";
 
@@ -25,18 +25,36 @@ export function explanationSheet(pay: EmployeePay[]): Sheet {
 }
 
 type EntryRow = { employee_id: string; starts_at: string; ends_at: string; break_minutes: number; status: string;
-  shifts: { starts_at: string; ends_at: string } | null };
+  source?: string; comment?: string | null; shifts: { starts_at: string; ends_at: string } | null };
 
-/** Kontrollark: hver registrering, med planlagt tid ved siden av. */
-export function entriesSheet(entries: EntryRow[], names: Map<string, string>, tz: string): Sheet {
-  const status: Record<string, string> = { draft: "Utkast", submitted: "Venter", approved: "Godkjent", locked: "Låst" };
-  const rows: Cell[][] = [["Ansatt", "Dato", "Fra", "Til", "Pause (min)", "Timer", "Planlagt", "Status"]];
+const STATUS: Record<string, string> = { draft: "Utkast", submitted: "Venter", approved: "Godkjent", locked: "Låst" };
+const SOURCE: Record<string, string> = { clock: "Stempling", manual: "Den ansatte", admin: "Leder" };
+
+/** «17:00–19:30, 21:00–22:00» */
+export function clockRanges(ranges: [Date, Date][] | undefined, tz: string) {
+  return (ranges ?? []).map(([a, b]) => `${localTime(a, tz)}–${localTime(b, tz)}`).join(", ");
+}
+
+/**
+ * Kontrollark: hver registrering med start og slutt, pause, mertid og overtid med klokkeslett,
+ * planlagt tid, hvem som førte den og status. Dette er oversikten arbeidsmiljøloven § 10-7 krever.
+ */
+export function entriesRows(entries: EntryRow[], names: Map<string, string>, tz: string,
+  opts: { clocks?: Map<string, EntryOvertime>; paidBreaks?: boolean } = {}): Cell[][] {
+  const rows: Cell[][] = [["Ansatt", "Dato", "Fra", "Til", opts.paidBreaks ? "Pause (min, betalt)" : "Pause (min)", "Timer", "Mertid (kl.)", "Overtid (kl.)", "Planlagt", "Ført av", "Status", "Kommentar"]];
   for (const r of entries.slice().sort((a, b) => (names.get(a.employee_id) ?? "").localeCompare(names.get(b.employee_id) ?? "", "nb") || a.starts_at.localeCompare(b.starts_at))) {
     const s = new Date(r.starts_at), e = new Date(r.ends_at);
+    const c = opts.clocks?.get(`${r.employee_id}|${s.toISOString()}`);
     rows.push([names.get(r.employee_id) ?? "", localDate(s, tz), localTime(s, tz), localTime(e, tz), r.break_minutes,
-      r2(((e.getTime() - s.getTime()) / 60000 - r.break_minutes) / 60),
+      r2(((e.getTime() - s.getTime()) / 60000 - (opts.paidBreaks ? 0 : r.break_minutes)) / 60),
+      clockRanges(c?.extra, tz), clockRanges(c?.overtime, tz),
       r.shifts ? `${localTime(new Date(r.shifts.starts_at), tz)}–${localTime(new Date(r.shifts.ends_at), tz)}` : "",
-      status[r.status] ?? r.status]);
+      SOURCE[r.source ?? ""] ?? "", STATUS[r.status] ?? r.status, r.comment ?? ""]);
   }
-  return { name: "Timer per dag", rows, widths: [24, 12, 7, 7, 11, 8, 13, 10] };
+  return rows;
+}
+
+export function entriesSheet(entries: EntryRow[], names: Map<string, string>, tz: string,
+  opts: { clocks?: Map<string, EntryOvertime>; paidBreaks?: boolean } = {}): Sheet {
+  return { name: "Timer per dag", rows: entriesRows(entries, names, tz, opts), widths: [24, 12, 7, 7, 11, 8, 16, 16, 13, 12, 10, 40] };
 }

@@ -17,7 +17,7 @@ export type TodoAction =
 
 export type TodoActionKey =
   | "approveAbsence" | "rejectAbsence" | "approveSwap" | "rejectSwap" | "approveRequest" | "rejectRequest"
-  | "approveEntries" | "approvePlanned" | "publish" | "confirmShift" | "acceptSwap" | "declineSwap";
+  | "approveEntries" | "approvePlanned" | "publish" | "confirmShift" | "acceptSwap" | "declineSwap" | "resolveNote";
 
 export interface TodoItem {
   key: string;
@@ -83,6 +83,20 @@ export const loadTodo = cache(async (ctx: Ctx): Promise<{ items: TodoItem[]; wai
       sb.from("emergency_contacts").select("employee_id").eq("org_id", org),
       ctx.isAdmin ? sb.from("pay_periods").select("starts_on, ends_on, status").eq("org_id", org).eq("status", "exported") : Promise.resolve({ data: [] }),
     ]);
+    const { data: notes } = await sb.from("entry_notes").select("id, employee_id, date, body, created_at").eq("org_id", org).eq("status", "open").order("created_at");
+
+    // Merknader fra ansatte: lederen tar stilling
+    const myNotes = (notes ?? []).filter((n) => mine(n.employee_id));
+    for (const n of myNotes.slice(0, 5)) {
+      items.push({
+        key: `note-${n.id}`, level: "amber",
+        title: `${first(n.employee_id)} har en merknad til ${formatDateLong(n.date)}`,
+        detail: `«${n.body.length > 160 ? `${n.body.slice(0, 160)} …` : n.body}»`,
+        primary: { kind: "link", label: "Se og svar", href: "/timer?vis=alle#merknader" },
+        secondary: { kind: "form", label: "Behandlet", action: "resolveNote", fields: { id: n.id } },
+      });
+    }
+    if (myNotes.length > 5) items.push({ key: "note-more", level: "amber", title: `${myNotes.length - 5} merknader til fra ansatte`, primary: { kind: "link", label: "Se alle", href: "/timer?vis=alle#merknader" } });
 
     // Underbemanning de neste 7 dagene
     const cov = await coverageForDays(ctx, today, 7, shifts.filter((s) => localDate(new Date(s.starts_at), tz) < addDays(today, 7)));
@@ -159,7 +173,7 @@ export const loadTodo = cache(async (ctx: Ctx): Promise<{ items: TodoItem[]; wai
         due: `Frist ${short(deadline)}`,
         primary: { kind: "form", label: "Godkjenn som planlagt", action: "approvePlanned",
           fields: { shift_ids: unconfirmed.map((s) => s.id), ids: drafts.map((d) => d.id) },
-          confirm: "Den ansatte har ikke bekreftet timene for disse dagene. Vil du godkjenne likevel?" },
+          confirm: "Den ansatte har ikke bekreftet timene for disse dagene. Timene merkes som ført av leder, og den ansatte får beskjed og kan melde fra hvis noe er feil. Vil du godkjenne likevel?" },
         secondary: { kind: "link", label: "Se dem", href: "/timer?vis=alle" },
       });
     }

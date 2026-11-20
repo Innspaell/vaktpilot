@@ -135,6 +135,20 @@ describe("lønnsregler som data", () => {
     expect(line(r, "ordinary") + line(r, "extra")).toBe(13);
   });
 
+  it("klokkeslett for overtid og mertid i kontrollarket", () => {
+    const full = { ...kari, hoursPerWeek: 37.5 };
+    const days = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map((d) => entry(d, "08:00", "17:00", 0));
+    const clocks: string[] = [];
+    const fmt = (r: [Date, Date][]) => r.map(([a, b]) => `${a.toISOString().slice(11, 16)}-${b.toISOString().slice(11, 16)}`).join(",");
+    calc(full, days, [], { from: "2026-11-16", to: "2026-11-22" }, ARBEIDSMILJOLOVEN, "Europe/Oslo", [], (e, c) => clocks.push(`${fmt(c.extra)}|${fmt(c.overtime)}`));
+    // Fredag: 1,5 t ordinært (opp til 37,5), 2,5 t mertid (opp til 40), så 5 t overtid (UTC = norsk tid − 1)
+    expect(clocks[4]).toBe("08:30-11:00|11:00-16:00");
+    // 11 timer én dag: de to siste timene er overtid (over 9 t)
+    const long: string[] = [];
+    calc(kari, [entry("2026-11-16", "07:00", "18:00", 0)], [], { from: "2026-11-16", to: "2026-11-22" }, ARBEIDSMILJOLOVEN, "Europe/Oslo", [], (e, c) => long.push(fmt(c.overtime)));
+    expect(long[0]).toBe("15:00-17:00");
+  });
+
   it("uten tariff: overtid over 40 timer i uka", () => {
     const full = { ...kari, hoursPerWeek: 37.5 };
     const days = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map((d) => entry(d, "08:00", "17:00", 0)); // 5 × 9 = 45

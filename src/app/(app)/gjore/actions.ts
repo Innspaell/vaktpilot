@@ -117,3 +117,11 @@ export async function setTodoDigest(fd: FormData) {
   await ctx.supabase.rpc("set_my_todo_digest", { p_org: ctx.org.id, p_on: one(fd, "on") === "1" });
   revalidatePath("/profil");
 }
+
+export async function todoResolveNote(fd: FormData) {
+  const ctx = await requirePlanner();
+  const id = one(fd, "id");
+  if (!id) return;
+  await ctx.supabase.from("entry_notes").update({ status: "done" }).eq("id", id).eq("status", "open");
+  refresh();
+}

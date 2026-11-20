@@ -175,7 +175,7 @@ export default async function Home() {
     loadTodo(org as Parameters<typeof loadTodo>[0]),
   ]);
   const claimed = new Set((requests ?? []).filter((r) => r.status === "pending").map((r) => r.shift_id));
-  const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), e.break_minutes), 0);
+  const monthMinutes = (entries ?? []).reduce((s, e) => s + workedMinutes(new Date(e.starts_at), new Date(e.ends_at!), ctx.org?.paidBreaks ? 0 : e.break_minutes), 0);
   const coworkers = next
     ? shifts.filter((s) => s.id !== next.id && s.employee_id && new Date(s.starts_at) < new Date(next.ends_at) && new Date(s.ends_at) > new Date(next.starts_at)).map((s) => names.get(s.employee_id!))
     : [];

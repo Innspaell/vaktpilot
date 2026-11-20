@@ -185,3 +185,32 @@ export async function deletePayEvent(fd: FormData) {
   refresh();
   revalidatePath("/lonn");
 }
+
+/** Den ansatte legger en merknad til en arbeidsdag (eller melder fra om feil i timer lederen har ført). */
+export async function addEntryNote(_: ActionState, fd: FormData): Promise<ActionState> {
+  const ctx = await requireOrg();
+  if (!ctx.employeeId) return { error: "Du er ikke registrert som ansatt." };
+  const body = text(fd, "body");
+  if (!body) return { error: "Skriv hva lederen bør vite." };
+  if (body.length > 2000) return { error: "Merknaden kan være på høyst 2000 tegn." };
+  const entryId = text(fd, "time_entry_id");
+  const shiftId = text(fd, "shift_id");
+  const date = text(fd, "date");
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Mangler dato." };
+  const { error } = await ctx.supabase.from("entry_notes").insert({
+    org_id: ctx.org.id, employee_id: ctx.employeeId, time_entry_id: entryId, shift_id: shiftId, date, body, created_by: ctx.userId,
+  });
+  if (error) return { error: "Kunne ikke sende merknaden. Prøv igjen." };
+  refresh();
+  return { ok: "Sendt til lederen din." };
+}
+
+/** Lederen behandler en merknad, med et valgfritt svar til den ansatte. */
+export async function answerEntryNote(fd: FormData) {
+  const ctx = await requirePlanner();
+  const id = text(fd, "id");
+  if (!id) return;
+  const answer = text(fd, "answer");
+  await ctx.supabase.from("entry_notes").update({ status: "done", answer: answer ? answer.slice(0, 2000) : null }).eq("id", id).eq("status", "open");
+  refresh();
+}

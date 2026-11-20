@@ -1186,5 +1186,40 @@ select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
 insert into holiday_payments (org_id, employee_id, date, hours) values (:'org_a', :'per', '2027-05-17', 7.5);
 select pg_temp.check((select count(*) from holiday_payments) = 1, 'leder markerer betalt helligdag');
 
+
+-- Timer ført av leder: den ansatte får beskjed, kan melde fra, og lederen svarer
+reset role;
+select set_config('t.ola', :'ola_emp', false);
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+insert into time_entries (org_id, employee_id, starts_at, ends_at, break_minutes, source, status)
+  values (:'org_a', :'ola_emp', '2027-03-01 07:00+00', '2027-03-01 15:00+00', 30, 'admin', 'approved');
+insert into time_entries (org_id, employee_id, starts_at, ends_at, break_minutes, source, status)
+  values (:'org_a', :'ola_emp', '2027-03-02 07:00+00', '2027-03-02 15:00+00', 30, 'admin', 'approved');
+reset role;
+select pg_temp.check((select count(*) from notifications where user_id = '00000000-0000-0000-0000-0000000000a3' and kind = 'entry_by_leader') = 1, 'to dager ført av leder gir ett samlet varsel');
+select pg_temp.check((select title from notifications where user_id = '00000000-0000-0000-0000-0000000000a3' and kind = 'entry_by_leader') like '%flere dager%', 'samlet varsel sier flere dager');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a3', 'ola@a.no');
+insert into entry_notes (org_id, employee_id, time_entry_id, date, body)
+  select :'org_a', :'ola_emp', id, '2027-03-01', 'Jeg gikk 17:30, ikke 16:00' from time_entries where employee_id = :'ola_emp' and starts_at = '2027-03-01 07:00+00';
+do $$ begin
+  insert into entry_notes (org_id, employee_id, date, body) values (current_setting('t.org')::uuid, current_setting('t.per')::uuid, '2027-03-01', 'Ikke min');
+  raise exception 'FEIL: ansatt skrev merknad på en annen';
+exception when others then if sqlerrm like 'FEIL:%' then raise; end if; end $$;
+update entry_notes set status = 'done', answer = 'Selvgodkjent';
+select pg_temp.check((select count(*) from entry_notes where status = 'open') = 1, 'ansatt kan ikke lukke sin egen merknad');
+reset role;
+select pg_temp.check((select count(*) from notifications where kind = 'entry_note' and user_id = '00000000-0000-0000-0000-0000000000a1') = 1, 'lederen får varsel om merknaden');
+select pg_temp.check((select n from todo_summary(:'org_a', '00000000-0000-0000-0000-0000000000a1') where label like 'merknader%') = 1, 'merknaden står i Å gjøre');
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000a1', 'leder@a.no');
+update entry_notes set status = 'done', answer = 'Rettet til 17:30', body = 'endret tekst';
+reset role;
+select pg_temp.check((select body from entry_notes) = 'Jeg gikk 17:30, ikke 16:00', 'lederen kan ikke endre teksten i merknaden');
+select pg_temp.check((select resolved_by from entry_notes) = '00000000-0000-0000-0000-0000000000a1', 'hvem som behandlet lagres');
+select pg_temp.check((select count(*) from notifications where kind = 'entry_note_answer' and user_id = '00000000-0000-0000-0000-0000000000a3') = 1, 'den ansatte får svaret');
+select pg_temp.check((select count(*) from notifications where kind = 'entry_note' and read_at is null) = 0, 'lederens varsel lukkes når merknaden er behandlet');
+
 reset role;
 select 'ALLE DATABASETESTER OK' as resultat;

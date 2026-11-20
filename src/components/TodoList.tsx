@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { TodoAction, TodoItem, TodoLevel } from "@/lib/todo";
 import { ConfirmSubmit } from "./ConfirmSubmit";
 import {
-  todoAbsence, todoAnswerSwap, todoApproveEntries, todoApprovePlanned, todoConfirmShift, todoPublish, todoRequest, todoSwap,
+  todoAbsence, todoAnswerSwap, todoApproveEntries, todoApprovePlanned, todoConfirmShift, todoPublish, todoRequest, todoResolveNote, todoSwap,
 } from "@/app/(app)/gjore/actions";
 
 const DOT: Record<TodoLevel, string> = { red: "bg-bad", amber: "bg-warn", blue: "bg-brand", grey: "bg-muted/50" };
@@ -22,6 +22,7 @@ const ACTIONS: Record<string, { fn: (fd: FormData) => Promise<void>; decision?: 
   confirmShift: { fn: todoConfirmShift },
   acceptSwap: { fn: todoAnswerSwap, decision: "approve" },
   declineSwap: { fn: todoAnswerSwap, decision: "reject" },
+  resolveNote: { fn: todoResolveNote },
 };
 
 function Act({ a, primary, formId }: { a: TodoAction; primary: boolean; formId: string }) {
