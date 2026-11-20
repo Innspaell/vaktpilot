@@ -10,6 +10,7 @@ import { DepartmentPills } from "@/components/DepartmentPills";
 import { loadDepartments, managesEmployee, selectedDepartment, shiftInDepartment } from "@/lib/departments";
 import { PlanBoard } from "@/components/PlanBoard";
 import { buildBoard } from "@/lib/plan-board";
+import { personOrder, primaryRoles, type RosterRole } from "@/lib/roster";
 import { assignShift, cancelShift, clearPeriod, copyPreviousWeek, createShift, proposeShift, publishWeek, requestOpenShift } from "../actions";
 import { checkPlannedShifts } from "@/lib/worktime-check";
 
@@ -59,7 +60,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [names, allShifts, rolesRes, requestsRes, absencesRes, pctRes] = await Promise.all([
     colleagues(ctx),
     shiftsBetween(ctx, from, addDays(from, days)),
-    ctx.supabase.from("work_roles").select("id, name, color").eq("org_id", ctx.org.id).order("name"),
+    ctx.supabase.from("work_roles").select("id, name, color, sort_order").eq("org_id", ctx.org.id).order("name"),
     ctx.employeeId
       ? ctx.supabase.from("shift_requests").select("shift_id").eq("employee_id", ctx.employeeId).eq("status", "pending")
       : Promise.resolve({ data: [] as { shift_id: string | null }[] }),
@@ -98,17 +99,22 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   let boardTemplates: { id: string; name: string; start: string; end: string; breakMinutes: number; workRoleId: string | null }[] = [];
   if (ctx.canPlan && view === "uke") {
     const to = addDays(from, days - 1);
-    const [{ data: emps }, { data: terms }, { data: avail }, { data: tpl }] = await Promise.all([
+    const [{ data: emps }, { data: terms }, { data: avail }, { data: tpl }, { data: roleLinks }] = await Promise.all([
       ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
       ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call").eq("org_id", ctx.org.id)
         .lte("valid_from", to).or(`valid_to.is.null,valid_to.gte.${from}`),
       ctx.supabase.from("availability").select("employee_id, kind, date, weekday").eq("org_id", ctx.org.id),
       ctx.supabase.from("shift_templates").select("id, name, start_time, end_time, break_minutes, work_role_id").eq("org_id", ctx.org.id).order("start_time"),
+      ctx.supabase.from("employee_work_roles").select("employee_id, work_role_id").eq("org_id", ctx.org.id),
     ]);
+    // Samme rekkefølge som i vaktplanen: rollenes rekkefølge, så etternavn
+    const roleList = (rolesRes.data ?? []) as RosterRole[];
+    const order = personOrder(roleList, primaryRoles(roleList, roleLinks ?? []));
     const onShift = new Set(shifts.map((s) => s.employee_id).filter(Boolean));
     const list = (emps ?? []).filter((e) => (!e.end_date || e.end_date >= from) && managesEmployee(ctx.isAdmin, deps, e.id)
       && (e.start_date <= to || onShift.has(e.id))
-      && (!dep || onShift.has(e.id) || !deps.canWork.get(e.id)?.size || deps.canWork.get(e.id)!.has(dep)));
+      && (!dep || onShift.has(e.id) || !deps.canWork.get(e.id)?.size || deps.canWork.get(e.id)!.has(dep)))
+      .sort((a, b) => order({ id: a.id, name: a.full_name }, { id: b.id, name: b.full_name }));
     board = buildBoard({
       from, days, tz,
       coverage,

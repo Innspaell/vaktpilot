@@ -55,3 +55,22 @@ export function shortName(name: string) {
   if (parts.length < 2 || name.length <= 12) return name;
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
 }
+
+/** Etternavn (siste ord i navnet). */
+export function surname(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return parts[parts.length - 1] ?? name;
+}
+
+/**
+ * Rekkefølge for personer i vaktplanen: etter hovedrollens plass (rekkefølgen under Innstillinger → Roller),
+ * så etternavn og fornavn. Uten rolle kommer sist.
+ */
+export function personOrder(roles: RosterRole[], primary: Map<string, string>) {
+  const rank = new Map(sortRoles(roles).map((r, i) => [r.id, i]));
+  const rankOf = (id: string | null) => (id && primary.has(id) ? rank.get(primary.get(id)!) ?? 999 : 999);
+  return (a: { id: string | null; name: string }, b: { id: string | null; name: string }) =>
+    rankOf(a.id) - rankOf(b.id)
+    || surname(a.name).localeCompare(surname(b.name), "nb")
+    || a.name.localeCompare(b.name, "nb");
+}

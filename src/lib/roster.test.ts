@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByRole, primaryRoles, shortName, shortTime } from "./roster";
+import { groupByRole, primaryRoles, shortName, shortTime, personOrder } from "./roster";
 import { zonedToUtc } from "./time";
 
 const roles = [
@@ -25,5 +25,17 @@ describe("vaktplanvisning", () => {
     expect(shortTime(zonedToUtc("2026-11-16", "08:30"), zonedToUtc("2026-11-16", "16:00"))).toBe("08:30–16");
     expect(shortName("Christian Andreassen")).toBe("Christian A.");
     expect(shortName("Kari Lie")).toBe("Kari Lie");
+  });
+  it("sorterer etter rolle, så etternavn", () => {
+    const roles = [
+      { id: "k", name: "Kundebehandler", color: "", sort_order: 10 },
+      { id: "l", name: "Ledelse", color: "", sort_order: 20 },
+    ];
+    const primary = new Map([["e", "l"], ["c", "k"], ["j", "k"]]);
+    const people = [
+      { id: "e", name: "Erlend Engan" }, { id: "x", name: "Uten Rolle" },
+      { id: "c", name: "Christian Marthinsen" }, { id: "j", name: "Joakim Knutsen" },
+    ];
+    expect(people.sort(personOrder(roles, primary)).map((p) => p.id)).toEqual(["j", "c", "e", "x"]);
   });
 });

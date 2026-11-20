@@ -6,7 +6,7 @@ import { colleagues, coverageForDays, shiftsBetween, today, type ShiftRow } from
 import { DepartmentPills } from "@/components/DepartmentPills";
 import { loadDepartments, selectedDepartment, shiftInDepartment } from "@/lib/departments";
 import { addDays, dayBounds, formatHours, isoWeekday, localDate, localTime, workedMinutes } from "@/lib/time";
-import { groupByRole, primaryRoles, shortName, shortTime, type RosterRole } from "@/lib/roster";
+import { groupByRole, personOrder, primaryRoles, shortName, shortTime, surname, type RosterRole } from "@/lib/roster";
 import { ActionForm, Field } from "@/components/Form";
 import { proposeShift, requestOpenShift } from "./actions";
 
@@ -103,6 +103,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const dateOf = (s: ShiftRow) => localDate(new Date(s.starts_at), tz);
   const awayOn = (d: string) => absences.filter((a) => a.from_date <= d && a.to_date >= d);
   const name = (id: string | null) => (id ? names.get(id) ?? "Ukjent" : "Ledig");
+  // Rekkefølge: rollenes rekkefølge (Innstillinger → Roller), så etternavn
+  const order = personOrder(roles, primary);
+  const byPerson = (a: ShiftRow, b: ShiftRow) =>
+    order({ id: a.employee_id, name: name(a.employee_id) }, { id: b.employee_id, name: name(b.employee_id) }) || a.starts_at.localeCompare(b.starts_at);
 
   // Navigasjon
   const step = view === "dag" ? 1 : view === "uke" ? 7 : view === "mine" ? 35 : 0;
@@ -160,7 +164,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
       {/* ---------------- MINE VAKTER ---------------- */}
       {view === "mine" && ctx.employeeId && (
-        <AgendaView me={ctx.employeeId} from={from} days={days} now={now} tz={tz} shifts={visible} absences={allAbsences}
+        <AgendaView byPerson={byPerson} me={ctx.employeeId} from={from} days={days} now={now} tz={tz} shifts={visible} absences={allAbsences}
           openShifts={openShifts} requested={requested} roleName={(s) => roleById.get(roleOf(s) ?? "")?.name ?? null} name={name}
           calendarHref="/profil#kalender" />
       )}
@@ -169,7 +173,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       {view === "dag" && (
         <DayView linkFor={shiftLink} date={anchor} shifts={shifts.filter((s) => dateOf(s) === anchor)} away={awayOn(anchor)}
           cov={coverage[0]} roles={roles} roleOf={roleOf} name={name} tz={tz} isAdmin={ctx.canPlan}
-          canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested} me={ctx.employeeId} isToday={anchor === now} />
+          canClaim={!ctx.canPlan && Boolean(ctx.employeeId)} requested={requested} me={ctx.employeeId} isToday={anchor === now} byPerson={byPerson} />
       )}
 
       {/* ---------------- UKE ---------------- */}
@@ -181,7 +185,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             // Alle med vakt eller fravær denne uka, pluss resten av kollegaene (uten avdelingsfilter)
             const ids = new Set([...shifts.filter((s) => s.employee_id).map((s) => s.employee_id!), ...absences.map((a) => a.employee_id)]);
             if (!dep) for (const id of names.keys()) ids.add(id);
-            const people = Array.from(ids).map((id) => ({ id, n: name(id) })).sort((a, b) => a.n.localeCompare(b.n, "nb"));
+            const people = Array.from(ids).map((id) => ({ id, n: name(id) })).sort((a, b) => order({ id: a.id, name: a.n }, { id: b.id, name: b.n }));
             const hoursOf = (id: string) => shifts.filter((s) => s.employee_id === id)
               .reduce((m, s) => m + workedMinutes(new Date(s.starts_at), new Date(s.ends_at), s.break_minutes), 0);
             return (
@@ -298,7 +302,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <div className="grid grid-cols-7 gap-1">
               {coverage.map((c) => {
                 const inMonth = c.date.slice(0, 7) === anchor.slice(0, 7);
-                const day = shifts.filter((s) => dateOf(s) === c.date).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+                const day = shifts.filter((s) => dateOf(s) === c.date).sort(byPerson);
                 const away = awayOn(c.date);
                 return (
                   <Link key={c.date} href={href({ d: c.date, v: "dag" })}
@@ -330,7 +334,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             const openOn = (d: string) => openShifts.some((s) => dateOf(s) === d);
             const myCount = coverage.filter((c) => c.date.slice(0, 7) === anchor.slice(0, 7) && meOn(c.date)).length;
             const day = shifts.filter((s) => s.employee_id && dateOf(s) === sel)
-              .sort((a, b) => (a.employee_id === ctx.employeeId ? -1 : b.employee_id === ctx.employeeId ? 1 : a.starts_at.localeCompare(b.starts_at)));
+              .sort(byPerson);
             const away = awayOn(sel);
             const open = openShifts.filter((s) => dateOf(s) === sel);
             return (
@@ -411,8 +415,8 @@ function c0<T extends { date: string }>(list: T[], date: string) {
 }
 
 /** «Mine vakter»: egne vakter, fri og ledige vakter fremover, uke for uke, med hvem du jobber med og når. */
-function AgendaView({ me, from, days, now, tz, shifts, absences, openShifts, requested, roleName, name, calendarHref }: {
-  me: string; from: string; days: number; now: string; tz: string; shifts: ShiftRow[];
+function AgendaView({ byPerson, me, from, days, now, tz, shifts, absences, openShifts, requested, roleName, name, calendarHref }: {
+  byPerson: (a: ShiftRow, b: ShiftRow) => number; me: string; from: string; days: number; now: string; tz: string; shifts: ShiftRow[];
   absences: { employee_id: string; from_date: string; to_date: string; type_name: string }[];
   openShifts: ShiftRow[]; requested: Set<string | null>; roleName: (s: ShiftRow) => string | null; name: (id: string | null) => string; calendarHref: string;
 }) {
@@ -424,7 +428,7 @@ function AgendaView({ me, from, days, now, tz, shifts, absences, openShifts, req
   const next = mineAll.find((s) => new Date(s.ends_at).getTime() > nowMs);
   const withWhom = (s: ShiftRow) => {
     const others = shifts.filter((o) => o.employee_id && o.employee_id !== me && o.status === "published" && dateOf(o) === dateOf(s))
-      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      .sort(byPerson);
     return others.length ? `Med ${others.map((o) => `${first(o.employee_id)} ${t(o)}`).join(" · ")}` : "Alene på jobb";
   };
   const untilNext = (s: ShiftRow) => {
@@ -556,7 +560,7 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor, focu
         <div key={g.role?.id ?? "andre"}>
           <RoleLabel role={g.role} />
           <ul className="mt-1 divide-y divide-line">
-            {g.items.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || name(a.employee_id).localeCompare(name(b.employee_id), "nb")).map((s) => (
+            {g.items.sort((a, b) => surname(name(a.employee_id)).localeCompare(surname(name(b.employee_id)), "nb") || name(a.employee_id).localeCompare(name(b.employee_id), "nb") || a.starts_at.localeCompare(b.starts_at)).map((s) => (
               <li key={s.id} className={`${s.employee_id === highlight ? "font-semibold" : ""} ${s.id === focus ? "-mx-2 rounded-lg bg-brand-soft px-2" : ""}`}>
                 {(() => {
                   const inner = (
@@ -587,8 +591,9 @@ function GroupedList({ shifts, roles, roleOf, name, tz, highlight, linkFor, focu
 }
 
 /** «Hvem jobber»: én dag som tidslinje (en stolpe per person), deg øverst, og samme dag som liste under. */
-function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor, canClaim, requested, me, isToday }: {
+function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, linkFor, canClaim, requested, me, isToday, byPerson }: {
   linkFor?: (s: ShiftRow) => string; canClaim: boolean; requested: Set<string | null>; me: string | null; isToday: boolean;
+  byPerson: (a: ShiftRow, b: ShiftRow) => number;
   date: string; shifts: ShiftRow[]; away: { employee_id: string; type_name: string }[];
   cov: { closed: boolean; holiday: string | null; gaps: { start: Date; end: Date; missing: number }[]; peakRequired: number };
   roles: RosterRole[]; roleOf: (s: ShiftRow) => string | null; name: (id: string | null) => string; tz: string; isAdmin: boolean;
@@ -602,7 +607,7 @@ function DayView({ date, shifts, away, cov, roles, roleOf, name, tz, isAdmin, li
   const ticks = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).filter((h) => (h - lo) % step === 0 && h < hi);
   const roleById = new Map(roles.map((r) => [r.id, r]));
   const assigned = shifts.filter((s) => s.employee_id)
-    .sort((a, b) => (a.employee_id === me ? -1 : b.employee_id === me ? 1 : a.starts_at.localeCompare(b.starts_at)));
+    .sort(byPerson);
   const open = shifts.filter((s) => !s.employee_id);
   const nowH = isToday ? (Date.now() - d0.getTime()) / 3600000 : null;
   const people = new Set(assigned.map((s) => s.employee_id)).size;
