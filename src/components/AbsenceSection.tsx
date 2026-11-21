@@ -3,6 +3,7 @@ import { colleagues } from "@/lib/data";
 import { formatDateLong, localDate, addDays } from "@/lib/time";
 import { workdaysBetween } from "@/lib/absence";
 import { ActionForm, Field } from "./Form";
+import { AbsenceTypeGrade } from "./AbsenceTypeGrade";
 import { VacationOverview, VacationTransfer } from "./VacationOverview";
 import { cancelAbsence, decideAbsence, registerAbsence, requestAbsence } from "@/app/(app)/foresporsler/absence-actions";
 
@@ -50,9 +51,6 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
   const pending = rows.filter((r) => r.status === "pending");
   const upcoming = rows.filter((r) => r.status === "approved" && r.to_date >= today).reverse();
   const history = rows.filter((r) => !pending.includes(r) && !upcoming.includes(r)).slice(0, 15);
-  const typeOptions = (types ?? []).map((t) => (
-    <option key={t.id} value={t.id}>{t.name}{t.needs_approval ? "" : " (registreres uten godkjenning)"}</option>
-  ));
   // Ansatte ser sykefravær bare når bedriften lar dem melde sykdom i appen
   const ownTypeOptions = (types ?? []).filter((t) => sickSelfReport || !t.is_sick).map((t) => (
     <option key={t.id} value={t.id}>{t.name}{t.needs_approval ? "" : " (registreres uten godkjenning)"}</option>
@@ -112,16 +110,13 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
-            <Field label="Type"><select name="absence_type_id" required className="input">{typeOptions}</select></Field>
+            <AbsenceTypeGrade types={(types ?? []).map((t) => ({ id: t.id, name: t.name, key: t.key, note: t.needs_approval ? "" : " (registreres uten godkjenning)" }))} />
             <Field label="Fra"><input name="from_date" type="date" required defaultValue={today} className="input" /></Field>
             <Field label="Til"><input name="to_date" type="date" required defaultValue={today} className="input" /></Field>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Fra kl." hint="Deler av dagen."><input name="from_time" type="time" className="input" /></Field>
               <Field label="Til kl." hint="Tomt = hele dager."><input name="to_time" type="time" className="input" /></Field>
             </div>
-            <Field label="Grad (%)" hint="Gradert sykmelding, f.eks. 50. Gjelder arbeidsevnen: timene den ansatte jobber, føres som vanlig. Tomt = 100 %.">
-              <input name="percent" type="number" min={1} max={100} step={1} inputMode="numeric" className="input" />
-            </Field>
             <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-2">
               <input type="checkbox" name="release_shifts" defaultChecked className="h-4 w-4" /> Gjør vaktene i perioden ledige (ikke ved gradert fravær)
             </label>

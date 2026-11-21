@@ -1,7 +1,8 @@
 import "server-only";
 import type { AppContext } from "./context";
-import { addDays } from "./time";
+import { addDays, localDate } from "./time";
 import { loadPayroll } from "./payroll-data";
+import { gradedSickRows } from "./graded-sick";
 import { coverageForDays, shiftsBetween } from "./data";
 import { buildReport, compTimeBalance, coverageSummary, type Grouping } from "./report";
 
@@ -47,5 +48,16 @@ export async function loadReport(ctx: Ctx, from: string, to: string, grouping: G
     pay: payroll.pay,
     balances: payroll.balances,
   });
-  return { ...report, payroll, coverage: coverageSummary(coverage), comp };
+  const brk = (m: number) => (ctx.org.paidBreaks ? 0 : m);
+  const today = localDate(new Date(), ctx.org.timezone);
+  // Gradert sykmelding regnet på både arbeidsevne og tid
+  const graded = gradedSickRows(
+    payroll.pay.map((p) => ({ employeeId: p.employee.id, name: p.employee.name, hoursPerWeek: p.employee.onCall ? 0 : p.employee.hoursPerWeek })),
+    payroll.absences.filter((a) => a.percent && a.percent < 100).map((a) => ({ employeeId: a.employeeId, from: a.from, to: a.to, percent: a.percent! })),
+    payroll.entries.map((e) => ({ employeeId: e.employee_id, start: new Date(e.starts_at), end: new Date(e.ends_at), breakMinutes: brk(e.break_minutes) })),
+    published.filter((s) => s.employee_id).map((s) => ({ employeeId: s.employee_id!, start: new Date(s.starts_at), end: new Date(s.ends_at), breakMinutes: brk(s.break_minutes) })),
+    // Bare dager som har vært: timer fram i tid er ikke jobbet ennå
+    { from, to: to < today ? to : today }, ctx.org.timezone,
+  );
+  return { ...report, payroll, coverage: coverageSummary(coverage), comp, graded };
 }

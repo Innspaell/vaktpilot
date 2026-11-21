@@ -5,6 +5,7 @@ import { addDays, formatDateLong, localDate } from "@/lib/time";
 import type { Grouping } from "@/lib/report";
 import { MonthHours } from "@/components/MonthHours";
 import { WorkAndAbsence } from "@/components/WorkAndAbsence";
+import { GradedSickTable } from "@/components/GradedSickTable";
 
 const num = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
 const signed = (n: number) => `${n > 0.004 ? "+" : ""}${num(n)}`;
@@ -102,6 +103,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </section>
 
       <WorkAndAbsence ctx={ctx} from={from} to={to} rows={r.employees} />
+      <GradedSickTable rows={r.graded} xlsxHref={`/api/rapport?fra=${from}&til=${to}&per=${grouping}`} />
 
       <section className="card overflow-x-auto p-0">
         <div className="flex items-center justify-between px-4 pt-4">

@@ -27,7 +27,9 @@ function period(fd: FormData) {
   const tt = text(fd, "to_time");
   // Gradert fravær (f.eks. 50 % sykmeldt) gjelder hele dager i perioden
   const pctRaw = text(fd, "percent");
-  const percent = pctRaw ? Math.round(Number(pctRaw.replace(",", "."))) : null;
+  const parsed = pctRaw ? Math.round(Number(pctRaw.replace(",", "."))) : null;
+  if (parsed !== null && !(parsed >= 1 && parsed <= 100)) return { error: "Graden må være mellom 1 og 100 %." };
+  const percent = parsed === 100 ? null : parsed;
   if (percent !== null) {
     if (!(percent >= 1 && percent <= 100)) return { error: "Graden må være mellom 1 og 100 %." };
     if (ft || tt) return { error: "Gradert fravær gjelder hele dager. Fjern klokkeslettene, eller la graden stå tom." };

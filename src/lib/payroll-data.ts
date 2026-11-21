@@ -145,6 +145,8 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
     lockedCount: periodRows.filter((r) => r.status === "locked").length,
     totalCount: periodRows.length,
     entries: periodRows,
+    /** Godkjent fravær i perioden (med grad) */
+    absences,
     /** Klokkeslett for mertid og overtid per registrering (alle registrerte timer, også ikke godkjente) */
     entryClocks: () => {
       const map = new Map<string, EntryOvertime>();

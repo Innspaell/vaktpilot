@@ -54,6 +54,12 @@ export async function GET(request: Request) {
     entriesSheet(r.payroll.entries, names, org.timezone, { clocks: r.payroll.entryClocks(), paidBreaks: r.payroll.paidBreaks }),
     { name: "Bemanning", rows: coverage, widths: [16, 13, 15, 22] },
     { name: "Avspasering", rows: comp, widths: [24, 12, 12, 10] },
+    {
+      name: "Gradert sykmelding",
+      rows: [["Ansatt", "Fra", "Til", "Sykmeldingsgrad (%)", "Grunnlag", "Grunnlag (t)", "Jobbet (t)", "På jobb (% av tiden)", "Arbeidsinnsats (%)", "Tilsvarer sykmelding (%)"],
+        ...r.graded.map((g): Cell[] => [g.name, g.from, g.to, g.grade, g.basis === "avtalt" ? "Avtalt tid" : "Planlagte vakter", g.basisHours, g.workedHours, g.timePct, g.effortPct, g.effectivePct])],
+      widths: [24, 12, 12, 18, 16, 12, 10, 18, 17, 22],
+    },
   ]);
   const file = `rapport_${org.name.replace(/[^\wæøåÆØÅ]+/g, "-")}_${from}_${to}.xlsx`;
   return new NextResponse(new Uint8Array(buf), { headers: xlsxResponseHeaders(file) });
