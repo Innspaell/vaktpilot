@@ -45,7 +45,7 @@ export async function WorkAndAbsence({ ctx, from, to, rows }: { ctx: Ctx; from: 
         <h2 className="h2">Arbeidstid og fravær</h2>
         <p className="mt-1 text-xs text-muted">
           Belastning og sykefravær i perioden per ansatt. Mye overtid eller brudd på arbeidstidsreglene sammen med sykefravær kan være et tegn på for stor belastning,
-          og er markert. Overtid regnes av godkjente timer. Gradert sykmelding teller med graden.
+          og er markert. Overtid regnes av godkjente timer. Sykefraværet regnes som hos SSB: gradert sykmelding teller med graden.
         </p>
       </div>
       {data.length === 0 ? <p className="p-4 text-sm text-muted">Ingen timer eller sykefravær i perioden.</p> : (

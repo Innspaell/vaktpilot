@@ -119,7 +119,7 @@ export async function AbsenceSection({ ctx }: { ctx: Ctx }) {
               <Field label="Fra kl." hint="Deler av dagen."><input name="from_time" type="time" className="input" /></Field>
               <Field label="Til kl." hint="Tomt = hele dager."><input name="to_time" type="time" className="input" /></Field>
             </div>
-            <Field label="Grad (%)" hint="Gradert sykmelding, f.eks. 50. Tomt = 100 %.">
+            <Field label="Grad (%)" hint="Gradert sykmelding, f.eks. 50. Gjelder arbeidsevnen: timene den ansatte jobber, føres som vanlig. Tomt = 100 %.">
               <input name="percent" type="number" min={1} max={100} step={1} inputMode="numeric" className="input" />
             </Field>
             <label className="flex items-center gap-2 self-end pb-3 text-sm md:col-span-2">

@@ -190,7 +190,7 @@ export default async function AbsenceOverviewPage({ searchParams }: { searchPara
           </tbody>
         </table>
         <p className="px-4 py-3 text-xs text-muted">
-          Sykefravær = tapte dagsverk delt på avtalte dagsverk, vektet med stillingsprosent (samme metode som SSB). Hverdager uten helligdager.
+          Sykefravær = tapte dagsverk delt på avtalte dagsverk, vektet med stillingsprosent (samme metode som SSB). Gradert sykmelding teller med graden. Hverdager uten helligdager.
           Egenmelding: etter folketrygdloven kan egenmelding brukes opptil 4 ganger på 12 måneder med inntil 3 dager hver gang
           (bedrifter med IA-avtale kan ha andre regler). ⚠ vises ved 4 ganger eller 12 dager. Ansatte: {active.length} · arbeidsdager i perioden: {active[0] ? employedWorkdays({ ...active[0], startDate: from, endDate: null }, from, to) : 0}.
         </p>

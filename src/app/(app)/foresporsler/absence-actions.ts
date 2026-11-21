@@ -103,7 +103,7 @@ export async function registerAbsence(_: ActionState, fd: FormData): Promise<Act
   // Gradert: den ansatte jobber fortsatt delvis, så vaktene står til lederen har tilpasset dem
   if (fd.get("release_shifts") === "on" && !p.percent) released = await releaseShifts(ctx, employeeId, p.from, p.to);
   refresh();
-  if (p.percent) return { ok: `Registrert som ${p.percent} % fravær. Vaktene i perioden er ikke endret: tilpass dem i planen.` };
+  if (p.percent) return { ok: `Registrert som ${p.percent} % sykmeldt. Vaktene er ikke endret. Timene den ansatte faktisk jobber, føres som vanlig, og resten av avtalt tid regnes som fravær.` };
   return { ok: released ? `Registrert. ${released} ${released === 1 ? "vakt er" : "vakter er"} gjort ledige.` : "Registrert." };
 }
 

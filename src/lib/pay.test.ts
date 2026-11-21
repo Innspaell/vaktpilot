@@ -135,6 +135,17 @@ describe("lønnsregler som data", () => {
     expect(line(r, "ordinary") + line(r, "extra")).toBe(13);
   });
 
+  it("gradert sykmelding: graden gjelder arbeidsevnen, fraværet er avtalt tid minus jobbet tid", () => {
+    const full = { ...kari, hoursPerWeek: 37.5 };
+    const sick = { employeeId: "k", from: "2026-11-16", to: "2026-11-17", typeKey: "sykmelding", typeName: "Sykmelding", paid: true, countsAsWork: true, partialHours: null, percent: 50 };
+    // Mandag full dag på jobb (redusert tempo), tirsdag 3 timer
+    const e = [entry("2026-11-16", "08:00", "15:30", 0), entry("2026-11-17", "08:00", "11:00", 0)];
+    const r = calc(full, e, [sick], { from: "2026-11-16", to: "2026-11-17" }, ARBEIDSMILJOLOVEN);
+    expect(r.lines.find((l) => l.code === "absence_sykmelding")?.hours).toBe(4.5);
+    const b = timeBalance(full, e, [sick], { from: "2026-11-16", to: "2026-11-17" });
+    expect(b.diffHours).toBe(0);
+  });
+
   it("klokkeslett for overtid og mertid i kontrollarket", () => {
     const full = { ...kari, hoursPerWeek: 37.5 };
     const days = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"].map((d) => entry(d, "08:00", "17:00", 0));

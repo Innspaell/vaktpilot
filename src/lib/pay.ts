@@ -518,20 +518,27 @@ export function calculatePay(
 
   // Fravær per type: dager (man–fre uten helligdager) og timer
   const byType = new Map<string, { name: string; days: number; minutes: number; graded?: boolean }>();
+  // Jobbet tid per dag, for gradert fravær: graden gjelder arbeidsevnen, ikke arbeidstiden,
+  // så fraværet er avtalt tid minus det den ansatte faktisk jobbet den dagen
+  const workedOn = new Map<string, number>();
+  for (const e of mine) {
+    const d = localDate(e.start, tz);
+    workedOn.set(d, (workedOn.get(d) ?? 0) + Math.max(0, (e.end.getTime() - e.start.getTime()) / 60000 - e.breakMinutes));
+  }
   for (const a of absences.filter((x) => x.employeeId === employee.id)) {
     for (let d = a.from > period.from ? a.from : period.from; d <= (a.to < period.to ? a.to : period.to); d = addDays(d, 1)) {
       if (isoWeekday(d) > 5 || holidayOn(d)) continue;
       const t = byType.get(a.typeKey) ?? { name: a.typeName, days: 0, minutes: 0 };
-      const share = a.percent ? a.percent / 100 : 1;
+      const off = a.percent ? Math.max(0, dayMinutes - (workedOn.get(d) ?? 0)) : dayMinutes;
       t.days += a.partialHours ? 0 : 1;
-      t.minutes += a.partialHours ? a.partialHours * 60 : a.paid ? dayMinutes * share : 0;
+      t.minutes += a.partialHours ? a.partialHours * 60 : a.paid ? off : 0;
       if (a.percent) t.graded = true;
       byType.set(a.typeKey, t);
     }
   }
   for (const [key, t] of byType) {
     lines.push({ code: `absence_${key}`, label: t.graded ? `${t.name} (gradert)` : t.name, hours: round2(t.minutes / 60), days: t.days,
-      why: t.graded ? "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager). Gradert fravær gir timer etter graden." : "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager)." });
+      why: t.graded ? "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager). Ved gradert sykmelding gjelder graden arbeidsevnen, ikke timene: fraværet er avtalt tid minus det den ansatte faktisk jobbet de dagene." : "Godkjent fravær, telt i arbeidsdager (man–fre uten helligdager)." });
   }
 
   return { employee, lines, workedHours: round2(worked / 60) };
@@ -565,14 +572,18 @@ export function timeBalance(
   for (let d = from; d <= until; d = addDays(d, 1)) {
     if (isoWeekday(d) <= 5 && !holidayOn(d)) expected += dayMin;
   }
-  const worked = entries
-    .filter((e) => e.employeeId === employee.id && localDate(e.start, tz) >= period.from && localDate(e.start, tz) <= period.to)
-    .reduce((s, e) => s + Math.max(0, (e.end.getTime() - e.start.getTime()) / 60000 - e.breakMinutes), 0);
+  const workedOn = new Map<string, number>();
+  for (const e of entries) {
+    const d = localDate(e.start, tz);
+    if (e.employeeId !== employee.id || d < period.from || d > period.to) continue;
+    workedOn.set(d, (workedOn.get(d) ?? 0) + Math.max(0, (e.end.getTime() - e.start.getTime()) / 60000 - e.breakMinutes));
+  }
+  const worked = [...workedOn.values()].reduce((a, b) => a + b, 0);
   let absence = 0;
   for (const a of absences.filter((x) => x.employeeId === employee.id && x.countsAsWork)) {
     for (let d = a.from > from ? a.from : from; d <= (a.to < until ? a.to : until); d = addDays(d, 1)) {
       if (isoWeekday(d) > 5 || holidayOn(d)) continue;
-      absence += a.partialHours ? a.partialHours * 60 : dayMin * (a.percent ? a.percent / 100 : 1);
+      absence += a.partialHours ? a.partialHours * 60 : a.percent ? Math.max(0, dayMin - (workedOn.get(d) ?? 0)) : dayMin;
     }
   }
   return {
