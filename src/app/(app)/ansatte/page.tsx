@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WORKER_TYPES } from "@/lib/employees";
 import { requirePlanner } from "@/lib/context";
 import { ActionForm, Field } from "@/components/Form";
 import { addEmployee } from "../actions";
@@ -10,14 +11,14 @@ export default async function EmployeesPage() {
   const [{ data: employees }, { data: statusRows }] = await Promise.all([
     ctx.supabase
       .from("employees")
-      .select("id, full_name, email, user_id, end_date, auto_plan, must_change_password, employment_terms(position_pct, on_call, pay_type, valid_to)")
+      .select("id, full_name, email, user_id, end_date, auto_plan, must_change_password, worker_type, employment_terms(position_pct, on_call, pay_type, valid_to)")
       .eq("org_id", ctx.org.id)
       .order("full_name"),
     ctx.supabase.rpc("employees_login_status", { p_org: ctx.org.id }),
   ]);
   const status = new Map(((statusRows ?? []) as LoginStatusRow[]).map((r) => [r.employee_id, r]));
 
-  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null; auto_plan: boolean; must_change_password: boolean | null;
+  type Row = { id: string; full_name: string; email: string | null; user_id: string | null; end_date: string | null; auto_plan: boolean; must_change_password: boolean | null; worker_type: string;
     employment_terms: { position_pct: number; on_call: boolean; pay_type: string; valid_to: string | null }[] };
   const rows = (employees ?? []) as Row[];
   const today = new Date().toISOString().slice(0, 10);
@@ -48,7 +49,8 @@ export default async function EmployeesPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2 text-sm">
                       {!e.auto_plan && <span className="badge bg-paper text-muted ring-1 ring-line">ikke i autoplan</span>}
-                      {terms && <span className="text-muted">{terms.on_call ? "tilkalling" : `${Number(terms.position_pct)} %`} · {terms.pay_type === "fixed" ? "fast" : "time"}</span>}
+                      {e.worker_type !== "employee" ? <span className="text-muted">{e.worker_type === "hired" ? "innleid" : "ulønnet"}</span>
+                        : terms && <span className="text-muted">{terms.on_call ? "tilkalling" : `${Number(terms.position_pct)} %`} · {terms.pay_type === "fixed" ? "fast" : "time"}</span>}
                       {ended ? <span className="badge bg-paper text-muted">Sluttet</span>
                         : <span className={`badge ${TONE_CLASS[ls.tone]}`} title={ls.long}>{ls.short}</span>}
                     </div>
@@ -65,6 +67,11 @@ export default async function EmployeesPage() {
         <p className="mt-1 text-sm text-muted">Den ansatte logger inn med e-posten du skriver her, og kobles automatisk til kortet.</p>
         <ActionForm action={addEmployee} submitLabel="Legg til" className="mt-4 grid gap-4 md:grid-cols-2">
           <Field label="Navn"><input name="full_name" required className="input" /></Field>
+          <Field label="Type" hint="Innleide og ulønnede (eier, familie) står i personallisten, men får ikke lønn eller avtalt tid.">
+            <select name="worker_type" className="input" defaultValue="employee">
+              {WORKER_TYPES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </Field>
           <Field label="E-post"><input name="email" type="email" className="input" /></Field>
           <Field label="Telefon"><input name="phone" type="tel" className="input" /></Field>
           <Field label="Ansattnummer"><input name="employee_number" className="input" /></Field>

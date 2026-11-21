@@ -105,7 +105,7 @@ export default async function SettingsPage() {
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="personnel_list" defaultChecked={org?.personnel_list ?? false} className="mt-0.5 h-4 w-4" />
               <span>Vi har plikt til å føre personalliste
-                <span className="block text-xs text-muted">Gjelder blant annet servering og catering, frisør og skjønnhetspleie, og bilverksted og bilpleie. Stemplingene blir da personallisten, med alle rettelser. Alle som jobber må stemple, også eier og daglig leder. Listen oppbevares i 3,5 år etter regnskapsårets slutt, så ansatte med registrert arbeidstid kan ikke slettes i den tiden, bare få sluttdato. <Link href="https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/personalliste/" target="_blank" className="text-brand">Les mer hos Skatteetaten</Link></span>
+                <span className="block text-xs text-muted">Gjelder blant annet servering og catering, frisør og skjønnhetspleie, og bilverksted og bilpleie. Stemplingene blir da personallisten, med alle rettelser. Alle som jobber må stemple, også eier, daglig leder, familie og innleide: legg dem inn med type «Ulønnet» eller «Innleid». Har dere flere arbeidssteder, merker dere avdelingene som eget arbeidssted. Listen oppbevares i 3,5 år etter regnskapsårets slutt, så ansatte med registrert arbeidstid kan ikke slettes i den tiden, bare få sluttdato. <Link href="https://www.skatteetaten.no/bedrift-og-organisasjon/arbeidsgiver/personalliste/" target="_blank" className="text-brand">Les mer hos Skatteetaten</Link></span>
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm">

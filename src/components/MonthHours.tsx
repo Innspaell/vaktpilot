@@ -20,7 +20,7 @@ export async function MonthHours({ ctx }: { ctx: Ctx }) {
 
   const [deps, { data: emps }, { data: terms }, { data: entries }, { data: shifts }] = await Promise.all([
     loadDepartments(ctx),
-    ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).order("full_name"),
+    ctx.supabase.from("employees").select("id, full_name, start_date, end_date").eq("org_id", ctx.org.id).eq("worker_type", "employee").order("full_name"),
     ctx.supabase.from("employment_terms").select("employee_id, valid_from, valid_to, hours_per_week, on_call").eq("org_id", ctx.org.id)
       .lte("valid_from", monthTo).or(`valid_to.is.null,valid_to.gte.${monthFrom}`),
     ctx.supabase.from("time_entries").select("employee_id, starts_at, ends_at, break_minutes").eq("org_id", ctx.org.id)

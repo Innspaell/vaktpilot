@@ -36,7 +36,7 @@ export async function loadPayroll(ctx: Ctx, from: string, to: string, onlyEmploy
   const end = dayBounds(addDays(to, 1), tz).start.toISOString();
 
   let empQ = ctx.supabase.from("employees").select("id, full_name, employee_number, start_date, end_date, is_shift_worker")
-    .eq("org_id", ctx.org.id).lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`).order("full_name");
+    .eq("org_id", ctx.org.id).eq("worker_type", "employee").lte("start_date", to).or(`end_date.is.null,end_date.gte.${from}`).order("full_name");
   if (onlyEmployee) empQ = empQ.eq("id", onlyEmployee);
   let entQ = ctx.supabase.from("time_entries")
     .select("id, employee_id, shift_id, starts_at, ends_at, break_minutes, status, source, comment, shifts!time_entries_shift_id_fkey(called_overtime, starts_at, ends_at)")

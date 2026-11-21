@@ -6,9 +6,10 @@ import { addDepartment, renameDepartment, saveDepartmentMatrix, setDepartmentArc
 export default async function DepartmentsPage() {
   const ctx = await requirePlanner();
   const today = new Date().toISOString().slice(0, 10);
-  const [deps, { data: emps }, { data: archived }, { data: leaders }, { data: links }] = await Promise.all([
+  const [deps, { data: emps }, { data: siteRows }, { data: archived }, { data: leaders }, { data: links }] = await Promise.all([
     loadDepartments(ctx),
     ctx.supabase.from("employees").select("id, full_name, user_id, end_date").eq("org_id", ctx.org.id).order("full_name"),
+    ctx.supabase.from("departments").select("id, is_worksite, address").eq("org_id", ctx.org.id),
     ctx.isAdmin
       ? ctx.supabase.from("departments").select("id, name").eq("org_id", ctx.org.id).not("archived_at", "is", null).order("name")
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -19,6 +20,7 @@ export default async function DepartmentsPage() {
       ? ctx.supabase.from("manager_departments").select("user_id, department_id").eq("org_id", ctx.org.id)
       : Promise.resolve({ data: [] as { user_id: string; department_id: string }[] }),
   ]);
+  const site = new Map((siteRows ?? []).map((r) => [r.id, r]));
   const employees = (emps ?? []).filter((e) => !e.end_date || e.end_date >= today);
   const nameOfUser = new Map((emps ?? []).filter((e) => e.user_id).map((e) => [e.user_id as string, e.full_name]));
   const managerList = (leaders ?? []).map((l) => ({ id: l.user_id, name: nameOfUser.get(l.user_id) ?? "Leder uten ansattkort" }))
@@ -34,6 +36,12 @@ export default async function DepartmentsPage() {
           Avdelinger er valgfrie. Bruk dem hvis dere har flere steder eller lag med hver sin leder. Hver vakt og hvert bemanningsbehov kan høre til en avdeling,
           og en leder planlegger og godkjenner bare for avdelingene vedkommende har ansvar for. Alle ansatte ser fortsatt hele vaktplanen.
         </p>
+        {ctx.org.personnelList && (
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            Personalliste: har dere flere steder der det jobbes, skal hvert sted ha sin egen liste. Merk avdelingen som eget arbeidssted.
+            En registrering havner på arbeidsstedet til vakten, ellers på den ansattes hovedavdeling.
+          </p>
+        )}
       </header>
 
       {ctx.isAdmin && (
@@ -48,9 +56,18 @@ export default async function DepartmentsPage() {
                 return (
                   <li key={d.id} className="space-y-3 px-3 py-3">
                     <div className="flex flex-wrap items-end gap-2">
-                      <ActionForm action={renameDepartment} submitLabel="Lagre navn" className="flex flex-wrap items-end gap-2">
+                      <ActionForm action={renameDepartment} submitLabel="Lagre" className="flex flex-wrap items-end gap-2">
                         <input type="hidden" name="id" value={d.id} />
                         <Field label="Navn"><input name="name" defaultValue={d.name} required maxLength={60} className="input w-56" /></Field>
+                        {ctx.org.personnelList && ctx.isAdmin && (
+                          <>
+                            <input type="hidden" name="worksite_shown" value="1" />
+                            <label className="flex items-center gap-2 pb-3 text-sm" title="Hvert arbeidssted skal ha sin egen personalliste">
+                              <input type="checkbox" name="is_worksite" defaultChecked={site.get(d.id)?.is_worksite ?? false} className="h-4 w-4" /> Eget arbeidssted
+                            </label>
+                            <Field label="Adresse (arbeidssted)"><input name="address" defaultValue={site.get(d.id)?.address ?? ""} maxLength={200} className="input w-64" /></Field>
+                          </>
+                        )}
                       </ActionForm>
                       <form action={setDepartmentArchived} className="ml-auto">
                         <input type="hidden" name="id" value={d.id} />

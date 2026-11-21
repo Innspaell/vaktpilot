@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WORKER_TYPES } from "@/lib/employees";
 import { notFound } from "next/navigation";
 import { requirePlanner, type AppContext } from "@/lib/context";
 import { EmergencyContacts, type EmergencyContact } from "@/components/EmergencyContacts";
@@ -98,6 +99,18 @@ export default async function EmployeePage({ params, searchParams }: { params: P
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input type="checkbox" name="is_shift_worker" defaultChecked={e.is_shift_worker} className="h-4 w-4" /> Jobber turnus eller skift
           </label>
+          <Field label="Type" hint={WORKER_TYPES.find((w) => w.value === (e.worker_type ?? "employee"))?.hint}>
+            <select name="worker_type" defaultValue={e.worker_type ?? "employee"} className="input">
+              {WORKER_TYPES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </Field>
+          {ctx.org.personnelList && (
+            <label className="flex items-start gap-2 text-sm md:col-span-2">
+              <input type="hidden" name="personnel_list_shown" value="1" />
+              <input type="checkbox" name="in_personnel_list" defaultChecked={e.in_personnel_list ?? true} className="mt-0.5 h-4 w-4" />
+              <span>Føres i personallisten<span className="block text-xs text-muted">Slå av bare for den som jobber i en del av bedriften uten plikt til personalliste, for eksempel på kontoret. Alle andre som jobber, også eier, innleide og familie, skal stå i listen.</span></span>
+            </label>
+          )}
           <fieldset className="md:col-span-2">
             <legend className="label">Arbeidsroller</legend>
             {(roles ?? []).length === 0 ? (

@@ -30,7 +30,10 @@ export async function renameDepartment(_: ActionState, fd: FormData): Promise<Ac
   const id = text(fd, "id");
   const name = text(fd, "name")?.slice(0, 60);
   if (!id || !name) return { error: "Skriv inn et navn." };
-  const { error } = await ctx.supabase.from("departments").update({ name }).eq("id", id).eq("org_id", ctx.org.id);
+  const extra = fd.has("worksite_shown")
+    ? { is_worksite: fd.get("is_worksite") === "on", address: text(fd, "address")?.slice(0, 200) ?? null }
+    : {};
+  const { error } = await ctx.supabase.from("departments").update({ name, ...extra }).eq("id", id).eq("org_id", ctx.org.id);
   if (error) return { error: error.code === "23505" ? `Det finnes allerede en avdeling som heter ${name}.` : "Kunne ikke lagre." };
   done();
   return { ok: "Lagret." };

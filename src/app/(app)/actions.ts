@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getContext, requireAdmin, requireOrg, ORG_COOKIE } from "@/lib/context";
-import { insertEmployee, termsHours } from "@/lib/employees";
+import { insertEmployee, termsHours, workerTypeOf } from "@/lib/employees";
 
 export type ActionState = { error?: string; ok?: string; link?: string } | undefined;
 
@@ -246,6 +246,8 @@ export async function updateEmployee(_: ActionState, fd: FormData): Promise<Acti
       end_date: text(fd, "end_date"),
       is_shift_worker: fd.get("is_shift_worker") === "on",
       auto_plan: fd.get("auto_plan") === "on",
+      ...(fd.has("worker_type") ? { worker_type: workerTypeOf(fd) } : {}),
+      ...(fd.has("personnel_list_shown") ? { in_personnel_list: fd.get("in_personnel_list") === "on" } : {}),
     })
     .eq("id", id)
     .eq("org_id", ctx.org.id);

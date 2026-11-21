@@ -970,6 +970,27 @@ select pg_temp.check((select deleted and changes -> -1 ->> 'action' = 'DELETE' a
                         from personnel_list(:'org_c', :'y') where entry_id = :'wrong_entry'), 'slettet registrering vises ikke');
 select pg_temp.check((select name = 'Kokkene AS' and org_number = '987654321' from personnel_list_header(:'org_c')), 'bedriftsopplysninger mangler');
 
+-- Periode, arbeidssted og hvem som føres
+select pg_temp.check((select count(*) from personnel_list_range(:'org_c', :'y', :'d')) = 3, 'perioden har ikke alle registreringene');
+select pg_temp.check((select array_agg(work_date order by work_date, starts_at) = array[:'y'::date, :'y'::date, :'d'::date] from personnel_list_range(:'org_c', :'y', :'d')), 'perioden er ikke i datoorden');
+reset role;
+insert into departments (org_id, name, is_worksite, address) values (:'org_c', 'Sentrum', true, 'Torget 1') returning id as site_c \gset
+insert into employee_departments (org_id, employee_id, department_id, is_home) select :'org_c', id, :'site_c', true from employees where full_name = 'Siv Servitør';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+select pg_temp.check((select site_name from personnel_list_range(:'org_c', :'y', :'d') where entry_id = :'siv_entry') = 'Sentrum', 'arbeidsstedet følger den ansattes avdeling');
+select pg_temp.check((select count(*) from personnel_list_range(:'org_c', :'y', :'d', :'site_c')) = 1, 'liste for ett arbeidssted');
+select pg_temp.check((select address from personnel_list_sites(:'org_c')) = 'Torget 1', 'arbeidssted med adresse');
+reset role;
+update employees set in_personnel_list = false where full_name = 'Per Kokk';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+select pg_temp.check((select count(*) from personnel_list_range(:'org_c', :'y', :'d')) = 1, 'den som ikke omfattes, står ikke i listen');
+reset role;
+update employees set in_personnel_list = true where full_name = 'Per Kokk';
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-0000000000c1', 'leder@c.no');
+
 -- Alle ansatte kan vise listen (kontroll når leder ikke er der) – men ikke når det er slått av
 select pg_temp.login('00000000-0000-0000-0000-0000000000c3', 'siv@c.no');
 select pg_temp.check((select count(*) from personnel_list(:'org_c', :'y')) = 2, 'ansatt kan ikke vise personallisten');

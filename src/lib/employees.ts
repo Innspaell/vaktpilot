@@ -26,12 +26,26 @@ export function termsHours(fd: FormData, fullTime: number, fallbackHours?: numbe
   return { on_call: false, position_pct: pct, hours_per_week: hours };
 }
 
+export type WorkerType = "employee" | "hired" | "unpaid";
+export const WORKER_TYPES: { value: WorkerType; label: string; hint: string }[] = [
+  { value: "employee", label: "Ansatt", hint: "Vanlig ansatt med lønn fra bedriften." },
+  { value: "hired", label: "Innleid", hint: "Leid inn fra et bemanningsbyrå eller annen bedrift. Står i personallisten, men får ikke lønn her." },
+  { value: "unpaid", label: "Ulønnet", hint: "Eier, familie eller frivillig som hjelper til uten lønn. Står i personallisten, men får ikke lønn." },
+];
+export function workerTypeOf(fd: FormData): WorkerType {
+  const v = text(fd, "worker_type");
+  return v === "hired" || v === "unpaid" ? v : "employee";
+}
+
 /** Lager ansattkort og første avtale. Brukes fra ansattsiden og fra vaktplanen. */
 export async function insertEmployee(ctx: AdminCtx, fd: FormData): Promise<{ id?: string; error?: string }> {
   const fullName = text(fd, "full_name");
   const email = text(fd, "email")?.toLowerCase() ?? null;
   if (!fullName) return { error: "Skriv inn navn." };
   const startDate = text(fd, "start_date") ?? new Date().toISOString().slice(0, 10);
+  const workerType = workerTypeOf(fd);
+  // Innleide og ulønnede har ingen avtalt tid eller lønn hos oss
+  if (workerType !== "employee") fd.set("on_call", "on");
 
   const { data: emp, error } = await ctx.supabase
     .from("employees")
@@ -43,6 +57,7 @@ export async function insertEmployee(ctx: AdminCtx, fd: FormData): Promise<{ id?
       employee_number: text(fd, "employee_number"),
       start_date: startDate,
       is_shift_worker: fd.get("is_shift_worker") === "on",
+      worker_type: workerType,
     })
     .select("id")
     .single();
